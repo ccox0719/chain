@@ -26,7 +26,6 @@ export function GameCanvas({ canvasRef, onLeftClick, onRightClick, onWheelZoom }
         className="game-canvas"
         onClick={(event) => onLeftClick(event.clientX, event.clientY)}
         onWheel={(event) => {
-          event.preventDefault();
           onWheelZoom(event.deltaY);
         }}
         onContextMenu={(event) => {

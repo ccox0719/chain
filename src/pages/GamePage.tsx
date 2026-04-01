@@ -11,6 +11,7 @@ import { useSpaceGame } from "../store/useSpaceGame";
 export function GamePage() {
   const { canvasRef, snapshot, overlay, setOverlay, contextMenu, actions } = useSpaceGame();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hudVisible, setHudVisible] = useState(true);
   const [starterPickerOpen, setStarterPickerOpen] = useState(
     () => window.localStorage.getItem("starfall-world") === null
   );
@@ -25,10 +26,20 @@ export function GamePage() {
           onWheelZoom={actions.adjustZoom}
         />
 
+        <button
+          type="button"
+          className="hud-toggle-btn"
+          onClick={() => setHudVisible((v) => !v)}
+          title={hudVisible ? "Hide HUD" : "Show HUD"}
+        >
+          {hudVisible ? "⊟" : "⊞"}
+        </button>
+
         <GameHud
           snapshot={snapshot}
           overlay={overlay}
           setOverlay={setOverlay}
+          panelsVisible={hudVisible}
           onSelectOverview={actions.selectObject}
           onOpenContextForOverview={(ref, event) =>
             actions.openContextMenuForObject(ref, event.clientX, event.clientY)

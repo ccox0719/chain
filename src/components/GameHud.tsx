@@ -52,6 +52,7 @@ interface GameHudProps {
   snapshot: GameSnapshot;
   overlay: "map" | "inventory" | "fitting" | "missions" | null;
   setOverlay: (value: "map" | "inventory" | "fitting" | "missions" | null) => void;
+  panelsVisible: boolean;
   onSelectOverview: (ref: SelectableRef) => void;
   onOpenContextForOverview: (ref: SelectableRef, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSetActiveTarget: (ref: SelectableRef | null) => void;
@@ -67,6 +68,7 @@ export function GameHud({
   snapshot,
   overlay,
   setOverlay,
+  panelsVisible,
   onSelectOverview,
   onOpenContextForOverview,
   onSetActiveTarget,
@@ -299,7 +301,7 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
   const activeCombatTone = activeTargetInfo?.combatProfileTone ?? null;
 
   return (
-    <div className="hud-layer">
+    <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
       {/* System name badge — centered top */}
       <div className="system-badge">
         {sector.name} · {currentRegion.name}
@@ -550,11 +552,7 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
                     key={`${entry.ref.type}-${entry.ref.id}`}
                     type="button"
                     className={`overview-row${isSelected ? " selected" : ""}${isObjective ? " objective" : ""}${isNextGate ? " waypoint" : ""}${entry.combatProfileTone ? ` combat-${entry.combatProfileTone}` : ""}`}
-                    onClick={() => onSelectOverview(entry.ref)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      onOpenContextForOverview(entry.ref, event);
-                    }}
+                    onClick={(event) => onOpenContextForOverview(entry.ref, event)}
                   >
                     <span className="overview-name">
                       <strong>{entry.name}</strong>
