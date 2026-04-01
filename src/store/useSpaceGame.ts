@@ -119,6 +119,8 @@ export function useSpaceGame() {
 
     resize();
     window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    window.visualViewport?.addEventListener("resize", resize);
 
     let lastTime = performance.now();
     let snapshotAccumulator = 0;
@@ -146,6 +148,8 @@ export function useSpaceGame() {
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
+      window.visualViewport?.removeEventListener("resize", resize);
     };
   }, []);
 
