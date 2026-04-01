@@ -98,6 +98,9 @@ button:disabled { opacity: 0.38; cursor: default; }
   height: 100%;
   display: block;
   background: transparent;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ============================================
@@ -2196,6 +2199,17 @@ select {
   .module-state span,
   .module-copy span:last-child {
     font-size: 0.58rem;
+  }
+
+  .context-menu {
+    gap: 0.34rem;
+    padding: 0.48rem;
+    width: min(220px, calc(100vw - 1rem));
+  }
+
+  .context-menu button {
+    padding: 0.62rem 0.78rem;
+    font-size: 0.86rem;
   }
 }
 

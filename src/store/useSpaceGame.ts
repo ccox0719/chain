@@ -273,8 +273,17 @@ export function useSpaceGame() {
           clientY
         );
         const ref = resolveSelectionAtPoint(worldRef.current, point);
+        const wasSelected =
+          ref &&
+          worldRef.current.selectedObject &&
+          ref.id === worldRef.current.selectedObject.id &&
+          ref.type === worldRef.current.selectedObject.type;
         selectObject(worldRef.current, ref);
-        setContextMenu(null);
+        if (ref && wasSelected) {
+          setContextMenu({ x: clientX, y: clientY, target: ref });
+        } else {
+          setContextMenu(null);
+        }
         refresh();
       },
       handleCanvasRightClick: (clientX: number, clientY: number) => {
