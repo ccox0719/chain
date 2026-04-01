@@ -1,0 +1,1095 @@
+import { useMemo, useState } from "react";
+import { ShipFittingDiagram } from "./ShipFittingDiagram";
+import { ShipGeoIcon } from "./ShipGeoIcon";
+import { CommandAction } from "../types/game";
+import { missionCatalog } from "../game/data/missions";
+import { CollapsibleSection } from "./CollapsibleSection";
+import { moduleById, moduleCatalog } from "../game/data/modules";
+import { getStationCommodityStock } from "../game/economy/commodityAvailability";
+import { isModuleAvailableAtStation } from "../game/economy/moduleAvailability";
+import { playerShipById, playerShips } from "../game/data/ships";
+import { commodityCatalog } from "../game/economy/data/commodities";
+import { getBestSellLocationForCommodity } from "../game/economy/market";
+import { transportMissionCatalog } from "../game/missions/data/transportMissions";
+import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
+import { regionById, sectorById } from "../game/data/sectors";
+import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
+import { CommodityId, GameSnapshot, ModuleSlot, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
+
+type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
+type MarketSortKey = "name" | "category" | "volume" | "owned" | "buyPrice" | "sellPrice" | "profit";
+
+const TAB_LABELS: Record<StationTab, string> = {
+  services: "⚙ Services",
+  ships:    "◈ Ships",
+  market:   "⊞ Market",
+  modules:  "⬡ Modules",
+  fitting:  "⊕ Fitting",
+  missions: "✦ Missions",
+};
+
+const CATEGORY_ICONS: Record<string, string> = {
+  essentials: "◉",
+  industrial: "⬡",
+  energy:     "⚡",
+  medical:    "✚",
+  technology: "◈",
+  military:   "⊕",
+  materials:  "⬒",
+  frontier:   "◌",
+  luxury:     "✦",
+  salvage:    "◇",
+};
+
+const MODULE_KIND_ICONS: Record<string, string> = {
+  laser:               "◈",
+  railgun:             "▣",
+  missile:             "✦",
+  mining_laser:        "⛏",
+  afterburner:         "➤",
+  webifier:            "⟲",
+  target_painter:      "◍",
+  tracking_disruptor:  "≋",
+  sensor_dampener:     "◌",
+  salvager:            "◇",
+  shield_booster:      "⬡",
+  armor_repairer:      "◼",
+  hardener:            "◆",
+  passive:             "•",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  essentials: "Essentials",
+  industrial: "Industrial",
+  energy:     "Energy",
+  medical:    "Medical",
+  technology: "Technology",
+  military:   "Military",
+  materials:  "Materials",
+  frontier:   "Frontier",
+  luxury:     "Luxury",
+  salvage:    "Salvage",
+};
+
+const RISK_LEVEL: Record<TransportRisk, number> = { low: 1, medium: 2, high: 3, extreme: 4 };
+const MISSION_TYPE_LABELS: Record<string, string> = {
+  bounty: "Bounty",
+  mining: "Mining",
+  deliver: "Delivery",
+  travel: "Survey"
+};
+
+const SHIP_ARCHETYPE_LABELS: Record<string, string> = {
+  skirmisher: "Skirmisher",
+  brawler: "Brawler",
+  sniper: "Sniper",
+  kiter: "Kiter",
+  support: "Support",
+  hauler: "Hauler",
+  miner: "Miner"
+};
+
+// Fixed max values for ship stat bars (covers full ship catalog range)
+const MAX_SHIP_SPEED = Math.max(...playerShips.map(s => s.maxSpeed));
+const MAX_SHIP_CARGO = Math.max(...playerShips.map(s => s.cargoCapacity));
+const MAX_SHIP_TANK  = Math.max(...playerShips.map(s => s.baseShield + s.baseArmor + s.baseHull));
+const MAX_SHIP_CAP   = Math.max(...playerShips.map(s => s.baseCapacitor));
+
+function RiskPips({ risk }: { risk: TransportRisk }) {
+  const level = RISK_LEVEL[risk] ?? 0;
+  return (
+    <span className="risk-pips">
+      {[1, 2, 3, 4].map(pip => (
+        <span key={pip} className={`risk-pip${pip <= level ? ` filled risk-${risk}` : ""}`} />
+      ))}
+      <span className="risk-text">{risk}</span>
+    </span>
+  );
+}
+
+function StatBar({ value, max, fillClass }: { value: number; max: number; fillClass: string }) {
+  return (
+    <div className="ship-stat-bar">
+      <div className={`ship-stat-fill ${fillClass}`} style={{ width: `${Math.min(100, (value / max) * 100)}%` }} />
+    </div>
+  );
+}
+
+function missionTypeLabel(type: string) {
+  return MISSION_TYPE_LABELS[type] ?? type;
+}
+
+function moduleCapUsePerSecond(module: (typeof moduleCatalog)[number]) {
+  if (module.capacitorDrain) return module.capacitorDrain;
+  if (module.capacitorUse && module.cycleTime && module.cycleTime > 0) return module.capacitorUse / module.cycleTime;
+  return 0;
+}
+
+function moduleCapPressureLabel(module: (typeof moduleCatalog)[number]) {
+  const capPerSec = moduleCapUsePerSecond(module);
+  if (capPerSec <= 0) return "Cap-free";
+  if (capPerSec < 4) return "Cap-light";
+  if (capPerSec < 8) return "Cap-moderate";
+  return "Cap-hungry";
+}
+
+function moduleFitAdvice(module: (typeof moduleCatalog)[number]) {
+  const capPerSec = moduleCapUsePerSecond(module);
+  if (capPerSec >= 8) return "Pairs best with passive shield or armor.";
+  if (capPerSec >= 4) return "Works well with balanced tank or mixed utility.";
+  if (module.kind === "laser" || module.kind === "missile" || module.kind === "railgun") {
+    return "Leaves room for active defense or speed.";
+  }
+  return "Low demand; flexible fit.";
+}
+
+interface StationPanelProps {
+  snapshot: GameSnapshot;
+  onUndock: () => void;
+  onRepair: () => void;
+  onSellCargo: () => void;
+  onBuyModule: (moduleId: string) => void;
+  onSellModule: (moduleId: string) => void;
+  onBuyCommodity: (commodityId: CommodityId, quantity: number) => void;
+  onSellCommodity: (commodityId: CommodityId, quantity: number) => void;
+  onEquip: (slotType: ModuleSlot, slotIndex: number, moduleId: string | null) => void;
+  onAcceptMission: (missionId: string) => void;
+  onTurnInMission: (missionId: string) => void;
+  onBuyShip: (shipId: string) => void;
+  onSwitchShip: (shipId: string) => void;
+  onSaveBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
+  onLoadBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
+  onQueueUndockAction: (command: CommandAction) => void;
+  onClearUndockQueue: () => void;
+}
+
+export function StationPanel({
+  snapshot,
+  onUndock,
+  onRepair,
+  onSellCargo,
+  onBuyModule,
+  onSellModule,
+  onBuyCommodity,
+  onSellCommodity,
+  onEquip,
+  onAcceptMission,
+  onTurnInMission,
+  onBuyShip,
+  onSwitchShip,
+  onSaveBuild,
+  onLoadBuild,
+  onQueueUndockAction,
+  onClearUndockQueue
+}: StationPanelProps) {
+  const { world, currentStation, selectedInfo } = snapshot;
+  const [tab, setTab] = useState<StationTab>("services");
+  const [shipPreviewId, setShipPreviewId] = useState(world.player.hullId);
+  const [tradeQuantityById, setTradeQuantityById] = useState<Record<string, number>>({});
+  const [marketSort, setMarketSort] = useState<{ key: MarketSortKey; direction: "asc" | "desc" }>({
+    key: "name",
+    direction: "asc"
+  });
+  const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
+  const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
+  const stationTags = currentStation?.tags ?? [];
+  const security = snapshot.sector.security;
+
+  function inventoryAllows(tags: string[]) {
+    if (tags.includes("common")) return true;
+    if (security === "high") {
+      return tags.some((tag) => stationTags.includes(tag)) && !tags.includes("frontier") && !tags.includes("high-tech");
+    }
+    if (security === "medium") {
+      return (
+        tags.some((tag) => stationTags.includes(tag)) ||
+        tags.includes("military") ||
+        tags.includes("industrial") ||
+        tags.includes("research")
+      ) && !tags.includes("frontier");
+    }
+    return (
+      tags.some((tag) => stationTags.includes(tag)) ||
+      tags.includes("military") ||
+      tags.includes("industrial") ||
+      tags.includes("high-tech") ||
+      tags.includes("frontier")
+    );
+  }
+
+  const availableShips = useMemo(
+    () => playerShips.filter((ship) => ship.id === world.player.hullId || inventoryAllows(ship.availabilityTags)),
+    [security, stationTags, world.player.hullId]
+  );
+  const availableModules = useMemo(
+    () => moduleCatalog.filter((module) => isModuleAvailableAtStation(module, security, currentStation)),
+    [security, currentStation?.id]
+  );
+  const currentHull = playerShipById[world.player.hullId];
+  const previewHull = playerShipById[shipPreviewId] ?? currentHull;
+  const currentStats = computeDerivedStats(world.player);
+  const roundedShieldMax = Math.round(currentStats.maxShield);
+  const roundedArmorMax = Math.round(currentStats.maxArmor);
+  const roundedHullMax = Math.round(currentStats.maxHull);
+  const roundedCargoCapacity = Math.round(currentStats.cargoCapacity);
+  const freeCargo = Math.max(0, currentStats.cargoCapacity - getCargoUsed(world.player));
+  const roundedFreeCargo = Math.round(freeCargo);
+  const missionCargoUsed = world.player.missionCargo.reduce((total, entry) => total + entry.volume, 0);
+  const previewBonuses = previewHull.bonuses ?? null;
+
+  const stockedCommodities = useMemo(
+    () => getStationCommodityStock(commodityCatalog, security, currentStation),
+    [currentStation?.id, security]
+  );
+
+  // Max buy price for bar normalization
+  const maxMarketPrice = useMemo(() => {
+    return Math.max(...commodityCatalog.map(c => snapshot.economy.commodityBuyPrices[c.id] ?? c.basePrice), 1);
+  }, [snapshot.economy.commodityBuyPrices]);
+
+  const sortedMarketRows = useMemo(() => {
+    const rows = stockedCommodities.map((commodity) => {
+      const buyPrice = snapshot.economy.commodityBuyPrices[commodity.id];
+      const sellPrice = snapshot.economy.commoditySellPrices[commodity.id];
+      const owned = world.player.commodities[commodity.id] ?? 0;
+      const hint = getBestSellLocationForCommodity(commodity.id, currentStats.commoditySellMultiplier);
+      const profitPerUnit = hint ? hint.value - buyPrice : 0;
+      return { commodity, buyPrice, sellPrice, owned, hint, profitPerUnit };
+    });
+
+    rows.sort((a, b) => {
+      const direction = marketSort.direction === "asc" ? 1 : -1;
+      let value = 0;
+      switch (marketSort.key) {
+        case "name":
+          value = a.commodity.name.localeCompare(b.commodity.name);
+          break;
+        case "category":
+          value = (CATEGORY_LABELS[a.commodity.category] ?? a.commodity.category).localeCompare(
+            CATEGORY_LABELS[b.commodity.category] ?? b.commodity.category
+          );
+          break;
+        case "volume":
+          value = a.commodity.volume - b.commodity.volume;
+          break;
+        case "owned":
+          value = a.owned - b.owned;
+          break;
+        case "buyPrice":
+          value = a.buyPrice - b.buyPrice;
+          break;
+        case "sellPrice":
+          value = a.sellPrice - b.sellPrice;
+          break;
+        case "profit":
+          value = a.profitPerUnit - b.profitPerUnit;
+          break;
+      }
+      return value === 0 ? a.commodity.name.localeCompare(b.commodity.name) * direction : value * direction;
+    });
+
+    return rows;
+  }, [
+    stockedCommodities,
+    snapshot.economy.commodityBuyPrices,
+    snapshot.economy.commoditySellPrices,
+    world.player.commodities,
+    currentStats.commoditySellMultiplier,
+    marketSort
+  ]);
+
+  // Group available modules by slot
+  const modulesBySlot = useMemo(() => {
+    const groups: Record<ModuleSlot, typeof moduleCatalog> = { weapon: [], utility: [], defense: [] };
+    availableModules.forEach(m => { groups[m.slot].push(m); });
+    return groups;
+  }, [availableModules]);
+  const inventoryModulesBySlot: Record<ModuleSlot, typeof moduleCatalog> = { weapon: [], utility: [], defense: [] };
+  // Fitting should show every owned module, even if the current station does not sell it.
+  moduleCatalog.forEach((module) => {
+    if ((world.player.inventory.modules[module.id] ?? 0) > 0) {
+      inventoryModulesBySlot[module.slot].push(module);
+    }
+  });
+
+  if (!currentStation) return null;
+
+  const plannedCommands: Array<{ label: string; command: CommandAction }> = selectedInfo
+    ? selectedInfo.type === "enemy"
+      ? [
+          { label: "Queue Attack",      command: { type: "attack",  target: selectedInfo.ref } },
+          { label: "Queue Approach",    command: { type: "approach", target: selectedInfo.ref } },
+          { label: "Queue Orbit 220 m", command: { type: "orbit",   target: selectedInfo.ref, range: 220 } }
+        ]
+      : selectedInfo.type === "station"
+        ? [
+            { label: "Queue Warp", command: { type: "warp", target: selectedInfo.ref, range: 130 } },
+            { label: "Queue Dock", command: { type: "dock", target: selectedInfo.ref } }
+          ]
+        : selectedInfo.type === "gate"
+          ? [
+              { label: "Queue Align", command: { type: "align", target: selectedInfo.ref } },
+              { label: "Queue Warp",  command: { type: "warp",  target: selectedInfo.ref, range: 120 } },
+              { label: "Queue Jump",  command: { type: "jump",  target: selectedInfo.ref } }
+            ]
+          : selectedInfo.type === "asteroid"
+            ? [
+                { label: "Queue Orbit 100 m", command: { type: "orbit", target: selectedInfo.ref, range: 100 } },
+                { label: "Queue Mine",         command: { type: "mine",  target: selectedInfo.ref } }
+              ]
+            : [
+                { label: "Queue Warp",    command: { type: "warp",    target: selectedInfo.ref, range: 110 } },
+                { label: "Queue Approach", command: { type: "approach", target: selectedInfo.ref } }
+              ]
+    : [];
+
+  function changedCount(build: (typeof world.player.savedBuilds)[number]) {
+    return (["weapon", "utility", "defense"] as ModuleSlot[]).reduce((total, slotType) => {
+      const slotCount = Math.max(world.player.equipped[slotType].length, build.equipped[slotType].length);
+      let slotChanges = 0;
+      for (let index = 0; index < slotCount; index += 1) {
+        if ((world.player.equipped[slotType][index] ?? null) !== (build.equipped[slotType][index] ?? null)) {
+          slotChanges += 1;
+        }
+      }
+      return total + slotChanges;
+    }, 0);
+  }
+
+  function summarizeBuild(build: (typeof world.player.savedBuilds)[number]) {
+    return (["weapon", "utility", "defense"] as ModuleSlot[])
+      .flatMap((slotType) => build.equipped[slotType].filter((id): id is string => Boolean(id)))
+      .map((id) => moduleCatalog.find((m) => m.id === id)?.name ?? id)
+      .join(" · ");
+  }
+
+  function moduleMiningSummary(module: (typeof moduleCatalog)[number]) {
+    if (module.kind !== "mining_laser") return null;
+    if (module.minesAllInRange) return "Sweeps all asteroids in range.";
+    const targets = module.miningTargets?.length ? module.miningTargets.join(", ") : "any ore";
+    return `Mines ${targets}.`;
+  }
+
+  function handleSlotDrop(slotType: ModuleSlot, index: number) {
+    if (!draggedModuleId) return;
+    const module = moduleById[draggedModuleId];
+    if (!module || module.slot !== slotType) return;
+    onEquip(slotType, index, draggedModuleId);
+    setDraggedModuleId(null);
+    setHoveredSlotKey(null);
+  }
+
+  function transportRouteMetrics(mission: TransportMissionDefinition) {
+    const toPickup =
+      world.currentSectorId === mission.pickupSystemId
+        ? 0
+        : planRoute(world, world.currentSectorId, mission.pickupSystemId, mission.routePreference, false)?.steps.length ?? 0;
+    const pickupToDestination =
+      planRoute(world, mission.pickupSystemId, mission.destinationSystemId, mission.routePreference, false)?.steps ?? [];
+    const cargoReimbursement = Math.max(0, Math.round(mission.cargoVolume * (mission.cargoUnitValue ?? 0)));
+    const cargoFitLabel = freeCargo >= mission.cargoVolume ? "General fit" : freeCargo >= Math.max(1, Math.floor(mission.cargoVolume * 0.6)) ? "Cargo heavy" : "Hauler fit";
+    return {
+      toPickup,
+      deliveryJumps: pickupToDestination.length,
+      risk: estimateRouteRisk(pickupToDestination),
+      cargoReimbursement,
+      rewardEstimate: mission.baseReward + cargoReimbursement + (mission.bonusReward ?? 0),
+      cargoFitLabel
+    };
+  }
+
+  function transportStatusLabel(state: TransportMissionState) {
+    if (state.status === "active") return state.pickedUp ? "active · delivering" : "active · pickup";
+    return state.status;
+  }
+
+  function getRegionNameForSystem(systemId: string) {
+    const s = sectorById[systemId];
+    if (!s) return "Unknown";
+    return regionById[s.regionId]?.name ?? "Unknown";
+  }
+
+  function quantityFor(commodityId: CommodityId) {
+    return Math.max(1, tradeQuantityById[commodityId] ?? 1);
+  }
+
+  function setQuantity(commodityId: CommodityId, quantity: number) {
+    setTradeQuantityById((current) => ({ ...current, [commodityId]: Math.max(1, Math.min(300, quantity)) }));
+  }
+
+  function toggleMarketSort(key: MarketSortKey) {
+    setMarketSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: key === "name" || key === "category" ? "asc" : "desc" }
+    );
+  }
+
+  function marketSortLabel(key: MarketSortKey) {
+    if (marketSort.key !== key) return "";
+    return marketSort.direction === "asc" ? " ↑" : " ↓";
+  }
+
+  const cargoUsed = getCargoUsed(world.player);
+  const cargoPct = Math.min(100, (cargoUsed / currentStats.cargoCapacity) * 100);
+
+  return (
+    <div className="station-overlay">
+      {/* Sticky header */}
+      <div className="station-header">
+        <div className="station-header-info">
+          <span className="station-name">⬡ {currentStation.name}</span>
+          <span className="station-system-label">
+            {snapshot.sector.name} · {snapshot.currentRegion.name} ·{" "}
+            <span className={`sec-tag sec-${snapshot.sector.security}`}>{snapshot.sector.security.toUpperCase()}</span>
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
+          <button type="button" className="primary-button" onClick={onUndock}>Undock</button>
+        </div>
+      </div>
+
+      {/* Tab navigation */}
+      <div className="station-tabs">
+        {(Object.keys(TAB_LABELS) as StationTab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`station-tab${tab === t ? " active" : ""}`}
+            onClick={() => setTab(t)}
+          >
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {/* Scrollable content */}
+      <div className="station-content">
+
+        {/* ── SERVICES TAB ── */}
+        {tab === "services" && (
+          <div className="station-grid">
+            <article className="panel-lite">
+              <h3>Ship Status — {playerShipById[world.player.hullId]?.name}</h3>
+              <div className="svc-ship-header">
+                <div className="svc-ship-icon">
+                  <ShipGeoIcon
+                    shipId={currentHull.id}
+                    silhouette={currentHull.silhouette}
+                    color={currentHull.color}
+                    size={78}
+                  />
+                </div>
+                <div className="svc-ship-copy">
+                  <strong>{currentHull.name}</strong>
+                  <div className="svc-ship-tags">
+                    <span className="status-chip">{currentHull.shipClass}</span>
+                    <span className="status-chip">{SHIP_ARCHETYPE_LABELS[currentHull.archetype] ?? currentHull.archetype}</span>
+                  </div>
+                  <p>{currentHull.role}</p>
+                </div>
+              </div>
+              <div className="svc-integrity-grid">
+                <div className="svc-bar-row">
+                  <span>⬡ Shield</span>
+                  <div className="meter"><span className="shield-fill" style={{ width: `${Math.min(100, (world.player.shield / currentStats.maxShield) * 100)}%` }} /></div>
+                  <span>{Math.round(world.player.shield)} / {roundedShieldMax}</span>
+                </div>
+                <div className="svc-bar-row">
+                  <span>◼ Armor</span>
+                  <div className="meter"><span className="armor-fill" style={{ width: `${Math.min(100, (world.player.armor / currentStats.maxArmor) * 100)}%` }} /></div>
+                  <span>{Math.round(world.player.armor)} / {roundedArmorMax}</span>
+                </div>
+                <div className="svc-bar-row">
+                  <span>▲ Hull</span>
+                  <div className="meter"><span className="hull-fill" style={{ width: `${Math.min(100, (world.player.hull / currentStats.maxHull) * 100)}%` }} /></div>
+                  <span>{Math.round(world.player.hull)} / {roundedHullMax}</span>
+                </div>
+              </div>
+              <div className="svc-cargo-summary">
+                <div className="svc-cargo-labels">
+                  <span>Cargo Hold</span>
+                  <span>{cargoUsed} / {roundedCargoCapacity}u · {roundedFreeCargo} free</span>
+                </div>
+                <div className="svc-cargo-bar">
+                  <div className="svc-cargo-fill" style={{ width: `${cargoPct}%` }} />
+                </div>
+              </div>
+              <div className="action-row">
+                <button type="button" onClick={onRepair}>
+                  Repair ({getRepairCost(world.player)} cr)
+                </button>
+                <button type="button" onClick={onSellCargo}>
+                  Sell All Cargo
+                </button>
+              </div>
+            </article>
+
+            <article className="panel-lite">
+              <h3>Undock Planner</h3>
+              {selectedInfo ? (
+                <div className="stack-list">
+                  <div className="market-item">
+                    <div>
+                      <strong>{selectedInfo.name}</strong>
+                      <p>{selectedInfo.type} · {Math.round(selectedInfo.distance)} m</p>
+                    </div>
+                    <div className="market-actions">
+                      {plannedCommands.map((item) => (
+                        <button key={item.label} type="button" onClick={() => onQueueUndockAction(item.command)}>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p>Select an object from the overview to queue undock commands.</p>
+              )}
+              <div style={{ marginTop: "0.75rem" }}>
+                {world.player.queuedUndockActions.length > 0 ? (
+                  <div className="queued-action-list">
+                    {world.player.queuedUndockActions.map((action, index) => (
+                      <span key={`${action.type}-${index}`} className="status-chip">
+                        {index + 1}. {action.type.replace("_", " ")}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p>Queue empty.</p>
+                )}
+              </div>
+              <button type="button" className="ghost-button" style={{ marginTop: "0.6rem" }} onClick={onClearUndockQueue}>
+                Clear Queue
+              </button>
+            </article>
+          </div>
+        )}
+
+        {/* ── SHIPS TAB ── */}
+        {tab === "ships" && (
+          <div className="station-grid">
+            <article className="panel-lite">
+              <h3>Ship Market</h3>
+              <div className="stack-list">
+                {availableShips.map((ship) => {
+                  const owned = world.player.ownedShips.includes(ship.id);
+                  const active = world.player.hullId === ship.id;
+                  return (
+                    <div key={ship.id} className="market-item">
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                        <ShipGeoIcon shipId={ship.id} silhouette={ship.silhouette} color={ship.color} />
+                        <div>
+                          <strong>{ship.name}</strong>
+                          <span className="status-chip">
+                            {ship.shipClass} · {SHIP_ARCHETYPE_LABELS[ship.archetype] ?? ship.archetype}
+                          </span>
+                          <p>{ship.description}</p>
+                        </div>
+                      </div>
+                      <div className="market-actions">
+                        <button type="button" onClick={() => setShipPreviewId(ship.id)}>
+                          Preview
+                        </button>
+                        {!owned ? (
+                          <button type="button" onClick={() => onBuyShip(ship.id)}>
+                            Buy {snapshot.economy.shipBuyPrices[ship.id] ?? ship.price} cr
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onSwitchShip(ship.id)} disabled={active}>
+                            {active ? "Active" : "Activate"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+
+            <article className="panel-lite">
+              <h3>Ship Stats — {previewHull.name}</h3>
+              <div style={{ marginBottom: "0.65rem" }}>
+                <span className="status-chip">{previewHull.shipClass} · {SHIP_ARCHETYPE_LABELS[previewHull.archetype] ?? previewHull.archetype}</span>
+                <p style={{ marginTop: "0.4rem", fontSize: "0.78rem" }}>{previewHull.role}</p>
+                {previewBonuses && (
+                  <p className="ship-bonus-summary">
+                    {[
+                      previewBonuses.cargoCapacity !== undefined ? `cargo +${previewBonuses.cargoCapacity}` : null,
+                      previewBonuses.cargoCapacityMultiplier !== undefined ? `cargo x${previewBonuses.cargoCapacityMultiplier.toFixed(2)}` : null,
+                      previewBonuses.miningYieldMultiplier !== undefined ? `mining x${previewBonuses.miningYieldMultiplier.toFixed(2)}` : null,
+                      previewBonuses.commodityBuyMultiplier !== undefined ? `trade buy x${previewBonuses.commodityBuyMultiplier.toFixed(2)}` : null,
+                      previewBonuses.commoditySellMultiplier !== undefined ? `trade sell x${previewBonuses.commoditySellMultiplier.toFixed(2)}` : null,
+                      previewBonuses.resourceSellMultiplier !== undefined ? `ore sell x${previewBonuses.resourceSellMultiplier.toFixed(2)}` : null,
+                      previewBonuses.moduleKinds?.laser ? "laser bonus" : null,
+                      previewBonuses.moduleKinds?.railgun ? "rail bonus" : null,
+                      previewBonuses.moduleKinds?.missile ? "missile bonus" : null,
+                      previewBonuses.moduleKinds?.mining_laser ? "mining laser bonus" : null,
+                      previewBonuses.moduleKinds?.shield_booster ? "shield booster bonus" : null,
+                      previewBonuses.moduleKinds?.armor_repairer ? "armor repair bonus" : null
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+              </div>
+
+              <div className="ship-stat-list">
+                {/* Speed */}
+                <div className="ship-stat-item">
+                  <span>Speed</span>
+                  <StatBar value={previewHull.maxSpeed} max={MAX_SHIP_SPEED} fillClass="speed-fill" />
+                  <strong>{previewHull.maxSpeed}</strong>
+                  <span className={`stat-delta${previewHull.maxSpeed > currentHull.maxSpeed ? " good" : previewHull.maxSpeed < currentHull.maxSpeed ? " bad" : ""}`}>
+                    {previewHull.maxSpeed === currentHull.maxSpeed ? "—" : (previewHull.maxSpeed > currentHull.maxSpeed ? "+" : "") + (previewHull.maxSpeed - currentHull.maxSpeed)}
+                  </span>
+                </div>
+                {/* Cargo */}
+                <div className="ship-stat-item">
+                  <span>Cargo</span>
+                  <StatBar value={previewHull.cargoCapacity} max={MAX_SHIP_CARGO} fillClass="cargo-fill-stat" />
+                  <strong>{previewHull.cargoCapacity}</strong>
+                  <span className={`stat-delta${previewHull.cargoCapacity > currentHull.cargoCapacity ? " good" : previewHull.cargoCapacity < currentHull.cargoCapacity ? " bad" : ""}`}>
+                    {previewHull.cargoCapacity === currentHull.cargoCapacity ? "—" : (previewHull.cargoCapacity > currentHull.cargoCapacity ? "+" : "") + (previewHull.cargoCapacity - currentHull.cargoCapacity)}
+                  </span>
+                </div>
+                {/* Shield */}
+                <div className="ship-stat-item">
+                  <span>Shield</span>
+                  <StatBar value={previewHull.baseShield} max={MAX_SHIP_TANK / 3} fillClass="shield-fill" />
+                  <strong>{previewHull.baseShield}</strong>
+                  <span className={`stat-delta${previewHull.baseShield > currentHull.baseShield ? " good" : previewHull.baseShield < currentHull.baseShield ? " bad" : ""}`}>
+                    {previewHull.baseShield === currentHull.baseShield ? "—" : (previewHull.baseShield > currentHull.baseShield ? "+" : "") + (previewHull.baseShield - currentHull.baseShield)}
+                  </span>
+                </div>
+                {/* Armor */}
+                <div className="ship-stat-item">
+                  <span>Armor</span>
+                  <StatBar value={previewHull.baseArmor} max={MAX_SHIP_TANK / 3} fillClass="armor-fill" />
+                  <strong>{previewHull.baseArmor}</strong>
+                  <span className={`stat-delta${previewHull.baseArmor > currentHull.baseArmor ? " good" : previewHull.baseArmor < currentHull.baseArmor ? " bad" : ""}`}>
+                    {previewHull.baseArmor === currentHull.baseArmor ? "—" : (previewHull.baseArmor > currentHull.baseArmor ? "+" : "") + (previewHull.baseArmor - currentHull.baseArmor)}
+                  </span>
+                </div>
+                {/* Hull */}
+                <div className="ship-stat-item">
+                  <span>Hull</span>
+                  <StatBar value={previewHull.baseHull} max={MAX_SHIP_TANK / 3} fillClass="hull-fill" />
+                  <strong>{previewHull.baseHull}</strong>
+                  <span className={`stat-delta${previewHull.baseHull > currentHull.baseHull ? " good" : previewHull.baseHull < currentHull.baseHull ? " bad" : ""}`}>
+                    {previewHull.baseHull === currentHull.baseHull ? "—" : (previewHull.baseHull > currentHull.baseHull ? "+" : "") + (previewHull.baseHull - currentHull.baseHull)}
+                  </span>
+                </div>
+                {/* Capacitor */}
+                <div className="ship-stat-item">
+                  <span>Capacitor</span>
+                  <StatBar value={previewHull.baseCapacitor} max={MAX_SHIP_CAP} fillClass="cap-fill" />
+                  <strong>{previewHull.baseCapacitor}</strong>
+                  <span className={`stat-delta${previewHull.baseCapacitor > currentHull.baseCapacitor ? " good" : previewHull.baseCapacitor < currentHull.baseCapacitor ? " bad" : ""}`}>
+                    {previewHull.baseCapacitor === currentHull.baseCapacitor ? "—" : (previewHull.baseCapacitor > currentHull.baseCapacitor ? "+" : "") + (previewHull.baseCapacitor - currentHull.baseCapacitor)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="ship-slot-row">
+                <span className="ship-slot-label">Weapon</span>
+                <span className="ship-slot-val">{previewHull.slots.weapon}</span>
+                <span className="ship-slot-label">Utility</span>
+                <span className="ship-slot-val">{previewHull.slots.utility}</span>
+                <span className="ship-slot-label">Defense</span>
+                <span className="ship-slot-val">{previewHull.slots.defense}</span>
+                <span className="ship-slot-label">Lock</span>
+                <span className="ship-slot-val">{previewHull.lockRange}m</span>
+              </div>
+            </article>
+          </div>
+        )}
+
+        {/* ── MARKET TAB ── */}
+        {tab === "market" && (
+          <div className="mkt-container">
+            <div className="mkt-header-bar">
+              <div className="mkt-table-copy">
+                <strong>Commodity Exchange</strong>
+                <span>All stocked goods in one sortable table.</span>
+              </div>
+              <div className="mkt-cargo-strip">
+                <span className="mkt-cargo-label">Cargo</span>
+                <div className="mkt-cargo-bar">
+                  <div className="mkt-cargo-fill" style={{ width: `${cargoPct}%` }} />
+                </div>
+                <span className="mkt-cargo-label">{cargoUsed}/{roundedCargoCapacity}u · {roundedFreeCargo} free</span>
+                {missionCargoUsed > 0 && <span className="mkt-cargo-label mkt-mission-lock">{missionCargoUsed}u mission locked</span>}
+                <span className="mkt-cargo-label">✦ {world.player.credits} cr</span>
+              </div>
+            </div>
+            <div className="mkt-table-shell">
+              <div className="mkt-table">
+                <div className="mkt-table-row mkt-table-head">
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("name")}>Good{marketSortLabel("name")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("category")}>Category{marketSortLabel("category")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("volume")}>Vol{marketSortLabel("volume")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("owned")}>Owned{marketSortLabel("owned")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("buyPrice")}>Buy{marketSortLabel("buyPrice")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("sellPrice")}>Sell{marketSortLabel("sellPrice")}</button>
+                  <button type="button" className="mkt-sort-btn" onClick={() => toggleMarketSort("profit")}>Best Margin{marketSortLabel("profit")}</button>
+                  <span>Trade</span>
+                </div>
+                {sortedMarketRows.map(({ commodity, buyPrice, sellPrice, owned, hint, profitPerUnit }) => {
+                  const quantity = quantityFor(commodity.id);
+                  const buyTotal = buyPrice * quantity;
+                  const sellQty = Math.min(quantity, owned);
+                  const sellTotal = sellPrice * sellQty;
+                  const canAfford = world.player.credits >= buyTotal;
+                  const requiredVolume = commodity.volume * quantity;
+                  const canFit = freeCargo >= requiredVolume;
+                  const buyFill = Math.min(100, (buyPrice / maxMarketPrice) * 100);
+                  const sellFill = Math.min(100, (sellPrice / maxMarketPrice) * 100);
+
+                  return (
+                    <div key={commodity.id} className="mkt-table-row">
+                      <div className="mkt-good-cell">
+                        <strong>{commodity.name}</strong>
+                        <div className="mkt-row-tags">
+                          {commodity.riskTag !== "legal" && <span className="status-chip mkt-risk-chip">{commodity.riskTag}</span>}
+                        </div>
+                      </div>
+                      <span>{CATEGORY_ICONS[commodity.category] ?? "◦"} {CATEGORY_LABELS[commodity.category] ?? commodity.category}</span>
+                      <span>{commodity.volume}u</span>
+                      <span>{owned}</span>
+                      <div className="mkt-price-cell">
+                        <div className="mkt-bar"><div className="mkt-bar-fill mkt-buy-fill" style={{ width: `${buyFill}%` }} /></div>
+                        <span>{buyPrice} cr</span>
+                      </div>
+                      <div className="mkt-price-cell">
+                        <div className="mkt-bar"><div className="mkt-bar-fill mkt-sell-fill" style={{ width: `${sellFill}%` }} /></div>
+                        <span>{sellPrice} cr</span>
+                      </div>
+                      <div className={`mkt-margin-cell${profitPerUnit > 0 ? " positive" : ""}`}>
+                        <strong>{profitPerUnit > 0 ? `+${profitPerUnit}` : "0"}</strong>
+                        <small>{hint && profitPerUnit > 0 ? `${hint.stationName} · ${hint.systemName}` : "No route"}</small>
+                      </div>
+                      <div className="mkt-trade-cell">
+                        <div className="mkt-qty-row">
+                          <button type="button" className="mkt-qty-btn" onClick={() => setQuantity(commodity.id, quantity - 1)}>−</button>
+                          <span className="mkt-qty-val">{quantity}</span>
+                          <button type="button" className="mkt-qty-btn" onClick={() => setQuantity(commodity.id, quantity + 1)}>+</button>
+                        </div>
+                        <div className="mkt-action-row">
+                          <button
+                            type="button"
+                            className={profitPerUnit > 0 ? "primary-button" : ""}
+                            onClick={() => onBuyCommodity(commodity.id, quantity)}
+                            disabled={!canAfford || !canFit}
+                            title={
+                              !canAfford
+                                ? "Not enough credits"
+                                : !canFit
+                                  ? `Need ${requiredVolume}u, free ${freeCargo}u${
+                                      missionCargoUsed > 0 ? ` (${missionCargoUsed}u locked by mission cargo)` : ""
+                                    }`
+                                  : `Buy ${quantity} ${commodity.name}`
+                            }
+                          >
+                            Buy {buyTotal}
+                          </button>
+                          <button type="button" onClick={() => onSellCommodity(commodity.id, sellQty)} disabled={sellQty <= 0}>
+                            Sell {sellQty > 0 ? `${sellQty} · ${sellTotal}` : "0"}
+                          </button>
+                        </div>
+                        {(!canAfford || !canFit) && (
+                          <span className="mkt-warn">
+                            {!canAfford
+                              ? "Need credits"
+                              : `Need ${Math.max(0, requiredVolume - freeCargo)}u${missionCargoUsed > 0 ? " · mission cargo is reserved" : ""}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODULES TAB ── */}
+        {tab === "modules" && (
+          <div className="mod-container">
+            {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => {
+              const slotModules = modulesBySlot[slotType];
+              if (slotModules.length === 0) return null;
+              return (
+                <CollapsibleSection
+                  key={slotType}
+                  title={`${slotType} modules`}
+                  subtitle={`${slotModules.length} listings`}
+                  defaultOpen={index === 0}
+                  className="mod-slot-section"
+                >
+                  {slotModules.length > 0 ? (
+                    slotModules.map((module) => {
+                      const owned = world.player.inventory.modules[module.id] ?? 0;
+                      const buyPrice = snapshot.economy.moduleBuyPrices[module.id] ?? module.price;
+                      const sellPrice = snapshot.economy.moduleSellPrices[module.id] ?? Math.max(1, Math.floor(module.price * 0.55));
+                      const miningSummary = moduleMiningSummary(module);
+                      return (
+                        <div key={module.id} className={`mod-row kind-${module.kind}`}>
+                          <span className="mod-kind-icon" title={module.kind}>{MODULE_KIND_ICONS[module.kind] ?? "·"}</span>
+                          <div className="mod-row-info">
+                            <div className="mod-row-name-line">
+                              <strong>{module.name}</strong>
+                              {owned > 0 && <span className="status-chip mod-owned-chip">{owned} owned</span>}
+                            </div>
+                          <div className="mod-row-tags">
+                            <span className="status-chip">{module.category}</span>
+                            {module.sizeClass && <span className="status-chip">{module.sizeClass}</span>}
+                            {module.techLevel && <span className="status-chip">T{module.techLevel}</span>}
+                            <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
+                              {moduleCapPressureLabel(module)}
+                            </span>
+                          </div>
+                          <p className="mod-desc">{module.description}</p>
+                          <p className="mod-detail">{moduleFitAdvice(module)}</p>
+                          {miningSummary && <p className="mod-detail">{miningSummary}</p>}
+                        </div>
+                          <div className="mod-row-prices">
+                            <div className="mod-price-pair">
+                              <span className="mod-price-label">Buy</span>
+                              <span className="mod-price-val">{buyPrice} cr</span>
+                            </div>
+                            <div className="mod-price-pair">
+                              <span className="mod-price-label">Sell</span>
+                              <span className="mod-price-val">{sellPrice} cr</span>
+                            </div>
+                          </div>
+                          <div className="mod-row-actions">
+                            <button type="button" onClick={() => onBuyModule(module.id)}>Buy</button>
+                            <button type="button" onClick={() => onSellModule(module.id)} disabled={owned <= 0}>Sell</button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="fit-empty-copy">No {slotType} modules stocked here.</div>
+                  )}
+                </CollapsibleSection>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── FITTING & BUILDS TAB ── */}
+        {tab === "fitting" && (
+          <div className="station-grid">
+            <article className="panel-lite">
+              <h3>Fitting Cradle</h3>
+              <p style={{ marginBottom: "0.75rem" }}>
+                {playerShipById[world.player.hullId]?.name} — drag modules from the locker onto the hull to fit them.
+              </p>
+              <div className="fitting-layout">
+                <div className="ship-fitting-board">
+                  <div className="ship-frame-shell">
+                    <div className="ship-frame-glow" />
+                    <div className="ship-frame-body ship-frame-body--diagram">
+                      <div className="ship-frame-title">
+                        <strong>{playerShipById[world.player.hullId]?.name}</strong>
+                        <span>
+                          {playerShipById[world.player.hullId]?.shipClass} · {SHIP_ARCHETYPE_LABELS[playerShipById[world.player.hullId]?.archetype ?? ""] ?? playerShipById[world.player.hullId]?.archetype}
+                          {" · "}
+                          {playerShipById[world.player.hullId]?.role}
+                        </span>
+                      </div>
+                      <ShipFittingDiagram
+                        hull={playerShipById[world.player.hullId]}
+                        equipped={world.player.equipped}
+                        draggedModuleId={draggedModuleId}
+                        hoveredSlotKey={hoveredSlotKey}
+                        onSlotHover={setHoveredSlotKey}
+                        onSlotDrop={handleSlotDrop}
+                        onClearSlot={(slotType, index) => onEquip(slotType, index, null)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="module-locker">
+                  {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => (
+                    <CollapsibleSection
+                      key={slotType}
+                      title={`${slotType} locker`}
+                      subtitle={`${inventoryModulesBySlot[slotType].length} items`}
+                      defaultOpen={index === 0}
+                      className="fit-group"
+                    >
+                      <div className="module-locker-list">
+                        {inventoryModulesBySlot[slotType].length > 0 ? (
+                          inventoryModulesBySlot[slotType].map((module) => (
+                            <div
+                              key={module.id}
+                              className={`module-drag-card${draggedModuleId === module.id ? " dragging" : ""}`}
+                              draggable
+                              onDragStart={() => setDraggedModuleId(module.id)}
+                              onDragEnd={() => {
+                                setDraggedModuleId(null);
+                                setHoveredSlotKey(null);
+                              }}
+                            >
+                              <div>
+                                <strong>{module.name}</strong>
+                                <span>
+                                  {module.category}
+                                  {module.sizeClass ? ` · ${module.sizeClass}` : ""}
+                                </span>
+                                <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
+                                  {moduleCapPressureLabel(module)}
+                                </span>
+                              </div>
+                              <div className="module-drag-meta">
+                                <span className="status-chip">x{world.player.inventory.modules[module.id] ?? 0}</span>
+                                <span>{module.price} cr</span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="fit-empty-copy">No spare {slotType} modules in storage.</div>
+                        )}
+                      </div>
+                    </CollapsibleSection>
+                  ))}
+                </div>
+              </div>
+            </article>
+
+            <article className="panel-lite">
+              <CollapsibleSection title="Saved Builds" subtitle={`${world.player.savedBuilds.length} presets`} defaultOpen>
+                <div className="stack-list">
+                  {world.player.savedBuilds.map((build) => (
+                    <div key={build.id} className="market-item">
+                      <div>
+                        <strong>{build.name}</strong>
+                        <span className="status-chip">
+                          {build.shipId === world.player.hullId
+                            ? `${changedCount(build)} changes · ${(1 + changedCount(build) * 0.95).toFixed(1)}s swap`
+                            : "other hull"}
+                        </span>
+                        <p>{playerShipById[build.shipId]?.name ?? build.shipId} · {summarizeBuild(build) || "Empty fit"}</p>
+                      </div>
+                      <div className="market-actions">
+                        <button type="button" className="primary-button" onClick={() => onLoadBuild(build.id)}>
+                          Load Build
+                        </button>
+                        <button type="button" onClick={() => onSaveBuild(build.id)}>
+                          Save Current Fit
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            </article>
+          </div>
+        )}
+
+        {/* ── MISSIONS TAB ── */}
+        {tab === "missions" && (
+          <div className="station-grid">
+            <article className="panel-lite">
+              <CollapsibleSection title="Story Mission Board" subtitle={`${missionCatalog.length} missions`} defaultOpen>
+                <div className="stack-list">
+                  {missionCatalog.map((mission) => {
+                    const state = world.missions[mission.id];
+                    return (
+                      <div key={mission.id} className="market-item">
+                        <div className="mission-card-header">
+                          <strong>{mission.title}</strong>
+                          <span className="status-chip">{missionTypeLabel(mission.type)}</span>
+                          <span className="status-chip">{state.status}</span>
+                        </div>
+                        <p>{mission.briefing}</p>
+                        <div className="market-actions">
+                          {state.status === "available" && (
+                            <button type="button" onClick={() => onAcceptMission(mission.id)}>Accept</button>
+                          )}
+                          {state.status === "readyToTurnIn" && (
+                            <button type="button" className="primary-button" onClick={() => onTurnInMission(mission.id)}>
+                              Claim {mission.rewardCredits} cr
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleSection>
+            </article>
+
+            <article className="panel-lite">
+              <CollapsibleSection title="Transport Contracts" subtitle={`${transportMissionCatalog.length} jobs`} defaultOpen>
+                <div className="stack-list">
+                  {transportMissionCatalog.map((mission) => {
+                    const state = world.transportMissions[mission.id];
+                    if (!state) return null;
+                    const route = transportRouteMetrics(mission);
+                    return (
+                      <div key={mission.id} className={`market-item${state.status === "active" ? " mission-active-card" : ""}`}>
+                        <div className="mission-card-header">
+                          <strong>{mission.title}</strong>
+                          <div className="mission-card-badges">
+                            <span className="status-chip">{missionTypeLabel("haul")}</span>
+                            <span className="status-chip">{transportStatusLabel(state)}</span>
+                            <RiskPips risk={route.risk} />
+                            <span className="jump-badge">{route.deliveryJumps}J</span>
+                            <span className="reward-badge">
+                              {route.rewardEstimate} cr
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mission-route">
+                          <span>{sectorById[mission.pickupSystemId]?.name ?? mission.pickupSystemId}</span>
+                          <span className="route-arrow">→</span>
+                          <span>{sectorById[mission.destinationSystemId]?.name ?? mission.destinationSystemId}</span>
+                          <span className="status-chip">{getRegionNameForSystem(mission.destinationSystemId)}</span>
+                          {route.toPickup > 0 && (
+                            <span className="status-chip">+{route.toPickup}J to pickup</span>
+                          )}
+                        </div>
+
+                        <div className="mission-details">
+                          <span className="status-chip">{mission.cargoVolume}u {mission.cargoType}</span>
+                          <span className="status-chip">{route.cargoFitLabel}</span>
+                          {route.cargoReimbursement > 0 && (
+                            <span className="status-chip">reimburses {route.cargoReimbursement} cr</span>
+                          )}
+                          {state.status === "available" && freeCargo < mission.cargoVolume && (
+                            <span className="status-chip mkt-risk-chip">Needs more cargo room</span>
+                          )}
+                        </div>
+
+                        <p style={{ fontSize: "0.76rem", color: "var(--text-dim)", margin: 0 }}>{mission.description}</p>
+
+                        <div className="market-actions">
+                          {state.status === "available" && (
+                            <button type="button" onClick={() => onAcceptMission(mission.id)}>
+                              Accept Haul
+                            </button>
+                          )}
+                          {state.status === "active" && (
+                            <span className="status-chip">
+                              {state.pickedUp ? "Delivering cargo" : "Travel to pickup"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleSection>
+            </article>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
