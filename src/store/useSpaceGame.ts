@@ -57,7 +57,11 @@ function worldPointFromClient(
 export function useSpaceGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef<GameWorld>(loadWorld());
-  const zoomTargetRef = useRef<number>(Number(window.localStorage.getItem("starfall-zoom") ?? "1"));
+  const zoomTargetRef = useRef<number>(
+    window.innerWidth < 768
+      ? clampZoom(0.65)
+      : Number(window.localStorage.getItem("starfall-zoom") ?? "1")
+  );
   const zoomCurrentRef = useRef<number>(zoomTargetRef.current);
   const [snapshot, setSnapshot] = useState<GameSnapshot>(() => createSnapshot(worldRef.current));
   const [overlay, setOverlay] = useState<"map" | "inventory" | "fitting" | "missions" | null>(null);
