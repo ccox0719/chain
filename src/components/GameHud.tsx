@@ -109,6 +109,10 @@ export function GameHud({
   const [overviewFilter, setOverviewFilter] = useState<
     "all" | "ships" | "hostile" | "stations" | "gates" | "asteroids" | "missions" | "loot"
   >("all");
+  const [pilotCollapsed, setPilotCollapsed] = useState(false);
+  const [targetCollapsed, setTargetCollapsed] = useState(false);
+  const [overviewCollapsed, setOverviewCollapsed] = useState(false);
+  const [missionCollapsed, setMissionCollapsed] = useState(false);
 
   const filteredOverview = useMemo(() => {
     return overview.filter((entry) => {
@@ -303,8 +307,14 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
 
       {/* TOP ROW — pilot card only */}
       <div className="hud-top">
-        <div className="hud-card pilot-card">
-          <h2>{ship.name}</h2>
+        <div className={`hud-window hud-window-left hud-window-pilot${pilotCollapsed ? " collapsed" : ""}`}>
+          <button type="button" className="hud-edge-toggle" onClick={() => setPilotCollapsed((current) => !current)}>
+            {pilotCollapsed ? "+" : "−"}
+          </button>
+          <div className={`hud-card pilot-card${pilotCollapsed ? " collapsed" : ""}`}>
+            <h2>{ship.name}</h2>
+          {!pilotCollapsed && (
+            <>
           <div className="bar-stack">
             <label title="Shield">⬡<div className="meter"><span className="shield-fill" style={{ width: `${(world.player.shield / derived.maxShield) * 100}%` }} /></div></label>
             <label title="Armor">◼<div className="meter"><span className="armor-fill" style={{ width: `${(world.player.armor / derived.maxArmor) * 100}%` }} /></div></label>
@@ -392,12 +402,22 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
               </div>
             </div>
           )}
+            </>
+          )}
+          </div>
         </div>
       </div>
 
       {/* MIDDLE ROW — target panel (left) + overview (right) */}
       <div className="hud-middle">
-        <div className="hud-card target-panel">
+        <div className={`hud-window hud-window-left hud-window-target${targetCollapsed ? " collapsed" : ""}`}>
+          <button type="button" className="hud-edge-toggle" onClick={() => setTargetCollapsed((current) => !current)}>
+            {targetCollapsed ? "+" : "−"}
+          </button>
+          <div className={`hud-card target-panel${targetCollapsed ? " collapsed" : ""}`}>
+            <p className="eyebrow" style={{ margin: 0 }}>Targeting</p>
+          {!targetCollapsed && (
+            <>
           {/* Selected object info merged into target panel */}
           {selectedInfo && (
             <div className={`selected-info${selectedCombatTone ? ` combat-${selectedCombatTone}` : ""}`}>
@@ -459,18 +479,27 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
               <span>—</span>
             )}
           </div>
+            </>
+          )}
         </div>
-
-        <div className="hud-card overview-panel">
-          <div className="overview-head">
-            <p className="eyebrow" style={{ margin: 0 }}>Overview</p>
-            <div className="overlay-shortcuts">
-              <button type="button" title="Missions (J)" onClick={() => setOverlay(overlay === "missions" ? null : "missions")}>⊕</button>
-              <button type="button" title="Inventory (I)" onClick={() => setOverlay(overlay === "inventory" ? null : "inventory")}>⊡</button>
-              <button type="button" title="Fitting (F)" onClick={() => setOverlay(overlay === "fitting" ? null : "fitting")}>⚙</button>
-              <button type="button" title="Map (M)" onClick={() => setOverlay(overlay === "map" ? null : "map")}>◎</button>
-            </div>
           </div>
+
+        <div className={`hud-window hud-window-right hud-window-overview${overviewCollapsed ? " collapsed" : ""}`}>
+          <button type="button" className="hud-edge-toggle" onClick={() => setOverviewCollapsed((current) => !current)}>
+            {overviewCollapsed ? "+" : "−"}
+          </button>
+          <div className={`hud-card overview-panel${overviewCollapsed ? " collapsed" : ""}`}>
+            <div className="overview-head">
+              <p className="eyebrow" style={{ margin: 0 }}>Overview</p>
+              <div className="overlay-shortcuts">
+                <button type="button" title="Missions (J)" onClick={() => setOverlay(overlay === "missions" ? null : "missions")}>⊕</button>
+                <button type="button" title="Inventory (I)" onClick={() => setOverlay(overlay === "inventory" ? null : "inventory")}>⊡</button>
+                <button type="button" title="Fitting (F)" onClick={() => setOverlay(overlay === "fitting" ? null : "fitting")}>⚙</button>
+                <button type="button" title="Map (M)" onClick={() => setOverlay(overlay === "map" ? null : "map")}>◎</button>
+              </div>
+            </div>
+          {!overviewCollapsed && (
+            <>
           <div className="overview-filters">
             {[
               ["all", "ALL"],
@@ -547,11 +576,20 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
               })}
             </div>
           </div>
+            </>
+          )}
+          </div>
         </div>
         {hasMission && (
-          <div className="hud-card mission-card">
-            <p className="eyebrow">Mission Guide</p>
-            <h2>{missionGuideTitle}</h2>
+          <div className={`hud-window hud-window-right hud-window-floating hud-window-mission${missionCollapsed ? " collapsed" : ""}`}>
+            <button type="button" className="hud-edge-toggle" onClick={() => setMissionCollapsed((current) => !current)}>
+              {missionCollapsed ? "+" : "−"}
+            </button>
+            <div className={`hud-card mission-card${missionCollapsed ? " collapsed" : ""}`}>
+              <p className="eyebrow">Mission Guide</p>
+              <h2>{missionGuideTitle}</h2>
+            {!missionCollapsed && (
+              <>
             <div className="mission-guide-row">
               {missionGuideLabel && <span className="status-chip">{missionGuideLabel}</span>}
               {activeTransportMission ? (
@@ -592,6 +630,9 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
                 )
               )}
             </div>
+              </>
+            )}
+          </div>
           </div>
         )}
       </div>

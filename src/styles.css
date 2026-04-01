@@ -197,6 +197,57 @@ button:disabled { opacity: 0.38; cursor: default; }
   backdrop-filter: blur(18px);
 }
 
+.hud-card.collapsed {
+  padding-bottom: 0.6rem;
+}
+
+.hud-window {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+
+.hud-window-left {
+  padding-left: 0.5rem;
+}
+
+.hud-window-right {
+  padding-right: 0.5rem;
+}
+
+.hud-window-floating {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 12;
+}
+
+.hud-edge-toggle {
+  position: absolute;
+  top: 0.85rem;
+  width: 22px;
+  height: 44px;
+  min-width: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(7, 12, 26, 0.78);
+  border: 1px solid rgba(130, 158, 210, 0.12);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  z-index: 1;
+}
+
+.hud-window-left .hud-edge-toggle {
+  left: 0;
+}
+
+.hud-window-right .hud-edge-toggle {
+  right: 0;
+}
+
 .pilot-card { width: min(300px, calc(100vw - 2rem)); }
 .mission-card {
   position: absolute;
@@ -2023,6 +2074,17 @@ select {
     font-size: 0.8rem;
   }
 
+  .hud-card-head {
+    margin-bottom: 0.3rem;
+  }
+
+  .hud-collapse-button {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    font-size: 0.76rem;
+  }
+
   .eyebrow {
     margin-bottom: 0.3rem;
     font-size: 0.58rem;
@@ -2034,7 +2096,57 @@ select {
 
   .hud-middle {
     gap: 0.45rem;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  .hud-window.collapsed {
+    position: fixed;
+    padding: 0;
+    z-index: 16;
+    pointer-events: auto;
+  }
+
+  .hud-window.collapsed .hud-card {
+    display: none;
+  }
+
+  .hud-window.collapsed .hud-edge-toggle {
+    position: static;
+    width: 26px;
+    height: 64px;
+    min-width: 26px;
+    font-size: 0.82rem;
+    background: rgba(7, 12, 26, 0.9);
+    border-color: rgba(130, 158, 210, 0.16);
+  }
+
+  .hud-window-left.collapsed .hud-edge-toggle {
+    border-radius: 0 12px 12px 0;
+  }
+
+  .hud-window-right.collapsed .hud-edge-toggle {
+    border-radius: 12px 0 0 12px;
+  }
+
+  .hud-window-pilot.collapsed {
+    left: 0;
+    top: 4.15rem;
+  }
+
+  .hud-window-target.collapsed {
+    left: 0;
+    top: 9rem;
+  }
+
+  .hud-window-overview.collapsed {
+    right: 0;
+    top: 4.15rem;
+  }
+
+  .hud-window-mission.collapsed {
+    right: 0;
+    top: 9rem;
   }
 
   .pilot-card {
@@ -2221,7 +2333,7 @@ select {
   }
 
   .hud-middle {
-    margin-top: auto;
+    margin-top: 0;
   }
 
   .pilot-card,
