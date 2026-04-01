@@ -715,18 +715,5 @@ export function renderSector(
   ctx.fillStyle = "#96b9df";
   ctx.fillText(`Nav: ${world.player.navigation.mode}`, 30, viewportHeight - 36);
 
-  const barsX = viewportWidth - 196;
-  setGlow(ctx, "#79d4ff", 8);
-  ctx.fillStyle = "#79d4ff";
-  ctx.fillRect(barsX, 22, 152 * (world.player.shield / derived.maxShield), 7);
-  clearGlow(ctx);
-  setGlow(ctx, "#ff8e76", 8);
-  ctx.fillStyle = "#ff8e76";
-  ctx.fillRect(barsX, 38, 152 * (world.player.hull / derived.maxHull), 7);
-  clearGlow(ctx);
-  setGlow(ctx, "#b6ff6c", 8);
-  ctx.fillStyle = "#b6ff6c";
-  ctx.fillRect(barsX, 54, 152 * (world.player.capacitor / derived.capacitorCapacity), 7);
-  clearGlow(ctx);
   ctx.restore();
 }

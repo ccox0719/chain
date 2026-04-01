@@ -40,6 +40,7 @@ export function GamePage() {
           overlay={overlay}
           setOverlay={setOverlay}
           panelsVisible={hudVisible}
+          onOpenMenu={() => setMenuOpen(true)}
           onSelectOverview={actions.selectObject}
           onOpenContextForOverview={(ref, event) =>
             actions.openContextMenuForObject(ref, event.clientX, event.clientY)
@@ -52,10 +53,6 @@ export function GamePage() {
           onStopShip={() => actions.issueCommand({ type: "stop" })}
           onToggleAutopilot={() => actions.setRouteAutoFollow(!Boolean(snapshot.world.routePlan?.autoFollow))}
         />
-
-        <button type="button" className="menu-button" onClick={() => setMenuOpen(true)}>
-          ≡ Menu
-        </button>
 
         {overlay && (
           <SidebarPanels

@@ -59,7 +59,7 @@ export function useSpaceGame() {
   const worldRef = useRef<GameWorld>(loadWorld());
   const zoomTargetRef = useRef<number>(
     window.innerWidth < 768
-      ? clampZoom(0.65)
+      ? 0.28
       : Number(window.localStorage.getItem("starfall-zoom") ?? "1")
   );
   const zoomCurrentRef = useRef<number>(zoomTargetRef.current);
@@ -281,17 +281,8 @@ export function useSpaceGame() {
           clientY
         );
         const ref = resolveSelectionAtPoint(worldRef.current, point);
-        const wasSelected =
-          ref &&
-          worldRef.current.selectedObject &&
-          ref.id === worldRef.current.selectedObject.id &&
-          ref.type === worldRef.current.selectedObject.type;
         selectObject(worldRef.current, ref);
-        if (ref && wasSelected) {
-          setContextMenu({ x: clientX, y: clientY, target: ref });
-        } else {
-          setContextMenu(null);
-        }
+        setContextMenu(null);
         refresh();
       },
       handleCanvasRightClick: (clientX: number, clientY: number) => {
@@ -352,7 +343,7 @@ export function useSpaceGame() {
 }
 
 function clampZoom(value: number) {
-  return Math.max(0.65, Math.min(1.8, value));
+  return Math.max(0.28, Math.min(1.8, value));
 }
 
 function loadWorld() {
