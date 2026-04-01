@@ -171,6 +171,13 @@ export interface SystemDestination {
   arrivalGateId?: string;
   unlockMissionId?: string;
   tags?: string[];
+  anomalyField?: {
+    effect: "push" | "pull";
+    radius: number;
+    strength: number;
+    debrisCount?: number;
+    tint?: string;
+  };
 }
 
 export interface ShipHullDefinition {
@@ -530,8 +537,14 @@ export interface RoutePlan {
   steps: RouteStep[];
 }
 
+export interface PilotLicenseState {
+  level: 1 | 2 | 3;
+  progress: number;
+}
+
 export interface PlayerState {
   starterConfigId: StarterShipConfigId;
+  pilotLicense: PilotLicenseState;
   hullId: string;
   ownedShips: string[];
   position: Vec2;
@@ -626,6 +639,20 @@ export interface FloatingText {
   ttl: number;
 }
 
+export type ParticleShape = "spark" | "dot" | "diamond";
+
+export interface ParticleState {
+  id: string;
+  position: Vec2;
+  velocity: Vec2;
+  lifetime: number;
+  ttl: number;
+  color: string;
+  size: number;
+  shape: ParticleShape;
+  glow: number;
+}
+
 export interface MissionState {
   missionId: string;
   status: "locked" | "available" | "active" | "readyToTurnIn" | "completed";
@@ -650,6 +677,7 @@ export interface SectorRuntime {
   loot: LootDropState[];
   wrecks: WreckState[];
   floatingText: FloatingText[];
+  particles: ParticleState[];
 }
 
 export interface DerivedShipStats {
@@ -760,7 +788,6 @@ export interface TransportTracker {
   bonusReward: number;
   cargoReimbursement: number;
   rewardEstimate: number;
-  cargoFitLabel: string;
   dueInSec: number | null;
   recommendedRoute: RoutePreference;
 }

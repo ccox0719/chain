@@ -10,6 +10,12 @@ import { isModuleAvailableAtStation } from "../game/economy/moduleAvailability";
 import { playerShipById, playerShips } from "../game/data/ships";
 import { commodityCatalog } from "../game/economy/data/commodities";
 import { getBestSellLocationForCommodity } from "../game/economy/market";
+import {
+  getPilotLicenseProgressPercent,
+  getPilotLicenseProgressRange,
+  getRequiredPilotLicenseLevel,
+  hasPilotLicenseForModule
+} from "../game/utils/pilotLicense";
 import { transportMissionCatalog } from "../game/missions/data/transportMissions";
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
@@ -236,6 +242,11 @@ export function StationPanel({
   const roundedFreeCargo = Math.round(freeCargo);
   const missionCargoUsed = world.player.missionCargo.reduce((total, entry) => total + entry.volume, 0);
   const previewBonuses = previewHull.bonuses ?? null;
+  const pilotLicense = world.player.pilotLicense;
+  const pilotLicenseProgress = getPilotLicenseProgressPercent(pilotLicense);
+  const pilotLicenseRange = getPilotLicenseProgressRange(pilotLicense.level);
+  const pilotLicenseNextTarget =
+    pilotLicense.level >= 3 ? "Maxed" : `${pilotLicense.progress - pilotLicenseRange.start} / ${pilotLicenseRange.end - pilotLicenseRange.start}`;
 
   const stockedCommodities = useMemo(
     () => getStationCommodityStock(commodityCatalog, security, currentStation),
@@ -304,13 +315,31 @@ export function StationPanel({
     availableModules.forEach(m => { groups[m.slot].push(m); });
     return groups;
   }, [availableModules]);
-  const inventoryModulesBySlot: Record<ModuleSlot, typeof moduleCatalog> = { weapon: [], utility: [], defense: [] };
-  // Fitting should show every owned module, even if the current station does not sell it.
-  moduleCatalog.forEach((module) => {
-    if ((world.player.inventory.modules[module.id] ?? 0) > 0) {
-      inventoryModulesBySlot[module.slot].push(module);
-    }
+  const ownedModuleEntries = Object.entries(world.player.inventory.modules)
+    .filter(([, count]) => count > 0)
+    .map(([moduleId, count]) => ({
+      moduleId,
+      count,
+      module: moduleById[moduleId] ?? null
+    }));
+  const inventoryModulesBySlot: Record<ModuleSlot, Array<{ moduleId: string; count: number; module: NonNullable<typeof ownedModuleEntries[number]["module"]> }>> = {
+    weapon: [],
+    utility: [],
+    defense: []
+  };
+  ownedModuleEntries.forEach((entry) => {
+    if (!entry.module) return;
+    inventoryModulesBySlot[entry.module.slot].push({
+      moduleId: entry.moduleId,
+      count: entry.count,
+      module: entry.module
+    });
   });
+  (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
+    inventoryModulesBySlot[slotType].sort((left, right) => left.module.name.localeCompare(right.module.name));
+  });
+  const allOwnedModules = (["weapon", "utility", "defense"] as ModuleSlot[]).flatMap((slotType) => inventoryModulesBySlot[slotType]);
+  const unknownOwnedModules = ownedModuleEntries.filter((entry) => !entry.module);
 
   if (!currentStation) return null;
 
@@ -343,26 +372,6 @@ export function StationPanel({
               ]
     : [];
 
-  function changedCount(build: (typeof world.player.savedBuilds)[number]) {
-    return (["weapon", "utility", "defense"] as ModuleSlot[]).reduce((total, slotType) => {
-      const slotCount = Math.max(world.player.equipped[slotType].length, build.equipped[slotType].length);
-      let slotChanges = 0;
-      for (let index = 0; index < slotCount; index += 1) {
-        if ((world.player.equipped[slotType][index] ?? null) !== (build.equipped[slotType][index] ?? null)) {
-          slotChanges += 1;
-        }
-      }
-      return total + slotChanges;
-    }, 0);
-  }
-
-  function summarizeBuild(build: (typeof world.player.savedBuilds)[number]) {
-    return (["weapon", "utility", "defense"] as ModuleSlot[])
-      .flatMap((slotType) => build.equipped[slotType].filter((id): id is string => Boolean(id)))
-      .map((id) => moduleCatalog.find((m) => m.id === id)?.name ?? id)
-      .join(" · ");
-  }
-
   function moduleMiningSummary(module: (typeof moduleCatalog)[number]) {
     if (module.kind !== "mining_laser") return null;
     if (module.minesAllInRange) return "Sweeps all asteroids in range.";
@@ -387,14 +396,12 @@ export function StationPanel({
     const pickupToDestination =
       planRoute(world, mission.pickupSystemId, mission.destinationSystemId, mission.routePreference, false)?.steps ?? [];
     const cargoReimbursement = Math.max(0, Math.round(mission.cargoVolume * (mission.cargoUnitValue ?? 0)));
-    const cargoFitLabel = freeCargo >= mission.cargoVolume ? "General fit" : freeCargo >= Math.max(1, Math.floor(mission.cargoVolume * 0.6)) ? "Cargo heavy" : "Hauler fit";
     return {
       toPickup,
       deliveryJumps: pickupToDestination.length,
       risk: estimateRouteRisk(pickupToDestination),
       cargoReimbursement,
-      rewardEstimate: mission.baseReward + cargoReimbursement + (mission.bonusReward ?? 0),
-      cargoFitLabel
+      rewardEstimate: mission.baseReward + cargoReimbursement + (mission.bonusReward ?? 0)
     };
   }
 
@@ -514,6 +521,15 @@ export function StationPanel({
                 </div>
                 <div className="svc-cargo-bar">
                   <div className="svc-cargo-fill" style={{ width: `${cargoPct}%` }} />
+                </div>
+              </div>
+              <div className="license-summary">
+                <div className="license-summary-head">
+                  <span>Pilot License</span>
+                  <span>L{pilotLicense.level} {pilotLicense.level >= 3 ? "· Max" : `· ${pilotLicenseNextTarget}`}</span>
+                </div>
+                <div className="license-progress-bar">
+                  <div className="license-progress-fill" style={{ width: `${pilotLicenseProgress}%` }} />
                 </div>
               </div>
               <div className="action-row">
@@ -815,6 +831,18 @@ export function StationPanel({
         {/* ── MODULES TAB ── */}
         {tab === "modules" && (
           <div className="mod-container">
+            <article className="panel-lite license-panel">
+              <h3>Pilot License</h3>
+              <div className="license-summary">
+                <div className="license-summary-head">
+                  <span>Current Authorization</span>
+                  <span>L{pilotLicense.level} {pilotLicense.level >= 3 ? "· Maxed" : `· next ${pilotLicenseNextTarget}`}</span>
+                </div>
+                <div className="license-progress-bar">
+                  <div className="license-progress-fill" style={{ width: `${pilotLicenseProgress}%` }} />
+                </div>
+              </div>
+            </article>
             {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => {
               const slotModules = modulesBySlot[slotType];
               if (slotModules.length === 0) return null;
@@ -832,8 +860,10 @@ export function StationPanel({
                       const buyPrice = snapshot.economy.moduleBuyPrices[module.id] ?? module.price;
                       const sellPrice = snapshot.economy.moduleSellPrices[module.id] ?? Math.max(1, Math.floor(module.price * 0.55));
                       const miningSummary = moduleMiningSummary(module);
+                      const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
+                      const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
                       return (
-                        <div key={module.id} className={`mod-row kind-${module.kind}`}>
+                        <div key={module.id} className={`mod-row kind-${module.kind}${licenseLocked ? " mod-row-locked" : ""}`}>
                           <span className="mod-kind-icon" title={module.kind}>{MODULE_KIND_ICONS[module.kind] ?? "·"}</span>
                           <div className="mod-row-info">
                             <div className="mod-row-name-line">
@@ -844,6 +874,7 @@ export function StationPanel({
                             <span className="status-chip">{module.category}</span>
                             {module.sizeClass && <span className="status-chip">{module.sizeClass}</span>}
                             {module.techLevel && <span className="status-chip">T{module.techLevel}</span>}
+                            {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
                             <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
                               {moduleCapPressureLabel(module)}
                             </span>
@@ -863,7 +894,14 @@ export function StationPanel({
                             </div>
                           </div>
                           <div className="mod-row-actions">
-                            <button type="button" onClick={() => onBuyModule(module.id)}>Buy</button>
+                            <button
+                              type="button"
+                              onClick={() => onBuyModule(module.id)}
+                              disabled={licenseLocked}
+                              title={licenseLocked ? `Requires pilot license L${requiredLicenseLevel}` : `Buy ${module.name}`}
+                            >
+                              Buy
+                            </button>
                             <button type="button" onClick={() => onSellModule(module.id)} disabled={owned <= 0}>Sell</button>
                           </div>
                         </div>
@@ -880,114 +918,178 @@ export function StationPanel({
 
         {/* ── FITTING & BUILDS TAB ── */}
         {tab === "fitting" && (
-          <div className="station-grid">
-            <article className="panel-lite">
-              <h3>Fitting Cradle</h3>
-              <p style={{ marginBottom: "0.75rem" }}>
-                {playerShipById[world.player.hullId]?.name} — drag modules from the locker onto the hull to fit them.
-              </p>
-              <div className="fitting-layout">
-                <div className="ship-fitting-board">
-                  <div className="ship-frame-shell">
-                    <div className="ship-frame-glow" />
-                    <div className="ship-frame-body ship-frame-body--diagram">
-                      <div className="ship-frame-title">
-                        <strong>{playerShipById[world.player.hullId]?.name}</strong>
-                        <span>
-                          {playerShipById[world.player.hullId]?.shipClass} · {SHIP_ARCHETYPE_LABELS[playerShipById[world.player.hullId]?.archetype ?? ""] ?? playerShipById[world.player.hullId]?.archetype}
-                          {" · "}
-                          {playerShipById[world.player.hullId]?.role}
-                        </span>
+          <article className="panel-lite fitting-panel">
+            <h3>Fitting Cradle</h3>
+            <p style={{ marginBottom: "0.75rem" }}>
+              {playerShipById[world.player.hullId]?.name} — drag modules from the locker onto the hull to fit them.
+            </p>
+            <div className="ship-frame-shell fitting-shell">
+              <div className="ship-frame-glow" />
+              <div className="ship-frame-body ship-frame-body--diagram">
+                <div className="ship-frame-title">
+                  <strong>{playerShipById[world.player.hullId]?.name}</strong>
+                  <span>
+                    {playerShipById[world.player.hullId]?.shipClass} · {SHIP_ARCHETYPE_LABELS[playerShipById[world.player.hullId]?.archetype ?? ""] ?? playerShipById[world.player.hullId]?.archetype}
+                    {" · "}
+                    {playerShipById[world.player.hullId]?.role}
+                  </span>
+                </div>
+
+                <div className="fitting-shell-layout">
+                  <div className="fitting-main-stage">
+                    <ShipFittingDiagram
+                      hull={playerShipById[world.player.hullId]}
+                      equipped={world.player.equipped}
+                      draggedModuleId={draggedModuleId}
+                      hoveredSlotKey={hoveredSlotKey}
+                      onSlotHover={setHoveredSlotKey}
+                      onSlotDrop={handleSlotDrop}
+                      onClearSlot={(slotType, index) => onEquip(slotType, index, null)}
+                    />
+                  </div>
+
+                  <div className="fitting-inset-column">
+                    <section className="fitting-inset-panel">
+                      <div className="fitting-inset-head">
+                        <strong>Build Slots</strong>
+                        <span>Save or load 1, 2, 3</span>
                       </div>
-                      <ShipFittingDiagram
-                        hull={playerShipById[world.player.hullId]}
-                        equipped={world.player.equipped}
-                        draggedModuleId={draggedModuleId}
-                        hoveredSlotKey={hoveredSlotKey}
-                        onSlotHover={setHoveredSlotKey}
-                        onSlotDrop={handleSlotDrop}
-                        onClearSlot={(slotType, index) => onEquip(slotType, index, null)}
-                      />
-                    </div>
+                      <div className="build-slot-grid">
+                        {world.player.savedBuilds.map((build, index) => (
+                          <div key={build.id} className="build-slot-card">
+                            <div className="build-slot-label">Slot {index + 1}</div>
+                            <div className="build-slot-actions">
+                              <button type="button" className="primary-button" onClick={() => onLoadBuild(build.id)}>
+                                Load
+                              </button>
+                              <button type="button" onClick={() => onSaveBuild(build.id)}>
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="fitting-inset-panel">
+                      <div className="fitting-inset-head">
+                        <strong>Module Locker</strong>
+                        <span>{allOwnedModules.length} owned modules</span>
+                      </div>
+                      <CollapsibleSection
+                        title="all owned modules"
+                        subtitle={`${allOwnedModules.length} items`}
+                        defaultOpen
+                        className="fit-group"
+                      >
+                        <div className="module-locker-list">
+                          {allOwnedModules.length > 0 ? (
+                            allOwnedModules.map(({ moduleId, module, count }) => {
+                              const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
+                              const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+                              return (
+                              <div
+                                key={`owned-${moduleId}`}
+                                className={`module-drag-card${draggedModuleId === moduleId ? " dragging" : ""}${licenseLocked ? " locked" : ""}`}
+                                draggable={!licenseLocked}
+                                onDragStart={() => {
+                                  if (licenseLocked) return;
+                                  setDraggedModuleId(moduleId);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedModuleId(null);
+                                  setHoveredSlotKey(null);
+                                }}
+                              >
+                                <div className="module-drag-copy">
+                                  <div className="module-drag-title-row">
+                                    <strong>{module.name}</strong>
+                                    <span className="status-chip">{module.slot}</span>
+                                  </div>
+                                  <span>
+                                    {module.slot} · {module.category}
+                                    {module.sizeClass ? ` · ${module.sizeClass}` : ""}
+                                  </span>
+                                  <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
+                                    {moduleCapPressureLabel(module)}
+                                  </span>
+                                  {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
+                                </div>
+                                <div className="module-drag-meta">
+                                  <span className="status-chip">x{count}</span>
+                                  <span>{module.price} cr</span>
+                                </div>
+                              </div>
+                            )})
+                          ) : (
+                            <div className="fit-empty-copy">No spare modules in storage.</div>
+                          )}
+                        </div>
+                      </CollapsibleSection>
+                      {unknownOwnedModules.length > 0 && (
+                        <div className="fit-empty-copy">
+                          {unknownOwnedModules.length} owned module {unknownOwnedModules.length === 1 ? "entry is" : "entries are"} out of sync and could not be rendered.
+                        </div>
+                      )}
+                      {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => (
+                        <CollapsibleSection
+                          key={slotType}
+                          title={`${slotType} locker`}
+                          subtitle={`${inventoryModulesBySlot[slotType].length} items`}
+                          defaultOpen={inventoryModulesBySlot[slotType].length > 0 || index === 0}
+                          className="fit-group"
+                        >
+                          <div className="module-locker-list">
+                            {inventoryModulesBySlot[slotType].length > 0 ? (
+                              inventoryModulesBySlot[slotType].map(({ moduleId, module, count }) => {
+                                const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
+                                const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+                                return (
+                                <div
+                                  key={moduleId}
+                                  className={`module-drag-card${draggedModuleId === moduleId ? " dragging" : ""}${licenseLocked ? " locked" : ""}`}
+                                  draggable={!licenseLocked}
+                                  onDragStart={() => {
+                                    if (licenseLocked) return;
+                                    setDraggedModuleId(moduleId);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggedModuleId(null);
+                                    setHoveredSlotKey(null);
+                                  }}
+                                >
+                                  <div className="module-drag-copy">
+                                    <div className="module-drag-title-row">
+                                      <strong>{module.name}</strong>
+                                      <span className="status-chip">{module.slot}</span>
+                                    </div>
+                                    <span>
+                                      {module.category}
+                                      {module.sizeClass ? ` · ${module.sizeClass}` : ""}
+                                    </span>
+                                    <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
+                                      {moduleCapPressureLabel(module)}
+                                    </span>
+                                    {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
+                                  </div>
+                                  <div className="module-drag-meta">
+                                    <span className="status-chip">x{count}</span>
+                                    <span>{module.price} cr</span>
+                                  </div>
+                                </div>
+                              )})
+                            ) : (
+                              <div className="fit-empty-copy">No spare {slotType} modules in storage.</div>
+                            )}
+                          </div>
+                        </CollapsibleSection>
+                      ))}
+                    </section>
                   </div>
                 </div>
-
-                <div className="module-locker">
-                  {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => (
-                    <CollapsibleSection
-                      key={slotType}
-                      title={`${slotType} locker`}
-                      subtitle={`${inventoryModulesBySlot[slotType].length} items`}
-                      defaultOpen={index === 0}
-                      className="fit-group"
-                    >
-                      <div className="module-locker-list">
-                        {inventoryModulesBySlot[slotType].length > 0 ? (
-                          inventoryModulesBySlot[slotType].map((module) => (
-                            <div
-                              key={module.id}
-                              className={`module-drag-card${draggedModuleId === module.id ? " dragging" : ""}`}
-                              draggable
-                              onDragStart={() => setDraggedModuleId(module.id)}
-                              onDragEnd={() => {
-                                setDraggedModuleId(null);
-                                setHoveredSlotKey(null);
-                              }}
-                            >
-                              <div>
-                                <strong>{module.name}</strong>
-                                <span>
-                                  {module.category}
-                                  {module.sizeClass ? ` · ${module.sizeClass}` : ""}
-                                </span>
-                                <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
-                                  {moduleCapPressureLabel(module)}
-                                </span>
-                              </div>
-                              <div className="module-drag-meta">
-                                <span className="status-chip">x{world.player.inventory.modules[module.id] ?? 0}</span>
-                                <span>{module.price} cr</span>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="fit-empty-copy">No spare {slotType} modules in storage.</div>
-                        )}
-                      </div>
-                    </CollapsibleSection>
-                  ))}
-                </div>
               </div>
-            </article>
-
-            <article className="panel-lite">
-              <CollapsibleSection title="Saved Builds" subtitle={`${world.player.savedBuilds.length} presets`} defaultOpen>
-                <div className="stack-list">
-                  {world.player.savedBuilds.map((build) => (
-                    <div key={build.id} className="market-item">
-                      <div>
-                        <strong>{build.name}</strong>
-                        <span className="status-chip">
-                          {build.shipId === world.player.hullId
-                            ? `${changedCount(build)} changes · ${(1 + changedCount(build) * 0.95).toFixed(1)}s swap`
-                            : "other hull"}
-                        </span>
-                        <p>{playerShipById[build.shipId]?.name ?? build.shipId} · {summarizeBuild(build) || "Empty fit"}</p>
-                      </div>
-                      <div className="market-actions">
-                        <button type="button" className="primary-button" onClick={() => onLoadBuild(build.id)}>
-                          Load Build
-                        </button>
-                        <button type="button" onClick={() => onSaveBuild(build.id)}>
-                          Save Current Fit
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleSection>
-            </article>
-          </div>
+            </div>
+          </article>
         )}
 
         {/* ── MISSIONS TAB ── */}
@@ -1057,7 +1159,6 @@ export function StationPanel({
 
                         <div className="mission-details">
                           <span className="status-chip">{mission.cargoVolume}u {mission.cargoType}</span>
-                          <span className="status-chip">{route.cargoFitLabel}</span>
                           {route.cargoReimbursement > 0 && (
                             <span className="status-chip">reimburses {route.cargoReimbursement} cr</span>
                           )}

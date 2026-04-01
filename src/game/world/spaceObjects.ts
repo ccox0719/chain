@@ -221,7 +221,9 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         subtitle:
           destination.kind === "gate" && targetSystemName
             ? `Jump to ${targetSystemName}`
-            : destination.description,
+            : destination.kind === "anomaly" && destination.anomalyField
+              ? `${destination.anomalyField.effect === "pull" ? "Pull field" : "Push field"} · ${destination.description}`
+              : destination.description,
         factionLabel:
           destination.kind === "station" || destination.kind === "outpost"
             ? factionData[system.controllingFaction].name
@@ -230,7 +232,11 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
           destination.kind === "belt"
             ? destination.resource
             : destination.kind === "anomaly"
-              ? "Combat"
+              ? destination.anomalyField?.effect === "pull"
+                ? "Pull Field"
+                : destination.anomalyField?.effect === "push"
+                  ? "Push Field"
+                  : "Combat"
               : destination.kind === "station"
                 ? "Safe"
                 : destination.kind === "gate"
@@ -245,7 +251,9 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
               ? 260
               : destination.kind === "belt"
                 ? 240
-                : 150
+                : destination.kind === "anomaly" && destination.anomalyField
+                  ? destination.anomalyField.radius
+                  : 150
       };
     }
   }

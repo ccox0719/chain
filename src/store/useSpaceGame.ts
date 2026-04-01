@@ -37,6 +37,7 @@ import {
 } from "../game/systems/simulation";
 import { createInitialWorld } from "../game/entities/factories";
 import { defaultStarterShipConfigId } from "../game/data/starterShips";
+import { normalizePilotLicense } from "../game/utils/pilotLicense";
 import { CommodityId, GameSnapshot, GameWorld, ModuleSlot, SelectableRef, StarterShipConfigId, Vec2 } from "../types/game";
 
 function worldPointFromClient(
@@ -391,6 +392,7 @@ function loadWorld() {
         ...fallback.player,
         ...parsed.player,
         starterConfigId: parsed.player?.starterConfigId ?? fallback.player.starterConfigId,
+        pilotLicense: normalizePilotLicense(parsed.player?.pilotLicense ?? fallback.player.pilotLicense),
         commodities: {
           ...fallback.player.commodities,
           ...(parsed.player?.commodities ?? {})

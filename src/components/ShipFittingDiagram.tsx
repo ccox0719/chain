@@ -295,6 +295,16 @@ function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
+function moduleLabelText(name: string) {
+  return truncate(name, 16);
+}
+
+function moduleLabelFontSize(label: string) {
+  if (label.length <= 10) return 6.5;
+  if (label.length <= 13) return 6;
+  return 5.4;
+}
+
 interface ShipFittingDiagramProps {
   hull: ShipHullDefinition;
   equipped: EquippedLoadout;
@@ -430,7 +440,8 @@ export function ShipFittingDiagram({
         const icon    = filled
           ? (MODULE_KIND_ICONS[module!.kind] ?? SLOT_ICONS[slotType])
           : SLOT_ICONS[slotType];
-        const nameLabel  = filled ? truncate(module!.name, 11) : "";
+        const nameLabel  = filled ? moduleLabelText(module!.name) : "";
+        const nameFontSize = moduleLabelFontSize(nameLabel);
         const slotLabel  = `${slotType.slice(0, 3).toUpperCase()} ${index + 1}`;
 
         return (
@@ -489,7 +500,7 @@ export function ShipFittingDiagram({
                 x={pos.x} y={pos.y + 30}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fontSize={6.5}
+                fontSize={nameFontSize}
                 fill={stroke}
                 fillOpacity={0.8}
                 style={{ pointerEvents: "none", userSelect: "none" }}

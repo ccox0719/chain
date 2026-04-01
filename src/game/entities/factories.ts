@@ -19,6 +19,7 @@ import { moduleById } from "../data/modules";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { defaultStarterShipConfigId, starterShipConfigById } from "../data/starterShips";
 import { getSystemStation, sectorCatalog, sectorById } from "../data/sectors";
+import { normalizePilotLicense } from "../utils/pilotLicense";
 
 let nextId = 0;
 
@@ -105,6 +106,7 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
   const starterFit = cloneLoadout(starterConfig.equipped);
   const player: PlayerState = {
     starterConfigId: starterConfig.id,
+    pilotLicense: normalizePilotLicense({ progress: 0 }),
     hullId: hull.id,
     ownedShips: [hull.id],
     position: { x: 1140, y: 1180 },
@@ -298,7 +300,8 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
     projectiles: [],
     loot: [],
     wrecks: [],
-    floatingText: []
+    floatingText: [],
+    particles: []
   };
 }
 

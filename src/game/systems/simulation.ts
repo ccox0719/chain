@@ -13,6 +13,8 @@ import {
   ModuleSlot,
   NavigationState,
   ObjectInfo,
+  ParticleShape,
+  ParticleState,
   ResistProfile,
   ResourceId,
   SelectableRef,
@@ -25,9 +27,15 @@ import {
 import { missionById, missionCatalog } from "../data/missions";
 import { moduleById } from "../data/modules";
 import { enemyVariantById, playerShipById } from "../data/ships";
-import { getSystemBeacons, getSystemDestination, getSystemGates, getSystemStation, regionById, sectorById } from "../data/sectors";
+import { getSystemBeacons, getSystemDestination, getSystemDestinations, getSystemGates, getSystemStation, regionById, sectorById } from "../data/sectors";
 import { defaultStarterShipConfigId } from "../data/starterShips";
 import { createProjectile, createStarterPlayerState, rebuildPlayerRuntime } from "../entities/factories";
+import {
+  getPilotLicenseLevelForProgress,
+  getRequiredPilotLicenseLevel,
+  hasPilotLicenseForModule,
+  normalizePilotLicense
+} from "../utils/pilotLicense";
 import { advanceRouteAfterJump, estimateRouteRisk, getNextRouteStep, planRoute } from "../universe/routePlanning";
 import { getCargoUsed, computeDerivedStats } from "../utils/stats";
 import { transportMissionById, transportMissionCatalog } from "../missions/data/transportMissions";
@@ -67,8 +75,143 @@ function addFloatingText(world: GameWorld, position: Vec2, text: string, color: 
   });
 }
 
+let particleCounter = 0;
+
+function spawnParticle(
+  world: GameWorld,
+  position: Vec2,
+  velocity: Vec2,
+  color: string,
+  size: number,
+  lifetime: number,
+  shape: ParticleShape,
+  glow: number
+): ParticleState {
+  return {
+    id: `pt-${++particleCounter}`,
+    position: { ...position },
+    velocity: { ...velocity },
+    lifetime,
+    ttl: lifetime,
+    color,
+    size,
+    shape,
+    glow
+  };
+}
+
+function emitBurst(
+  world: GameWorld,
+  position: Vec2,
+  color: string,
+  count: number,
+  minSpeed: number,
+  maxSpeed: number,
+  lifetime: number,
+  size: number,
+  shape: ParticleShape,
+  glow: number
+) {
+  const sector = world.sectors[world.currentSectorId];
+  if (!sector.particles) sector.particles = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+    const spd = minSpeed + Math.random() * (maxSpeed - minSpeed);
+    sector.particles.push(
+      spawnParticle(world, position, { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd }, color, size, lifetime, shape, glow)
+    );
+  }
+}
+
+function emitImpact(world: GameWorld, position: Vec2, color: string) {
+  emitBurst(world, position, color, 8, 70, 200, 0.3, 3, "spark", 10);
+  emitBurst(world, position, "#ffffff", 3, 20, 60, 0.2, 2, "dot", 8);
+}
+
+function emitExplosion(world: GameWorld, position: Vec2, color: string) {
+  // Instant blinding core flash
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.18, 48, "dot", 50);
+  emitBurst(world, position, color, 1, 0, 0, 0.28, 32, "dot", 40);
+  // Outer fast sparks — primary color and white mixed
+  emitBurst(world, position, color, 32, 200, 560, 0.5, 4.5, "spark", 18);
+  emitBurst(world, position, "#ffffff", 14, 140, 380, 0.38, 3, "spark", 14);
+  // Mid-speed diamond shards
+  emitBurst(world, position, color, 10, 70, 200, 1.0, 6, "diamond", 22);
+  // Slower glowing debris — drift and linger
+  emitBurst(world, position, color, 18, 30, 110, 1.4, 5, "dot", 20);
+  // Ember core — almost stationary, long glow
+  emitBurst(world, position, "#ffffff", 10, 5, 28, 2.0, 7, "dot", 26);
+}
+
+function emitMiningYield(world: GameWorld, position: Vec2, resource: ResourceId) {
+  const color =
+    resource === "ferrite" ? "#86e0ff" : resource === "ember-crystal" ? "#ff9f6d" : "#bc99ff";
+  const bright =
+    resource === "ferrite" ? "#ccf4ff" : resource === "ember-crystal" ? "#ffd4a8" : "#e0ccff";
+  // Sharp crack flash
+  emitBurst(world, position, bright, 1, 0, 0, 0.14, 22, "dot", 35);
+  // Crystal shards blasting outward
+  emitBurst(world, position, color, 14, 80, 260, 0.45, 3.5, "spark", 14);
+  emitBurst(world, position, bright, 6, 60, 180, 0.3, 2.5, "spark", 10);
+  // Ore chunk diamonds tumbling out
+  emitBurst(world, position, color, 8, 25, 100, 1.0, 5, "diamond", 18);
+  // Glowing dust cloud settling
+  emitBurst(world, position, color, 10, 10, 55, 1.1, 4, "dot", 14);
+}
+
+function emitWarpActivate(world: GameWorld, position: Vec2, rotation: number) {
+  const sector = world.sectors[world.currentSectorId];
+  if (!sector.particles) sector.particles = [];
+  const backAngle = rotation + Math.PI;
+  for (let i = 0; i < 20; i++) {
+    const spread = (Math.random() - 0.5) * 0.7;
+    const spd = 150 + Math.random() * 320;
+    const angle = backAngle + spread;
+    sector.particles.push(
+      spawnParticle(world, position, { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd }, "#7ae0ff", 3, 0.55, "spark", 12)
+    );
+  }
+  emitBurst(world, position, "#ffffff", 8, 10, 40, 0.4, 4, "dot", 16);
+}
+
+function emitWarpArrive(world: GameWorld, position: Vec2) {
+  emitBurst(world, position, "#7ae0ff", 16, 60, 180, 0.5, 3, "spark", 12);
+  emitBurst(world, position, "#ffffff", 8, 20, 60, 0.6, 5, "dot", 18);
+  emitBurst(world, position, "#a0f0ff", 4, 5, 20, 0.8, 7, "diamond", 20);
+}
+
+function updateParticles(world: GameWorld, dt: number) {
+  const sector = world.sectors[world.currentSectorId];
+  if (!sector.particles) { sector.particles = []; return; }
+  for (const p of sector.particles) {
+    p.position = add(p.position, scale(p.velocity, dt));
+    // Sparks decelerate fast; dots and diamonds drift longer
+    const drag = p.shape === "spark" ? 2.2 : 1.4;
+    p.velocity = scale(p.velocity, 1 - dt * drag);
+    p.ttl -= dt;
+  }
+  sector.particles = sector.particles.filter((p) => p.ttl > 0);
+  if (sector.particles.length > 700) sector.particles = sector.particles.slice(-700);
+}
+
 function pushStory(world: GameWorld, message: string) {
   world.storyLog = [message, ...world.storyLog].slice(0, 7);
+}
+
+function ensurePilotLicense(world: GameWorld) {
+  world.player.pilotLicense = normalizePilotLicense(world.player.pilotLicense);
+}
+
+function awardPilotLicenseProgress(world: GameWorld, amount: number) {
+  if (amount <= 0) return;
+  ensurePilotLicense(world);
+  const previousLevel = world.player.pilotLicense.level;
+  const nextProgress = world.player.pilotLicense.progress + Math.max(1, Math.round(amount));
+  world.player.pilotLicense.progress = nextProgress;
+  world.player.pilotLicense.level = getPilotLicenseLevelForProgress(nextProgress);
+  if (world.player.pilotLicense.level > previousLevel) {
+    pushStory(world, `Pilot license advanced to L${world.player.pilotLicense.level}.`);
+  }
 }
 
 function getCurrentSector(world: GameWorld) {
@@ -403,6 +546,19 @@ function applyBuildLoadout(world: GameWorld, loadout: EquippedLoadout) {
     utility: Array.from({ length: hull.slots.utility }, (_, index) => loadout.utility[index] ?? null),
     defense: Array.from({ length: hull.slots.defense }, (_, index) => loadout.defense[index] ?? null)
   };
+  ensurePilotLicense(world);
+  let blockedByLicense = 0;
+  (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
+    nextLoadout[slotType] = nextLoadout[slotType].map((moduleId) => {
+      if (!moduleId) return null;
+      const module = moduleById[moduleId];
+      if (module && hasPilotLicenseForModule(world.player.pilotLicense, module)) {
+        return moduleId;
+      }
+      blockedByLicense += 1;
+      return null;
+    });
+  });
 
   (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
     nextLoadout[slotType].forEach((moduleId) => {
@@ -429,6 +585,9 @@ function applyBuildLoadout(world: GameWorld, loadout: EquippedLoadout) {
   world.player.shield = clamp(world.player.shield, 0, derived.maxShield);
   world.player.capacitor = clamp(world.player.capacitor, 0, derived.capacitorCapacity);
   trimCargoToCapacity(world, derived.cargoCapacity);
+  if (blockedByLicense > 0) {
+    pushStory(world, `${blockedByLicense} build module${blockedByLicense === 1 ? "" : "s"} skipped due to pilot license.`);
+  }
 }
 
 function updateBuildSwap(world: GameWorld, dt: number) {
@@ -493,13 +652,6 @@ function getMissionCargoOnboard(world: GameWorld, missionId: string) {
 
 function getTransportCargoReimbursement(mission: TransportMissionDefinition) {
   return Math.max(0, Math.round(mission.cargoVolume * (mission.cargoUnitValue ?? 0)));
-}
-
-function getCargoFitLabelForMission(mission: TransportMissionDefinition, cargoCapacity: number) {
-  if (mission.cargoVolume > cargoCapacity) return "Too large";
-  if (mission.cargoVolume > cargoCapacity * 0.82) return "Hauler fit";
-  if (mission.cargoVolume > cargoCapacity * 0.6) return "Cargo heavy";
-  return "General fit";
 }
 
 function getTransportMissionPayout(world: GameWorld, mission: TransportMissionDefinition) {
@@ -646,6 +798,7 @@ function completeTransportMission(world: GameWorld, mission: TransportMissionDef
     const cargoReimbursement = getTransportCargoReimbursement(mission);
     const payout = getTransportMissionPayout(world, mission);
     world.player.credits += payout;
+    awardPilotLicenseProgress(world, payout / 16);
     state.rewardClaimed = true;
     pushStory(
       world,
@@ -709,6 +862,7 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
   }
 
   world.player.credits += mission.rewardCredits;
+  awardPilotLicenseProgress(world, mission.rewardCredits / 8);
   state.status = "completed";
   if (mission.unlockSystemId && !world.unlockedSectorIds.includes(mission.unlockSystemId)) {
     world.unlockedSectorIds.push(mission.unlockSystemId);
@@ -945,6 +1099,7 @@ export function sellCargo(world: GameWorld) {
   });
   world.player.credits += soldValue;
   if (soldValue > 0) {
+    awardPilotLicenseProgress(world, soldValue / 120);
     pushStory(world, `Cargo sold for ${soldValue} credits.`);
   }
   return soldValue;
@@ -1005,6 +1160,7 @@ export function sellCommodity(world: GameWorld, commodityId: CommodityId, quanti
   const totalValue = unitPrice * quantity;
   world.player.commodities[commodityId] = owned - quantity;
   world.player.credits += totalValue;
+  awardPilotLicenseProgress(world, totalValue / 110);
   pushStory(world, `Sold ${quantity}x ${commodity.name} for ${totalValue} credits.`);
   return true;
 }
@@ -1013,9 +1169,14 @@ export function buyModule(world: GameWorld, moduleId: string, priceOverride?: nu
   if (!world.dockedStationId) return false;
   const module = moduleById[moduleId];
   if (!module) return false;
+  ensurePilotLicense(world);
   const station = getCurrentStation(world);
   if (!isModuleAvailableAtStation(module, getCurrentSectorDef(world).security, station)) {
     pushStory(world, `${module.name} is not stocked here.`);
+    return false;
+  }
+  if (!hasPilotLicenseForModule(world.player.pilotLicense, module)) {
+    pushStory(world, `${module.name} requires pilot license L${getRequiredPilotLicenseLevel(module)}.`);
     return false;
   }
   const price = priceOverride ?? getLocalEconomySnapshot(world).moduleBuyPrices[moduleId] ?? module.price;
@@ -1152,16 +1313,28 @@ export function equipModuleToSlot(
   slotIndex: number,
   moduleId: string | null
 ) {
+  ensurePilotLicense(world);
   const slots = world.player.equipped[slotType];
   const currentId = slots[slotIndex];
+  if (moduleId) {
+    const module = moduleById[moduleId];
+    if (!module) {
+      return false;
+    }
+    if (!hasPilotLicenseForModule(world.player.pilotLicense, module)) {
+      pushStory(world, `${module.name} requires pilot license L${getRequiredPilotLicenseLevel(module)}.`);
+      return false;
+    }
+    const count = world.player.inventory.modules[moduleId] ?? 0;
+    if (count <= 0) {
+      return false;
+    }
+  }
   if (currentId) {
     world.player.inventory.modules[currentId] = (world.player.inventory.modules[currentId] ?? 0) + 1;
   }
   if (moduleId) {
     const count = world.player.inventory.modules[moduleId] ?? 0;
-    if (count <= 0) {
-      return false;
-    }
     world.player.inventory.modules[moduleId] = count - 1;
   }
   slots[slotIndex] = moduleId;
@@ -1541,6 +1714,25 @@ function computeTurretApplication(
   return { damage, quality };
 }
 
+function getClosestPointOnSegment(point: Vec2, start: Vec2, end: Vec2) {
+  const segment = subtract(end, start);
+  const lengthSquared = segment.x * segment.x + segment.y * segment.y;
+  if (lengthSquared <= 0.0001) {
+    return { point: { ...start }, t: 0, distance: distance(point, start) };
+  }
+  const t = clamp(
+    ((point.x - start.x) * segment.x + (point.y - start.y) * segment.y) / lengthSquared,
+    0,
+    1
+  );
+  const closestPoint = add(start, scale(segment, t));
+  return {
+    point: closestPoint,
+    t,
+    distance: distance(point, closestPoint)
+  };
+}
+
 function getTurretAdjustedModule(
   module: {
     damage?: number;
@@ -1817,19 +2009,42 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
         nav.warpFrom = { ...player.position };
         nav.warpProgress = 0;
         player.velocity = { x: 0, y: 0 };
+        emitWarpActivate(world, player.position, player.rotation);
       }
     } else {
       nav.warpProgress = 0;
     }
   } else if (nav.mode === "warping" && targetPosition && nav.warpFrom) {
+    const previousPosition = { ...player.position };
     nav.warpProgress = clamp(nav.warpProgress + dt * 0.9, 0, 1);
     const direction = normalize(subtract(targetPosition, nav.warpFrom));
     const totalDistance = Math.max(distance(nav.warpFrom, targetPosition) - nav.desiredRange, 1);
     const travelled = totalDistance * nav.warpProgress;
     player.position = add(nav.warpFrom, scale(direction, travelled));
     player.rotation = angleTo(nav.warpFrom, targetPosition);
+    const warpInterdictor = getCurrentSector(world).enemies
+      .filter((enemy) => enemy.hull > 0)
+      .map((enemy) => {
+        const variant = enemyVariantById[enemy.variantId];
+        const interdictionRange = Math.max(150, variant.lockRange * enemy.effects.lockRangeMultiplier * 0.82);
+        const closest = getClosestPointOnSegment(enemy.position, previousPosition, player.position);
+        return { enemy, variant, interdictionRange, closest };
+      })
+      .filter(({ closest, interdictionRange }) => closest.distance <= interdictionRange)
+      .sort((left, right) => left.closest.t - right.closest.t)[0];
+    if (warpInterdictor) {
+      player.position = { ...warpInterdictor.closest.point };
+      player.velocity = { x: 0, y: 0 };
+      nav.warpFrom = null;
+      nav.warpProgress = 0;
+      setIdle(nav);
+      aggroEnemyToPlayer(world, warpInterdictor.enemy.id);
+      pushStory(world, `Warp interrupted by ${warpInterdictor.variant.name}.`);
+      return;
+    }
     if (nav.warpProgress >= 1 || distance(player.position, targetPosition) <= nav.desiredRange + 20) {
       player.position = add(targetPosition, scale(direction, -nav.desiredRange));
+      emitWarpArrive(world, player.position);
       setIdle(nav);
     }
     return;
@@ -2064,11 +2279,13 @@ function runPlayerModules(world: GameWorld, dt: number) {
             remainingSpace -= mined;
             totalMined += mined;
             addFloatingText(world, entry.position, `+${mined} ${entry.resource}`, "#9fe3b6");
+            emitMiningYield(world, entry.position, entry.resource);
             missionCatalog
               .filter((mission) => mission.type === "mining" && mission.targetResource === entry.resource)
               .forEach((mission) => advanceMission(world, mission.id, mined));
           });
           if (totalMined === 0) return;
+          awardPilotLicenseProgress(world, totalMined * 0.35);
         }
       } else if (module.kind === "salvager" && target?.type === "wreck") {
         const wreck = sector.wrecks.find((entry) => entry.id === target.id);
@@ -2387,6 +2604,10 @@ function updateProjectiles(world: GameWorld, dt: number) {
               : `${projectile.qualityLabel ?? "hit"} ${Math.round(projectile.damage)}`,
             projectile.damage < 1 ? "#c4d1e8" : projectile.qualityLabel === "excellent" ? "#ffe08a" : "#ffd078"
           );
+          if (projectile.damage >= 1) {
+            const impactColor = projectile.moduleId.includes("missile") ? "#ffb265" : "#6feeff";
+            emitImpact(world, projectile.position, impactColor);
+          }
           consumed = true;
           break;
         }
@@ -2404,6 +2625,9 @@ function updateProjectiles(world: GameWorld, dt: number) {
         projectile.damage < 1 ? "miss" : `${projectile.qualityLabel ?? "hit"} ${Math.round(projectile.damage)}`,
         projectile.damage < 1 ? "#c4d1e8" : "#ff7d7d"
       );
+      if (projectile.damage >= 1) {
+        emitImpact(world, projectile.position, "#ff5544");
+      }
       consumed = true;
     }
 
@@ -2413,6 +2637,64 @@ function updateProjectiles(world: GameWorld, dt: number) {
   });
 
   sector.projectiles = nextProjectiles;
+}
+
+function applyAnomalyFields(world: GameWorld, dt: number) {
+  const anomalies = getSystemDestinations(world.currentSectorId).filter(
+    (entry) => entry.kind === "anomaly" && entry.anomalyField
+  );
+  if (anomalies.length === 0) return;
+  const sector = getCurrentSector(world);
+  const sectorDef = getCurrentSectorDef(world);
+
+  const applyForce = (
+    position: Vec2,
+    velocity: Vec2,
+    maxVelocity: number,
+    bodyScale: number,
+    canBeAffected = true
+  ) => {
+    if (!canBeAffected) return velocity;
+    let nextVelocity = velocity;
+    anomalies.forEach((anomaly) => {
+      const field = anomaly.anomalyField;
+      if (!field) return;
+      const offset = subtract(position, anomaly.position);
+      const dist = length(offset);
+      if (dist <= 6 || dist > field.radius) return;
+      const falloff = 1 - dist / field.radius;
+      const dir = normalize(offset);
+      const radial =
+        field.effect === "push"
+          ? dir
+          : scale(dir, -1);
+      const tangent =
+        field.effect === "push"
+          ? { x: -dir.y, y: dir.x }
+          : { x: dir.y, y: -dir.x };
+      const force = field.strength * falloff * dt * bodyScale;
+      nextVelocity = add(nextVelocity, scale(radial, force));
+      nextVelocity = add(nextVelocity, scale(tangent, force * 0.24));
+    });
+    return clampMagnitude(nextVelocity, maxVelocity);
+  };
+
+  if (world.player.navigation.mode !== "warping" && world.player.navigation.mode !== "jumping") {
+    const derived = computeDerivedStats(world.player);
+    world.player.velocity = applyForce(world.player.position, world.player.velocity, derived.maxSpeed * 1.22, 0.42);
+  }
+
+  sector.enemies.forEach((enemy) => {
+    if (enemy.navigation.mode === "warping" || enemy.navigation.mode === "jumping") return;
+    const variant = enemyVariantById[enemy.variantId];
+    enemy.velocity = applyForce(enemy.position, enemy.velocity, variant.speed * 1.2, 0.5);
+    enemy.position.x = clamp(enemy.position.x, 30, sectorDef.width - 30);
+    enemy.position.y = clamp(enemy.position.y, 30, sectorDef.height - 30);
+  });
+
+  sector.loot.forEach((drop) => {
+    drop.velocity = applyForce(drop.position, drop.velocity, 160, 0.95);
+  });
 }
 
 function cleanupWorld(world: GameWorld) {
@@ -2427,7 +2709,9 @@ function cleanupWorld(world: GameWorld) {
     const variant = enemyVariantById[enemy.variantId];
     const bounty = Math.max(12, Math.round(variant.lootCredits * (0.55 + getCurrentSectorDef(world).danger * 0.12)));
     world.player.credits += bounty;
+    awardPilotLicenseProgress(world, bounty / 55);
     addFloatingText(world, enemy.position, `+${bounty}cr bounty`, "#9fe3b6");
+    emitExplosion(world, enemy.position, variant.color);
     sector.wrecks.push({
       id: `wreck-${Date.now()}-${enemy.id}`,
       position: { ...enemy.position },
@@ -2587,7 +2871,6 @@ function buildTransportTracker(world: GameWorld): TransportTracker | null {
   const objectiveStation = getSystemDestination(objectiveSystemId, objectiveStationId);
   const pickupStation = getSystemDestination(mission.pickupSystemId, mission.pickupStationId);
   const destinationStation = getSystemDestination(mission.destinationSystemId, mission.destinationStationId);
-  const cargoFitLabel = getCargoFitLabelForMission(mission, computeDerivedStats(world.player).cargoCapacity);
   const currentRoute =
     world.routePlan && world.routePlan.destinationSystemId === objectiveSystemId
       ? world.routePlan
@@ -2629,7 +2912,6 @@ function buildTransportTracker(world: GameWorld): TransportTracker | null {
     bonusReward: mission.bonusReward ?? 0,
     cargoReimbursement,
     rewardEstimate: mission.baseReward + cargoReimbursement + (mission.bonusReward ?? 0),
-    cargoFitLabel,
     dueInSec,
     recommendedRoute: mission.routePreference
   };
@@ -2704,11 +2986,13 @@ export function updateWorld(world: GameWorld, dt: number) {
   applyPlayerControlEffects(world);
   updateRouteAutopilot(world);
   updatePlayerNavigation(world, dt);
+  applyAnomalyFields(world, dt);
   autoEngageNearbyHostile(world);
   runPlayerModules(world, dt);
   runEnemyModules(world, dt);
   updateProjectiles(world, dt);
   cleanupWorld(world);
+  updateParticles(world, dt);
   evaluateWorldInteractions(world);
 }
 

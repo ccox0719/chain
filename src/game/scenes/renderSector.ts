@@ -1,5 +1,6 @@
-import { GameWorld, Vec2 } from "../../types/game";
+import { GameWorld, ParticleState, Vec2 } from "../../types/game";
 import { enemyVariantById, playerShipById } from "../data/ships";
+import { moduleById } from "../data/modules";
 import { getSystemDestinations, sectorById } from "../data/sectors";
 import { computeDerivedStats } from "../utils/stats";
 import { getObjectInfo } from "../world/spaceObjects";
@@ -233,6 +234,164 @@ function drawEnergyArc(ctx: CanvasRenderingContext2D, x: number, y: number, radi
   ctx.restore();
 }
 
+function drawParticle(ctx: CanvasRenderingContext2D, p: ParticleState) {
+  const alpha = Math.max(0, p.ttl / p.lifetime);
+  const r = p.size * (0.5 + alpha * 0.5);
+  ctx.globalAlpha = alpha;
+  setGlow(ctx, p.color, p.glow * alpha);
+
+  if (p.shape === "spark") {
+    const tailX = p.position.x - p.velocity.x * 0.04;
+    const tailY = p.position.y - p.velocity.y * 0.04;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = r * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(p.position.x, p.position.y);
+    ctx.stroke();
+  } else if (p.shape === "dot") {
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.position.x, p.position.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    drawDiamond(ctx, p.position.x, p.position.y, r, p.color, `rgba(255,255,255,0.15)`);
+  }
+
+  clearGlow(ctx);
+  ctx.globalAlpha = 1;
+}
+
+interface MiningBeamStyle {
+  outerColor: string;
+  coreColor: string;
+  outerWidth: number;
+  coreWidth: number;
+  outerGlow: number;
+  pulseSpeed: number;
+}
+
+const MINING_BEAM_STYLES: Record<string, MiningBeamStyle> = {
+  "survey-mining-laser": {
+    outerColor: "#56c8ff",
+    coreColor: "#c8f0ff",
+    outerWidth: 2.5,
+    coreWidth: 1,
+    outerGlow: 14,
+    pulseSpeed: 2.2
+  },
+  "strip-mining-laser": {
+    outerColor: "#ff9f3a",
+    coreColor: "#ffe0a0",
+    outerWidth: 3.5,
+    coreWidth: 1.4,
+    outerGlow: 20,
+    pulseSpeed: 1.6
+  },
+  "deep-vein-reclaimer": {
+    outerColor: "#c87aff",
+    coreColor: "#f0d0ff",
+    outerWidth: 3,
+    coreWidth: 1.2,
+    outerGlow: 22,
+    pulseSpeed: 1.2
+  },
+  "field-excavator-array": {
+    outerColor: "#40ffcc",
+    coreColor: "#ccfff0",
+    outerWidth: 4.5,
+    coreWidth: 2,
+    outerGlow: 28,
+    pulseSpeed: 2.8
+  }
+};
+
+const DEFAULT_BEAM_STYLE: MiningBeamStyle = {
+  outerColor: "#56c8ff",
+  coreColor: "#c8f0ff",
+  outerWidth: 2.5,
+  coreWidth: 1,
+  outerGlow: 14,
+  pulseSpeed: 2.2
+};
+
+function drawStraightBeam(
+  ctx: CanvasRenderingContext2D,
+  start: Vec2,
+  end: Vec2,
+  style: MiningBeamStyle,
+  t: number
+) {
+  // Pulse the glow intensity
+  const pulse = 0.8 + Math.sin(t * style.pulseSpeed * Math.PI * 2) * 0.2;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+
+  // Outer glow pass
+  setGlow(ctx, style.outerColor, style.outerGlow * pulse);
+  ctx.strokeStyle = style.outerColor;
+  ctx.lineWidth = style.outerWidth * pulse;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  // Bright core pass
+  setGlow(ctx, "#ffffff", 5);
+  ctx.strokeStyle = style.coreColor;
+  ctx.lineWidth = style.coreWidth;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  // Impact dot at asteroid
+  setGlow(ctx, style.outerColor, style.outerGlow * 1.4 * pulse);
+  ctx.fillStyle = style.coreColor;
+  ctx.beginPath();
+  ctx.arc(end.x, end.y, style.outerWidth * 1.2 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  clearGlow(ctx);
+  ctx.restore();
+}
+
+function drawMiningBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
+  const player = world.player;
+  const allModules = [
+    ...player.modules.weapon,
+    ...player.modules.utility,
+    ...player.modules.defense
+  ];
+  const activeMiningRuntime = allModules.find((m) => m.moduleId && m.active && moduleById[m.moduleId]?.kind === "mining_laser");
+  if (!activeMiningRuntime?.moduleId) return;
+
+  const moduleDef = moduleById[activeMiningRuntime.moduleId];
+  if (!moduleDef) return;
+
+  const style = MINING_BEAM_STYLES[activeMiningRuntime.moduleId] ?? DEFAULT_BEAM_STYLE;
+  const t = world.elapsedTime;
+  const sector = world.sectors[world.currentSectorId];
+
+  if (moduleDef.minesAllInRange && moduleDef.range) {
+    // Field Excavator Array: beam to every asteroid in range
+    for (const asteroid of sector.asteroids) {
+      const dx = asteroid.position.x - player.position.x;
+      const dy = asteroid.position.y - player.position.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= moduleDef.range && asteroid.oreRemaining > 0) {
+        drawStraightBeam(ctx, player.position, asteroid.position, style, t);
+      }
+    }
+  } else {
+    // Single-target: beam to active target asteroid
+    if (world.activeTarget?.type !== "asteroid") return;
+    const targetAsteroid = sector.asteroids.find((a) => a.id === world.activeTarget?.id);
+    if (!targetAsteroid) return;
+    drawStraightBeam(ctx, player.position, targetAsteroid.position, style, t);
+  }
+}
+
 export function renderSector(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -320,9 +479,44 @@ export function renderSector(
   destinations
     .filter((entry) => entry.kind === "beacon" || entry.kind === "anomaly" || entry.kind === "outpost" || entry.kind === "wreck")
     .forEach((entry) => {
+      if (entry.kind === "anomaly" && entry.anomalyField) {
+        const radius = entry.anomalyField.radius;
+        const tint = entry.anomalyField.tint ?? "#ff7b7b";
+        const pulse = 1 + Math.sin(world.elapsedTime * 1.8 + entry.position.x * 0.01) * 0.04;
+        ctx.save();
+        ctx.translate(entry.position.x, entry.position.y);
+        ctx.scale(pulse, pulse);
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 2.2;
+        ctx.globalAlpha = 0.2;
+        setGlow(ctx, tint, 18);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.45, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.1;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.76, 0, Math.PI * 2);
+        ctx.stroke();
+        clearGlow(ctx);
+        const debrisCount = entry.anomalyField.debrisCount ?? 10;
+        for (let index = 0; index < debrisCount; index += 1) {
+          const seed = index * 1.73 + entry.position.x * 0.003 + entry.position.y * 0.002;
+          const angle = world.elapsedTime * (entry.anomalyField.effect === "pull" ? -0.45 : 0.52) + seed;
+          const orbit = radius * (0.24 + ((index * 17) % 9) * 0.065);
+          const x = Math.cos(angle) * orbit;
+          const y = Math.sin(angle) * orbit;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(angle * 1.8);
+          ctx.fillStyle = entry.anomalyField.effect === "pull" ? "rgba(215, 187, 255, 0.48)" : "rgba(255, 166, 120, 0.46)";
+          ctx.fillRect(-2.5, -1.2, 5, 2.4);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
       const stroke =
         entry.kind === "anomaly"
-          ? "#ff7b7b"
+          ? entry.anomalyField?.tint ?? "#ff7b7b"
           : entry.kind === "wreck"
             ? "#d5c7a1"
             : "#8de6ff";
@@ -401,6 +595,8 @@ export function renderSector(
     drawDiamond(ctx, projectile.position.x, projectile.position.y, projectile.radius + 1, color, "rgba(255,255,255,0.08)");
     clearGlow(ctx);
   });
+
+  drawMiningBeam(ctx, world);
 
   sector.enemies.forEach((enemy, index) => {
     const variant = enemyVariantById[enemy.variantId];
@@ -487,6 +683,15 @@ export function renderSector(
       ctx.font = '12px "Space Grotesk", sans-serif';
       ctx.fillText(world.player.navigation.mode.toUpperCase(), world.player.position.x + 18, world.player.position.y - 18);
     }
+  }
+
+  if (sector.particles?.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (const p of sector.particles) {
+      drawParticle(ctx, p);
+    }
+    ctx.restore();
   }
 
   sector.floatingText.forEach((entry) => {

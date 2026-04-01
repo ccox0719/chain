@@ -80,7 +80,8 @@ function anomaly(
   name: string,
   x: number,
   y: number,
-  description: string
+  description: string,
+  anomalyField?: SystemDestination["anomalyField"]
 ): SystemDestination {
   return {
     id,
@@ -90,7 +91,8 @@ function anomaly(
     warpable: true,
     hostileActivity: true,
     description,
-    tags: ["combat"]
+    tags: ["combat"],
+    anomalyField
   };
 }
 
@@ -352,7 +354,13 @@ export const sectorCatalog: SolarSystemDefinition[] = [
       gate("gate-ember-blackwake", "Blackwake Gate", 2540, 2360, "blackwake", "gate-blackwake-ember", "Fast but dangerous gate into raider country."),
       belt("ember-belt-alpha", "Reach Belt Alpha", 1480, 1220, "ember-crystal", "Dense ember crystal field with pirate pickets."),
       belt("ember-belt-beta", "Reach Belt Beta", 980, 1640, "ferrite", "Secondary ore field used by refinery crews."),
-      anomaly("ember-anomaly", "Melt Rift", 2180, 1280, "A pirate ambush pocket forming inside the heat wake."),
+      anomaly("ember-anomaly", "Melt Rift", 2180, 1280, "A pirate ambush pocket forming inside the heat wake.", {
+        effect: "push",
+        radius: 260,
+        strength: 180,
+        debrisCount: 10,
+        tint: "#ff9f6d"
+      }),
       beacon("reach-beacon", "Reach Survey Beacon", 1820, 720, "Survey beacon used to chart the fringe lanes.", ["mission"])
     ],
     asteroidFields: [
@@ -488,7 +496,13 @@ export const sectorCatalog: SolarSystemDefinition[] = [
       gate("gate-verge-blackwake", "Blackwake Gate", 2860, 680, "blackwake", "gate-blackwake-verge", "Raider-laced gate into the shortcut corridor."),
       gate("gate-verge-vanta", "Vanta Gate", 2840, 2440, "vanta-expanse", "gate-vanta-verge", "Eastern gate into deeper frontier space."),
       belt("verge-belt-alpha", "Verge Belt Alpha", 1220, 1180, "ghost-alloy", "Rare alloy band under pirate pressure."),
-      anomaly("verge-anomaly", "Silent Cut", 2140, 1380, "Combat anomaly where scouts keep disappearing."),
+      anomaly("verge-anomaly", "Silent Cut", 2140, 1380, "Combat anomaly where scouts keep disappearing.", {
+        effect: "pull",
+        radius: 280,
+        strength: 210,
+        debrisCount: 12,
+        tint: "#b48dff"
+      }),
       beacon("verge-beacon", "Frontier Signal Beacon", 2080, 760, "Beacon used for border patrol and survey jobs.", ["mission"])
     ],
     asteroidFields: [
@@ -533,7 +547,13 @@ export const sectorCatalog: SolarSystemDefinition[] = [
       gate("gate-blackwake-ember", "Ember Gate", 420, 620, "ember-reach", "gate-ember-blackwake", "The fast return route to the industrial fringe."),
       gate("gate-blackwake-verge", "Outer Verge Gate", 2460, 520, "outer-verge", "gate-verge-blackwake", "Border gate back toward Shade Hub."),
       gate("gate-blackwake-ghostlight", "Ghostlight Gate", 2760, 2320, "ghostlight-pocket", "gate-ghostlight-blackwake", "Unstable gate into the lucrative pocket.", "ghostlight-charter"),
-      anomaly("blackwake-rift", "Wake Rift", 1780, 1420, "Large pirate anomaly with disciplined raider wings."),
+      anomaly("blackwake-rift", "Wake Rift", 1780, 1420, "Large pirate anomaly with disciplined raider wings.", {
+        effect: "push",
+        radius: 320,
+        strength: 245,
+        debrisCount: 14,
+        tint: "#ff7b7b"
+      }),
       wreck("blackwake-wrecks", "Convoy Tomb", 1280, 1040, "A graveyard of shortcut freighters."),
       beacon("blackwake-beacon", "Smuggler Marker", 2120, 940, "An encoded navigation marker used in covert runs.", ["mission"])
     ],
@@ -567,7 +587,13 @@ export const sectorCatalog: SolarSystemDefinition[] = [
       gate("gate-vanta-verge", "Outer Verge Gate", 420, 580, "outer-verge", "gate-verge-vanta", "Gate back toward the border hub."),
       gate("gate-vanta-ghostlight", "Ghostlight Gate", 2860, 960, "ghostlight-pocket", "gate-ghostlight-vanta", "Deep gate toward the lucrative pocket."),
       belt("vanta-belt-alpha", "Vanta Belt Alpha", 1820, 1420, "ghost-alloy", "Rare alloy field with poor rescue odds."),
-      anomaly("vanta-echo", "Echo Hollow", 2320, 1980, "A quiet anomaly that never stays quiet for long."),
+      anomaly("vanta-echo", "Echo Hollow", 2320, 1980, "A quiet anomaly that never stays quiet for long.", {
+        effect: "pull",
+        radius: 300,
+        strength: 170,
+        debrisCount: 11,
+        tint: "#8e7ef5"
+      }),
       beacon("vanta-marker", "Expanse Marker", 1460, 860, "Survey marker used to map the rare-ore loop.", ["mission"])
     ],
     asteroidFields: [
@@ -612,7 +638,13 @@ export const sectorCatalog: SolarSystemDefinition[] = [
       gate("gate-ghostlight-blackwake", "Blackwake Gate", 420, 620, "blackwake", "gate-blackwake-ghostlight", "Shortcut gate back toward Blackwake."),
       gate("gate-ghostlight-vanta", "Vanta Gate", 2860, 940, "vanta-expanse", "gate-vanta-ghostlight", "Deep loop gate into the Expanse."),
       belt("ghostlight-belt-alpha", "Ghostlight Belt Alpha", 1760, 1380, "ghost-alloy", "Rich ghost-alloy field near a debris halo."),
-      anomaly("ghostlight-core", "Ghostlight Core", 2260, 1840, "A lucrative anomaly defended by heavy raider hulls."),
+      anomaly("ghostlight-core", "Ghostlight Core", 2260, 1840, "A lucrative anomaly defended by heavy raider hulls.", {
+        effect: "pull",
+        radius: 360,
+        strength: 260,
+        debrisCount: 16,
+        tint: "#d7bbff"
+      }),
       wreck("ghostlight-yard", "Vault Debris Field", 1320, 1180, "High-value wreck field from a lost convoy."),
       beacon("ghostlight-vault", "Vault Marker", 2080, 900, "Encrypted marker tied to deeper frontier contracts.", ["mission"])
     ],
