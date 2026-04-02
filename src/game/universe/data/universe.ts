@@ -167,7 +167,7 @@ export const regionCatalog: RegionDefinition[] = [
   }
 ];
 
-export const sectorCatalog: SolarSystemDefinition[] = [
+const baseSectorCatalog: SolarSystemDefinition[] = [
   {
     id: "lumen-rest",
     name: "Lumen Rest",
@@ -667,6 +667,8 @@ export const sectorCatalog: SolarSystemDefinition[] = [
     ]
   }
 ];
+
+export const sectorCatalog: SolarSystemDefinition[] = baseSectorCatalog.map(scaleSystem);
 
 export const regionById = Object.fromEntries(regionCatalog.map((region) => [region.id, region]));
 export const sectorById = Object.fromEntries(sectorCatalog.map((sector) => [sector.id, sector]));

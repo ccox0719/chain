@@ -11,7 +11,12 @@ export type CommodityId =
   | "refined-alloys"
   | "frontier-survival-kits"
   | "luxury-goods"
-  | "salvage-scrap";
+  | "salvage-scrap"
+  | "coolant-gel"
+  | "reactor-coils"
+  | "drone-parts"
+  | "archive-shards"
+  | "siege-stims";
 export type CommodityCategory =
   | "essentials"
   | "industrial"
