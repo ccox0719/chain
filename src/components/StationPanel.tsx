@@ -368,6 +368,13 @@ export function StationPanel({
     inventoryModulesBySlot[slotType].sort((left, right) => left.module.name.localeCompare(right.module.name));
   });
   const equippedWeaponIds = world.player.equipped.weapon;
+  const equippedWeaponDps = world.player.equipped.weapon
+    .filter((id): id is string => id !== null)
+    .reduce((sum, id) => {
+      const m = moduleById[id];
+      if (!m || !m.damage || !m.cycleTime) return sum;
+      return sum + getWeaponSummaryStats(m).dps;
+    }, 0);
   const unknownOwnedModules = ownedModuleEntries.filter((entry) => !entry.module);
   const selectedModule = selectedModuleId ? moduleById[selectedModuleId] ?? null : null;
   const focusedSlotKey = focusedSlot ? `${focusedSlot.slotType}-${focusedSlot.index}` : null;
@@ -981,7 +988,7 @@ export function StationPanel({
                       </div>
                       <div className={`mkt-margin-cell${profitPerUnit > 0 ? " positive" : ""}`}>
                         <strong>{profitPerUnit > 0 ? `+${profitPerUnit}` : "0"}</strong>
-                        <small>{hint && profitPerUnit > 0 ? `${hint.stationName} · ${hint.systemName}` : "No route"}</small>
+                        <small>{hint && profitPerUnit > 0 ? `${hint.stationName} · ${hint.systemName}` : "—"}</small>
                       </div>
                       <div className="mkt-trade-cell">
                         <div className="mkt-qty-row">
@@ -1005,17 +1012,17 @@ export function StationPanel({
                                   : `Buy ${quantity} ${commodity.name}`
                             }
                           >
-                            Buy {buyTotal}
+                            Buy {buyTotal} cr
                           </button>
                           <button type="button" onClick={() => onSellCommodity(commodity.id, sellQty)} disabled={sellQty <= 0}>
-                            Sell {sellQty > 0 ? `${sellQty} · ${sellTotal}` : "0"}
+                            Sell {sellQty > 0 ? `${sellQty} · ${sellTotal} cr` : "—"}
                           </button>
                         </div>
                         {(!canAfford || !canFit) && (
                           <span className="mkt-warn">
                             {!canAfford
                               ? "Need credits"
-                              : `Need ${Math.max(0, requiredVolume - freeCargo)}u${missionCargoUsed > 0 ? " · mission cargo is reserved" : ""}`}
+                              : `Need ${Math.max(0, requiredVolume - freeCargo)}u${missionCargoUsed > 0 ? " · mission locked" : ""}`}
                           </span>
                         )}
                       </div>
@@ -1150,7 +1157,7 @@ export function StationPanel({
               <div>
                 <h3>Fitting Cradle</h3>
                 <p className="fitting-subcopy">
-                  {playerShipById[world.player.hullId]?.name} fitted for compact drag on desktop and tap-to-fit on touch.
+                  {Math.round(currentStats.maxSpeed)}m/s · warp {currentStats.warpSpeed.toFixed(1)}c · lock {Math.round(currentStats.lockRange)}m
                 </p>
               </div>
               <div className="fitting-summary-grid">
@@ -1173,6 +1180,11 @@ export function StationPanel({
                   <span>Cargo</span>
                   <strong>{roundedFreeCargo}/{roundedCargoCapacity}</strong>
                   <small>{Math.round(missionCargoUsed)} reserved</small>
+                </div>
+                <div className="fitting-summary-card">
+                  <span>DPS</span>
+                  <strong>{equippedWeaponDps > 0 ? equippedWeaponDps.toFixed(1) : "—"}</strong>
+                  <small>weapon output</small>
                 </div>
               </div>
             </div>
@@ -1267,10 +1279,11 @@ export function StationPanel({
                       </div>
                       <div className="build-slot-grid">
                         {world.player.savedBuilds.map((build, index) => (
-                          <div key={build.id} className="build-slot-card">
+                          <div key={build.id} className={`build-slot-card${build.savedAt !== null ? " saved" : ""}`}>
                             <div className="build-slot-label">Slot {index + 1}</div>
+                            <div className="build-slot-name">{build.savedAt !== null ? (build.name || "Saved build") : "Empty"}</div>
                             <div className="build-slot-actions">
-                              <button type="button" className="primary-button" onClick={() => onLoadBuild(build.id)}>
+                              <button type="button" className="primary-button" onClick={() => onLoadBuild(build.id)} disabled={build.savedAt === null}>
                                 Load
                               </button>
                               <button type="button" onClick={() => onSaveBuild(build.id)}>

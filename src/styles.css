@@ -1508,6 +1508,10 @@ select {
   border-bottom: none;
 }
 
+.mkt-table-row:not(.mkt-table-head):hover {
+  background: rgba(127, 192, 255, 0.04);
+}
+
 .mkt-table-head {
   position: sticky;
   top: 0;
@@ -1930,7 +1934,7 @@ select {
 
 .fitting-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: calc(var(--fit-gap) * 0.7);
 }
 
@@ -1940,6 +1944,7 @@ select {
   padding: var(--fit-card-pad);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(130, 158, 210, 0.1);
+  border-left: 2px solid rgba(127, 192, 255, 0.28);
   background: rgba(7, 12, 24, 0.72);
 }
 
@@ -2052,10 +2057,27 @@ select {
 }
 
 .build-slot-label {
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.build-slot-name {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.build-slot-card.saved .build-slot-label {
   color: var(--accent);
+}
+
+.build-slot-card.saved .build-slot-name {
+  color: var(--text);
 }
 
 .build-slot-actions {
