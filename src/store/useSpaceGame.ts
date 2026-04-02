@@ -471,7 +471,8 @@ function loadWorld() {
             projectiles: parsedSector?.projectiles ?? fallbackSector.projectiles,
             loot: parsedSector?.loot ?? fallbackSector.loot,
             wrecks: parsedSector?.wrecks ?? fallbackSector.wrecks,
-            floatingText: parsedSector?.floatingText ?? fallbackSector.floatingText
+            floatingText: parsedSector?.floatingText ?? fallbackSector.floatingText,
+            beltSpawnCooldowns: parsedSector?.beltSpawnCooldowns ?? fallbackSector.beltSpawnCooldowns
           }
         ];
       })

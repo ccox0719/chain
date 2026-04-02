@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
-import { moduleCatalog } from "../game/data/modules";
+import { WeaponDetailsCard } from "./WeaponDetailsCard";
+import { moduleById, moduleCatalog } from "../game/data/modules";
 import { playerShips } from "../game/data/ships";
 import { transportMissionCatalog } from "../game/missions/data/transportMissions";
 import { getSystemDestination, getSystemDestinations, regionById, regionCatalog, sectorById, sectorCatalog } from "../game/data/sectors";
+import { findComparableEquippedWeapon } from "../game/utils/weaponStats";
 import { planRoute } from "../game/universe/routePlanning";
 import { CommandAction, GameSnapshot, ModuleSlot, SelectableRef } from "../types/game";
 
@@ -132,6 +134,25 @@ export function SidebarPanels({
       })
     );
   }, []);
+  const equippedWeaponIds = world.player.equipped.weapon;
+  const storedModuleEntries = moduleCatalog
+    .filter((module) => (world.player.inventory.modules[module.id] ?? 0) > 0)
+    .map((module) => ({
+      module,
+      count: world.player.inventory.modules[module.id] ?? 0,
+      compareTo: findComparableEquippedWeapon(module, equippedWeaponIds)
+    }));
+  const equippedModuleEntries = equippedWeaponIds
+    .map((moduleId) => (moduleId ? moduleById[moduleId] ?? null : null))
+    .filter((module): module is NonNullable<typeof module> => Boolean(module))
+    .map((module) => ({
+      module,
+      compareTo:
+        equippedWeaponIds
+          .map((moduleId) => (moduleId ? moduleById[moduleId] ?? null : null))
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+          .find((entry) => entry.id !== module.id && (entry.weaponClass ?? entry.sizeClass ?? entry.slot) === (module.weaponClass ?? module.sizeClass ?? module.slot)) ?? null
+    }));
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -194,6 +215,27 @@ export function SidebarPanels({
                 </CollapsibleSection>
               </section>
               <section className="panel-lite">
+                <CollapsibleSection
+                  title="Weapon Rack"
+                  subtitle={`${storedModuleEntries.length} stored module types`}
+                  defaultOpen
+                >
+                  <div className="weapon-rack-list">
+                    {storedModuleEntries.length > 0 ? (
+                      storedModuleEntries.map(({ module, count, compareTo }) => (
+                        <div key={module.id} className="weapon-rack-item">
+                          <div className="weapon-rack-head">
+                            <span>{count}x in storage</span>
+                            <span>{module.price} cr</span>
+                          </div>
+                          <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Stored" />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="fit-empty-copy">No stored weapons.</div>
+                    )}
+                  </div>
+                </CollapsibleSection>
                 <CollapsibleSection title="Stored Modules" subtitle={`${moduleCatalog.length} types`} defaultOpen>
                   <ul className="plain-list">
                     {moduleCatalog.map((module) => (
@@ -482,6 +524,34 @@ export function SidebarPanels({
                     ))}
                   </div>
                 ))}
+                <CollapsibleSection title="Equipped Modules" subtitle={`${equippedModuleEntries.length} online`} defaultOpen>
+                  <div className="weapon-rack-list">
+                    {equippedModuleEntries.length > 0 ? (
+                      equippedModuleEntries.map(({ module, compareTo }) => (
+                        <WeaponDetailsCard key={module.id} module={module} compareTo={compareTo} contextLabel="Equipped" />
+                      ))
+                    ) : (
+                      <div className="fit-empty-copy">No modules fitted.</div>
+                    )}
+                  </div>
+                </CollapsibleSection>
+                <CollapsibleSection title="Stored Modules" subtitle={`${storedModuleEntries.length} ready to fit`}>
+                  <div className="weapon-rack-list">
+                    {storedModuleEntries.length > 0 ? (
+                      storedModuleEntries.map(({ module, count, compareTo }) => (
+                        <div key={`fit-${module.id}`} className="weapon-rack-item">
+                          <div className="weapon-rack-head">
+                            <span>{count}x available</span>
+                            <span>{module.weaponClass ?? module.sizeClass ?? "light"}</span>
+                          </div>
+                          <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Fit Compare" />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="fit-empty-copy">No spare modules in storage.</div>
+                    )}
+                  </div>
+                </CollapsibleSection>
               </section>
             </div>
           )}

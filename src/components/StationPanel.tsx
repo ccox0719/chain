@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ShipFittingDiagram } from "./ShipFittingDiagram";
 import { ShipGeoIcon } from "./ShipGeoIcon";
+import { WeaponDetailsCard } from "./WeaponDetailsCard";
 import { CommandAction } from "../types/game";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -20,6 +21,7 @@ import { transportMissionCatalog } from "../game/missions/data/transportMissions
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
 import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
+import { findComparableEquippedWeapon } from "../game/utils/weaponStats";
 import { CommodityId, GameSnapshot, ModuleSlot, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
 type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
@@ -123,30 +125,6 @@ function StatBar({ value, max, fillClass }: { value: number; max: number; fillCl
 
 function missionTypeLabel(type: string) {
   return MISSION_TYPE_LABELS[type] ?? type;
-}
-
-function moduleCapUsePerSecond(module: (typeof moduleCatalog)[number]) {
-  if (module.capacitorDrain) return module.capacitorDrain;
-  if (module.capacitorUse && module.cycleTime && module.cycleTime > 0) return module.capacitorUse / module.cycleTime;
-  return 0;
-}
-
-function moduleCapPressureLabel(module: (typeof moduleCatalog)[number]) {
-  const capPerSec = moduleCapUsePerSecond(module);
-  if (capPerSec <= 0) return "Cap-free";
-  if (capPerSec < 4) return "Cap-light";
-  if (capPerSec < 8) return "Cap-moderate";
-  return "Cap-hungry";
-}
-
-function moduleFitAdvice(module: (typeof moduleCatalog)[number]) {
-  const capPerSec = moduleCapUsePerSecond(module);
-  if (capPerSec >= 8) return "Pairs best with passive shield or armor.";
-  if (capPerSec >= 4) return "Works well with balanced tank or mixed utility.";
-  if (module.kind === "laser" || module.kind === "missile" || module.kind === "railgun") {
-    return "Leaves room for active defense or speed.";
-  }
-  return "Low demand; flexible fit.";
 }
 
 interface StationPanelProps {
@@ -339,6 +317,7 @@ export function StationPanel({
     inventoryModulesBySlot[slotType].sort((left, right) => left.module.name.localeCompare(right.module.name));
   });
   const allOwnedModules = (["weapon", "utility", "defense"] as ModuleSlot[]).flatMap((slotType) => inventoryModulesBySlot[slotType]);
+  const equippedWeaponIds = world.player.equipped.weapon;
   const unknownOwnedModules = ownedModuleEntries.filter((entry) => !entry.module);
 
   if (!currentStation) return null;
@@ -862,26 +841,14 @@ export function StationPanel({
                       const miningSummary = moduleMiningSummary(module);
                       const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
                       const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+                      const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
                       return (
                         <div key={module.id} className={`mod-row kind-${module.kind}${licenseLocked ? " mod-row-locked" : ""}`}>
                           <span className="mod-kind-icon" title={module.kind}>{MODULE_KIND_ICONS[module.kind] ?? "·"}</span>
                           <div className="mod-row-info">
-                            <div className="mod-row-name-line">
-                              <strong>{module.name}</strong>
-                              {owned > 0 && <span className="status-chip mod-owned-chip">{owned} owned</span>}
-                            </div>
-                          <div className="mod-row-tags">
-                            <span className="status-chip">{module.category}</span>
-                            {module.sizeClass && <span className="status-chip">{module.sizeClass}</span>}
-                            {module.techLevel && <span className="status-chip">T{module.techLevel}</span>}
-                            {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
-                            <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
-                              {moduleCapPressureLabel(module)}
-                            </span>
-                          </div>
-                          <p className="mod-desc">{module.description}</p>
-                          <p className="mod-detail">{moduleFitAdvice(module)}</p>
+                            {owned > 0 && <span className="status-chip mod-owned-chip">{owned} owned</span>}
                           {miningSummary && <p className="mod-detail">{miningSummary}</p>}
+                          <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Market Analysis" />
                         </div>
                           <div className="mod-row-prices">
                             <div className="mod-price-pair">
@@ -987,6 +954,7 @@ export function StationPanel({
                             allOwnedModules.map(({ moduleId, module, count }) => {
                               const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
                               const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+                              const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
                               return (
                               <div
                                 key={`owned-${moduleId}`}
@@ -1002,23 +970,22 @@ export function StationPanel({
                                 }}
                               >
                                 <div className="module-drag-copy">
-                                  <div className="module-drag-title-row">
-                                    <strong>{module.name}</strong>
-                                    <span className="status-chip">{module.slot}</span>
-                                  </div>
-                                  <span>
-                                    {module.slot} · {module.category}
-                                    {module.sizeClass ? ` · ${module.sizeClass}` : ""}
-                                  </span>
-                                  <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
-                                    {moduleCapPressureLabel(module)}
-                                  </span>
                                   {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
                                 </div>
                                 <div className="module-drag-meta">
                                   <span className="status-chip">x{count}</span>
                                   <span>{module.price} cr</span>
+                                  <button
+                                    type="button"
+                                    className="ghost-button mini"
+                                    onClick={() => onSellModule(module.id)}
+                                    disabled={count <= 0}
+                                    title={`Sell one ${module.name}`}
+                                  >
+                                    Sell 1
+                                  </button>
                                 </div>
+                                <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Locker Fit" />
                               </div>
                             )})
                           ) : (
@@ -1044,6 +1011,7 @@ export function StationPanel({
                               inventoryModulesBySlot[slotType].map(({ moduleId, module, count }) => {
                                 const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
                                 const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+                                const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
                                 return (
                                 <div
                                   key={moduleId}
@@ -1058,24 +1026,23 @@ export function StationPanel({
                                     setHoveredSlotKey(null);
                                   }}
                                 >
-                                  <div className="module-drag-copy">
-                                    <div className="module-drag-title-row">
-                                      <strong>{module.name}</strong>
-                                      <span className="status-chip">{module.slot}</span>
-                                    </div>
-                                    <span>
-                                      {module.category}
-                                      {module.sizeClass ? ` · ${module.sizeClass}` : ""}
-                                    </span>
-                                    <span className={`status-chip ${moduleCapPressureLabel(module).toLowerCase().replace(/[^a-z-]/g, "-")}`}>
-                                      {moduleCapPressureLabel(module)}
-                                    </span>
+                                <div className="module-drag-copy">
                                     {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
                                   </div>
                                   <div className="module-drag-meta">
                                     <span className="status-chip">x{count}</span>
                                     <span>{module.price} cr</span>
+                                    <button
+                                      type="button"
+                                      className="ghost-button mini"
+                                      onClick={() => onSellModule(module.id)}
+                                      disabled={count <= 0}
+                                      title={`Sell one ${module.name}`}
+                                    >
+                                      Sell 1
+                                    </button>
                                   </div>
+                                  <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Locker Fit" />
                                 </div>
                               )})
                             ) : (

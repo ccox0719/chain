@@ -1,0 +1,181 @@
+import { ModuleDefinition } from "../types/game";
+import {
+  CompactModuleMetric,
+  getCompactModuleMetrics,
+  getDamageProfileEntries,
+  getModuleRoleTag,
+  getWeaponComparisonHighlights,
+  getWeaponSummaryStats
+} from "../game/utils/weaponStats";
+
+interface WeaponDetailsCardProps {
+  module: ModuleDefinition;
+  compareTo?: ModuleDefinition | null;
+  contextLabel?: string;
+}
+
+function DeltaGlyph({ direction }: { direction: "up" | "down" | "flat" }) {
+  if (direction === "up") return <span className="weapon-delta up">▲</span>;
+  if (direction === "down") return <span className="weapon-delta down">▼</span>;
+  return <span className="weapon-delta flat">•</span>;
+}
+
+function getMetricDelta(metric: CompactModuleMetric, compareTo: ModuleDefinition | null | undefined) {
+  if (!compareTo) return "flat" as const;
+  const compareMetrics = getCompactModuleMetrics(compareTo);
+  const baseline = compareMetrics.find((entry) => entry.id === metric.id);
+  if (!baseline) return "flat" as const;
+  const denom = Math.max(Math.abs(baseline.value), 0.001);
+  const delta = (metric.value - baseline.value) / denom;
+  if (Math.abs(delta) < 0.05) return "flat" as const;
+  return delta > 0 ? "up" : "down";
+}
+
+export function WeaponDetailsCard({ module, compareTo = null, contextLabel }: WeaponDetailsCardProps) {
+  const metrics = getCompactModuleMetrics(module);
+  const roleTag = getModuleRoleTag(module);
+  const weaponLike = module.slot === "weapon" && Boolean(module.damage && module.damageProfile);
+  const weaponStats = weaponLike ? getWeaponSummaryStats(module) : null;
+  const comparisonHighlights = weaponLike ? getWeaponComparisonHighlights(module, compareTo) : [];
+  const profileEntries = weaponLike ? getDamageProfileEntries(module.damageProfile) : [];
+
+  return (
+    <section className="weapon-details-card weapon-details-card-compact">
+      <div className="weapon-details-head">
+        <div className="weapon-title-block">
+          <div className="weapon-details-title-row">
+            <strong>{module.name}</strong>
+            <span className="status-chip">{module.weaponClass ?? module.sizeClass ?? module.slot}</span>
+          </div>
+          <div className="weapon-tag-row">
+            <span className="weapon-role-tag">{roleTag}</span>
+            {contextLabel && <span className="weapon-context-label">{contextLabel}</span>}
+          </div>
+        </div>
+      </div>
+
+      {comparisonHighlights.length > 0 && (
+        <div className="weapon-compare-row">
+          {comparisonHighlights.map((entry) => (
+            <span key={entry.label} className={`weapon-compare-chip ${entry.direction === "up" ? "up" : "down"}`}>
+              {entry.direction === "up" ? "+" : "-"} {entry.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="weapon-stat-grid compact">
+        {metrics.map((metric) => {
+          const delta = getMetricDelta(metric, compareTo);
+          return (
+            <div key={metric.id} className="weapon-stat-row compact">
+              <div className="weapon-stat-topline compact">
+                <span>{metric.label}</span>
+                <div className="weapon-stat-value-wrap">
+                  <strong>{metric.displayValue}</strong>
+                  <DeltaGlyph direction={delta} />
+                </div>
+              </div>
+              <div className="weapon-stat-bar compact">
+                <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <details className="weapon-details-expander">
+        <summary>More Info</summary>
+        <div className="weapon-meta-grid compact">
+          {weaponLike ? (
+            <>
+              <div className="weapon-meta-item">
+                <span>DPS</span>
+                <strong>{weaponStats?.dps.toFixed(1)}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Damage / cycle</span>
+                <strong>{weaponStats?.damagePerCycle.toFixed(1)}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Optimal</span>
+                <strong>{Math.round(weaponStats?.optimal ?? 0)} m</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Falloff</span>
+                <strong>{Math.round(weaponStats?.falloff ?? 0)} m</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Cycle time</span>
+                <strong>{weaponStats?.cycleTime.toFixed(1)} s</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Tracking</span>
+                <strong>{module.kind === "missile" ? "Guided" : `${weaponStats?.tracking.toFixed(3)} rad/s`}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Shield pressure</span>
+                <strong>{weaponStats?.shieldPressure.toFixed(1)}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Armor pressure</span>
+                <strong>{weaponStats?.armorPressure.toFixed(1)}</strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="weapon-meta-item">
+                <span>Slot</span>
+                <strong>{module.slot}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Category</span>
+                <strong>{module.category}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Activation</span>
+                <strong>{module.activation}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Cycle / drain</span>
+                <strong>
+                  {module.cycleTime ? `${module.cycleTime.toFixed(1)} s` : module.capacitorDrain ? `${module.capacitorDrain.toFixed(1)}/s` : "Passive"}
+                </strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Range</span>
+                <strong>{module.range ? `${Math.round(module.range)} m` : "None"}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Cap use</span>
+                <strong>{module.capacitorUse ? `${module.capacitorUse}/cycle` : module.capacitorDrain ? `${module.capacitorDrain}/s` : "Cap-free"}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Role</span>
+                <strong>{roleTag}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Price</span>
+                <strong>{module.price} cr</strong>
+              </div>
+            </>
+          )}
+        </div>
+
+        {weaponLike ? (
+          <div className="weapon-damage-profile compact">
+            {profileEntries.map((entry) => (
+              <div key={entry.type} className="weapon-profile-row">
+                <span>{entry.label}</span>
+                <div className="weapon-profile-bar">
+                  <div className={`weapon-profile-fill type-${entry.type}`} style={{ width: `${entry.value * 100}%` }} />
+                </div>
+                <strong>{Math.round(entry.value * 100)}%</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </details>
+    </section>
+  );
+}

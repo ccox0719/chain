@@ -232,45 +232,6 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
   });
 
   const enemies: EnemyState[] = [];
-  sector.asteroidFields.forEach((field, fieldIndex) => {
-    const chance = field.hostileSpawnChance ?? 0;
-    if (chance <= 0 || Math.random() > chance) return;
-    const variantIds = field.hostileSpawnVariantIds?.length
-      ? field.hostileSpawnVariantIds
-      : ["dust-raider", "scrap-drone", "veil-stalker"];
-    const count = field.hostileSpawnCount ?? 1;
-    for (let index = 0; index < count; index += 1) {
-      const variant = enemyVariantById[pickRandom(variantIds)] ?? enemyVariantById["dust-raider"];
-      const position = scatter(
-        field.center,
-        Math.max(70, field.spread * 0.55),
-        fieldIndex * 7 + index,
-        Math.max(count, 1)
-      );
-      const patrolBehavior = pickEnemyPatrolBehavior();
-      enemies.push({
-        id: uid("enemy"),
-        variantId: variant.id,
-        position,
-        velocity: { x: 0, y: 0 },
-        rotation: 0,
-        shield: variant.shield,
-        armor: variant.armor,
-        hull: variant.hull,
-        capacitor: variant.capacitor,
-        patrolBehavior,
-        patrolAnchor: position,
-        patrolTarget: createEnemyPatrolTarget(patrolBehavior, position, sector.width, sector.height),
-        navigation: idleNav(),
-        lockedTargets: [],
-        activeTarget: null,
-        modules: enemyModuleRuntime(variant.fittedModules),
-        effects: neutralEffects(),
-        recentDamageTimer: 0
-      });
-    }
-  });
-
   sector.enemySpawns.forEach((spawn) => {
     const variant = enemyVariantById[spawn.variantId];
     for (let index = 0; index < spawn.count; index += 1) {
@@ -306,7 +267,8 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
     loot: [],
     wrecks: [],
     floatingText: [],
-    particles: []
+    particles: [],
+    beltSpawnCooldowns: {}
   };
 }
 

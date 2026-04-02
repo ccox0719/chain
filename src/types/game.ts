@@ -683,6 +683,7 @@ export interface SectorRuntime {
   wrecks: WreckState[];
   floatingText: FloatingText[];
   particles: ParticleState[];
+  beltSpawnCooldowns: Record<string, number>;
 }
 
 export interface DerivedShipStats {

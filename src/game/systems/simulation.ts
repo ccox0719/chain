@@ -1813,6 +1813,93 @@ function getEnemyCombatMode(enemyVariantId: string) {
   return "orbit" as const;
 }
 
+function createEnemyFromVariant(
+  variantId: string,
+  position: Vec2,
+  patrolAnchor = position
+) {
+  const variant = enemyVariantById[variantId] ?? enemyVariantById["dust-raider"];
+  const patrolBehavior = "anchor-patrol" as const;
+  return {
+    id: `enemy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    variantId: variant.id,
+    position: { ...position },
+    velocity: { x: 0, y: 0 },
+    rotation: 0,
+    shield: variant.shield,
+    armor: variant.armor,
+    hull: variant.hull,
+    capacitor: variant.capacitor,
+    patrolBehavior,
+    patrolAnchor: { ...patrolAnchor },
+    patrolTarget: {
+      x: patrolAnchor.x + (Math.random() - 0.5) * 220,
+      y: patrolAnchor.y + (Math.random() - 0.5) * 220
+    },
+    navigation: {
+      mode: "idle" as const,
+      target: null,
+      desiredRange: 0,
+      destination: null,
+      warpFrom: null,
+      warpProgress: 0
+    },
+    lockedTargets: [],
+    activeTarget: null,
+    modules: variant.fittedModules.map((moduleId, index) => ({
+      moduleId,
+      active: true,
+      cycleRemaining: (moduleById[moduleId]?.cycleTime ?? 0) * (0.25 + index * 0.2),
+      autoRepeat: true
+    })),
+    effects: {
+      speedMultiplier: 1,
+      signatureMultiplier: 1,
+      turretTrackingMultiplier: 1,
+      lockRangeMultiplier: 1
+    },
+    recentDamageTimer: 0
+  };
+}
+
+const HOSTILE_TRIGGER_COOLDOWN_SEC = 25;
+
+const HOSTILE_TRIGGER_PROFILES = {
+  low: { chance: 0.03, count: 1 },
+  mid: { chance: 0.06, count: 2 },
+  high: { chance: 0.09, count: 3 }
+} as const;
+
+function getHostileTriggerProfile(sectorId: string) {
+  const sectorDef = sectorById[sectorId];
+  if (sectorDef.danger >= 5) return HOSTILE_TRIGGER_PROFILES.high;
+  if (sectorDef.danger >= 3) return HOSTILE_TRIGGER_PROFILES.mid;
+  return HOSTILE_TRIGGER_PROFILES.low;
+}
+
+function getSectorResponseVariants(sectorId: string, preferredVariantIds?: string[]) {
+  if (preferredVariantIds?.length) return preferredVariantIds;
+  const sectorDef = sectorById[sectorId];
+  const variantIds = [
+    ...sectorDef.asteroidFields.flatMap((field) => field.hostileSpawnVariantIds ?? []),
+    ...sectorDef.enemySpawns.map((spawn) => spawn.variantId)
+  ].filter((variantId, index, all) => Boolean(variantId) && all.indexOf(variantId) === index);
+  return variantIds.length ? variantIds : ["dust-raider"];
+}
+
+function updateBeltSpawnCooldowns(world: GameWorld, dt: number) {
+  Object.values(world.sectors).forEach((sector) => {
+    Object.keys(sector.beltSpawnCooldowns).forEach((beltId) => {
+      const remaining = Math.max(0, sector.beltSpawnCooldowns[beltId] - dt);
+      if (remaining > 0) {
+        sector.beltSpawnCooldowns[beltId] = remaining;
+      } else {
+        delete sector.beltSpawnCooldowns[beltId];
+      }
+    });
+  });
+}
+
 function aggroEnemyToPlayer(world: GameWorld, enemyId: string) {
   const enemy = getCurrentSector(world).enemies.find((entry) => entry.id === enemyId);
   if (!enemy || enemy.hull <= 0) return;
@@ -1871,6 +1958,79 @@ function pickNextEnemyPatrolTarget(world: GameWorld, enemy: EnemyState) {
     x: 120 + Math.random() * Math.max(240, sectorDef.width - 240),
     y: 120 + Math.random() * Math.max(240, sectorDef.height - 240)
   };
+}
+
+function spawnTriggeredHostiles(
+  world: GameWorld,
+  sectorId: string,
+  anchorPosition: Vec2,
+  variantIds: string[],
+  spawnCount: number
+) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  const nearbyHostiles = sector.enemies.filter(
+    (enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= 720
+  ).length;
+  if (nearbyHostiles >= 3) return;
+
+  const actualCount = Math.min(Math.max(1, spawnCount), Math.max(1, 3 - nearbyHostiles));
+  const spawnedNames: string[] = [];
+
+  for (let index = 0; index < actualCount; index += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 220 + Math.random() * 140 + index * 24;
+    const spawnPosition = {
+      x: clamp(anchorPosition.x + Math.cos(angle) * radius, 80, sectorDef.width - 80),
+      y: clamp(anchorPosition.y + Math.sin(angle) * radius, 80, sectorDef.height - 80)
+    };
+    const enemy = createEnemyFromVariant(
+      variantIds[Math.floor(Math.random() * variantIds.length)] ?? "dust-raider",
+      spawnPosition,
+      anchorPosition
+    );
+    sector.enemies.push(enemy);
+    aggroEnemyToPlayer(world, enemy.id);
+    spawnedNames.push(enemyVariantById[enemy.variantId]?.name ?? "hostile");
+  }
+
+  const originalSectorId = world.currentSectorId;
+  world.currentSectorId = sectorId;
+  addFloatingText(world, anchorPosition, "Hostiles inbound", "#ff8b7a");
+  world.currentSectorId = originalSectorId;
+  pushStory(world, `${spawnedNames.join(", ")} warped toward your position.`);
+}
+
+function maybeTriggerMiningSpawn(
+  world: GameWorld,
+  beltId: string,
+  anchorPosition: Vec2,
+  preferredVariantIds?: string[]
+) {
+  const sector = getCurrentSector(world);
+  if (sector.beltSpawnCooldowns[beltId] && sector.beltSpawnCooldowns[beltId] > 0) return;
+  const profile = getHostileTriggerProfile(world.currentSectorId);
+  if (Math.random() > profile.chance) return;
+  spawnTriggeredHostiles(
+    world,
+    world.currentSectorId,
+    anchorPosition,
+    getSectorResponseVariants(world.currentSectorId, preferredVariantIds),
+    profile.count
+  );
+  sector.beltSpawnCooldowns[beltId] = HOSTILE_TRIGGER_COOLDOWN_SEC;
+}
+
+function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, anchorPosition: Vec2) {
+  const profile = getHostileTriggerProfile(destinationSectorId);
+  if (Math.random() > profile.chance) return;
+  spawnTriggeredHostiles(
+    world,
+    destinationSectorId,
+    anchorPosition,
+    getSectorResponseVariants(destinationSectorId),
+    profile.count
+  );
 }
 
 function updateRouteAutopilot(world: GameWorld) {
@@ -1969,6 +2129,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
         if (arrival) {
           world.player.position = { x: arrival.position.x + 100, y: arrival.position.y + 20 };
           world.player.velocity = { x: 0, y: 0 };
+          maybeTriggerPortalSpawn(world, gate.connectedSystemId, arrival.position);
         }
         advanceRouteAfterJump(world, gate.connectedSystemId);
         setIdle(world.player.navigation);
@@ -2256,6 +2417,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
         if (!asteroid) return;
         const freeSpace = derived.cargoCapacity - getCargoUsed(player);
         if (freeSpace > 0 && asteroid.oreRemaining > 0) {
+          const sectorDef = getCurrentSectorDef(world);
+          const sourceField =
+            sectorDef.asteroidFields.find((field) => field.beltId === asteroid.beltId) ??
+            sectorDef.asteroidFields.find(
+              (field) => distance(field.center, asteroid.position) <= Math.max(field.spread + 80, 180)
+            );
           const miningRange = module.range ?? 0;
           const eligibleAsteroids = module.minesAllInRange
             ? sector.asteroids
@@ -2291,6 +2458,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
               .forEach((mission) => advanceMission(world, mission.id, mined));
           });
           if (totalMined === 0) return;
+          maybeTriggerMiningSpawn(
+            world,
+            asteroid.beltId,
+            asteroid.position,
+            sourceField?.hostileSpawnVariantIds
+          );
           awardPilotLicenseProgress(world, totalMined * 0.35);
         }
       } else if (module.kind === "salvager" && target?.type === "wreck") {
@@ -2984,6 +3157,7 @@ function getNavLabel(world: GameWorld) {
 
 export function updateWorld(world: GameWorld, dt: number) {
   world.elapsedTime += dt;
+  updateBeltSpawnCooldowns(world, dt);
   ensureMissionUnlocks(world);
   normalizeTransportMissionStates(world);
   normalizeDeliveryMissionStates(world);
