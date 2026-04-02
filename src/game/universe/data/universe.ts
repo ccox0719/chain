@@ -668,7 +668,345 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
   }
 ];
 
-export const sectorCatalog: SolarSystemDefinition[] = baseSectorCatalog.map(scaleSystem);
+const expansionSectorCatalog: SolarSystemDefinition[] = [
+  {
+    id: "glass-harbor",
+    name: "Glass Harbor",
+    regionId: "aurelian-core",
+    security: "high",
+    danger: 2,
+    description: "A polished trade harbor where refinement yards meet quieter prospecting contracts.",
+    flavorText: "Freighters idle here longer than usual because every dockmaster thinks the prices turn tomorrow.",
+    controllingFaction: "aurelian-league",
+    visualTheme: "Cold blue docks, mirrored solar sheets, and disciplined civilian traffic.",
+    economyTags: ["trade", "research", "mining"],
+    missionTags: ["delivery", "survey", "acquisition"],
+    traffic: "medium",
+    population: "Harbor ring",
+    width: 3000,
+    height: 2800,
+    backdrop: { nebula: "#274866", dust: "#9ad8ff" },
+    mapPosition: { x: 180, y: 340 },
+    neighbors: ["farpoint-market", "auric-loop"],
+    destinations: [
+      station("glass-quay", "Glass Quay", 1280, 1520, "Refinement harbor known for clean civilian contracts.", ["market", "research"]),
+      gate("gate-glass-farpoint", "Farpoint Gate", 420, 620, "farpoint-market", "gate-farpoint-glass", "Core gate back toward the market spine."),
+      gate("gate-glass-auric", "Auric Gate", 2460, 620, "auric-loop", "gate-auric-glass", "Inner loop gate toward civilian mining lanes."),
+      belt("glass-belt-alpha", "Glass Belt Alpha", 1760, 1120, "ferrite", "A bright ferrite belt with relatively safe extraction windows."),
+      beacon("glass-survey", "Survey Prism", 960, 920, "League cartography beacon used in route survey contracts.", ["mission"]),
+      outpost("glass-shed", "Harbor Tool Shed", 2100, 1840, "A quiet service outpost handling mining fit swaps.")
+    ],
+    asteroidFields: [{ beltId: "glass-belt-alpha", center: { x: 1760, y: 1120 }, count: 8, resource: "ferrite", spread: 220, richness: 12 }],
+    enemySpawns: [{ variantId: "scrap-drone", count: 2, center: { x: 2140, y: 1320 }, radius: 180 }]
+  },
+  {
+    id: "crown-exchange",
+    name: "Crown Exchange",
+    regionId: "aurelian-core",
+    security: "high",
+    danger: 2,
+    description: "A premium brokerage system built around route arbitrage, finance traffic, and high-value cargo tenders.",
+    flavorText: "Everyone sounds calm in Crown Exchange, which is how you know the margins are vicious.",
+    controllingFaction: "aurelian-league",
+    visualTheme: "Gold-white relay towers and tidy orbital commerce lanes.",
+    economyTags: ["trade", "logistics", "market"],
+    missionTags: ["delivery", "escort", "route-choice"],
+    traffic: "high",
+    population: "Financial hub",
+    width: 3100,
+    height: 2700,
+    backdrop: { nebula: "#384869", dust: "#f0d08d" },
+    mapPosition: { x: 210, y: 50 },
+    neighbors: ["sunward-span", "farpoint-market"],
+    destinations: [
+      station("crown-dais", "Crown Dais", 1380, 1480, "Broker ring handling expensive bulk orders and convoy schedules.", ["market", "logistics"]),
+      gate("gate-crown-sunward", "Sunward Gate", 500, 520, "sunward-span", "gate-sunward-crown", "Northbound gate back to the safe corridor."),
+      gate("gate-crown-farpoint", "Farpoint Gate", 2480, 620, "farpoint-market", "gate-farpoint-crown", "Market-side gate toward regional trade traffic."),
+      belt("crown-belt-alpha", "Crown Belt Alpha", 980, 960, "ferrite", "Modest extraction belt worked by contract haulers."),
+      beacon("crown-ledger", "Ledger Relay", 2060, 960, "Finance relay used in premium courier work.", ["mission"])
+    ],
+    asteroidFields: [{ beltId: "crown-belt-alpha", center: { x: 980, y: 960 }, count: 6, resource: "ferrite", spread: 180, richness: 10 }],
+    enemySpawns: [{ variantId: "dust-raider", count: 1, center: { x: 2140, y: 1180 }, radius: 140 }]
+  },
+  {
+    id: "slag-arc",
+    name: "Slag Arc",
+    regionId: "industrial-fringe",
+    security: "low",
+    danger: 3,
+    description: "A furnace route where half-processed ore, coolant runs, and raider ambushes overlap.",
+    flavorText: "Nobody stays in Slag Arc unless they are getting paid twice or hiding from someone expensive.",
+    controllingFaction: "cinder-union",
+    visualTheme: "Orange refinery haze and debris-lit convoy arcs.",
+    economyTags: ["industry", "mining", "trade"],
+    missionTags: ["hauling", "combat", "escort"],
+    traffic: "medium",
+    population: "Smelter lane",
+    width: 3200,
+    height: 3000,
+    backdrop: { nebula: "#4e2417", dust: "#ff9b6e" },
+    mapPosition: { x: 380, y: 430 },
+    neighbors: ["ironway", "ember-reach"],
+    destinations: [
+      station("slag-yard", "Slag Yard", 760, 2280, "A refinery yard known for armor fittings and ugly but profitable contracts.", ["industrial", "repair"]),
+      gate("gate-slag-ironway", "Ironway Gate", 440, 520, "ironway", "gate-ironway-slag", "Convoy gate back toward the main spine."),
+      gate("gate-slag-ember", "Ember Gate", 2580, 620, "ember-reach", "gate-ember-slag", "Refinery shortcut gate into the crystal basin."),
+      belt("slag-belt-alpha", "Slag Belt Alpha", 1600, 1380, "ember-crystal", "Hot crystal field wrapped in industrial debris."),
+      wreck("slag-break", "Breaker Wrecks", 2100, 1760, "The remains of refinery escorts that lost the timetable war."),
+      beacon("slag-marker", "Arc Marker", 1260, 900, "Union route marker used by freight dispatch.", ["patrol"])
+    ],
+    asteroidFields: [
+      {
+        beltId: "slag-belt-alpha",
+        center: { x: 1600, y: 1380 },
+        count: 8,
+        resource: "ember-crystal",
+        spread: 250,
+        richness: 15,
+        hostileSpawnChance: 0.38,
+        hostileSpawnCount: 2,
+        hostileSpawnVariantIds: ["cinder-pike", "dust-raider"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "cinder-pike", count: 2, center: { x: 2060, y: 1500 }, radius: 200 },
+      { variantId: "dust-raider", count: 2, center: { x: 2260, y: 1260 }, radius: 180 }
+    ]
+  },
+  {
+    id: "brass-strait",
+    name: "Brass Strait",
+    regionId: "industrial-fringe",
+    security: "medium",
+    danger: 3,
+    description: "A guarded freight strait that rewards slower routes with steadier contracts and fewer surprises.",
+    flavorText: "Every captain in Brass Strait claims to prefer safety right up until the margins get thin.",
+    controllingFaction: "cinder-union",
+    visualTheme: "Amber convoy rails crossing muted industrial void.",
+    economyTags: ["logistics", "trade", "industry"],
+    missionTags: ["delivery", "hauling", "border"],
+    traffic: "high",
+    population: "Freight crossing",
+    width: 3200,
+    height: 2900,
+    backdrop: { nebula: "#413034", dust: "#dca87d" },
+    mapPosition: { x: 610, y: 200 },
+    neighbors: ["forge-plains", "sable-haul"],
+    destinations: [
+      station("brass-quay", "Brass Quay", 980, 2140, "A dependable freight quay built around route planners and repair crews.", ["logistics", "repair"]),
+      gate("gate-brass-forge", "Forge Gate", 420, 540, "forge-plains", "gate-forge-brass", "Checkpoint gate back toward Forge Bastion."),
+      gate("gate-brass-sable", "Sable Gate", 2540, 620, "sable-haul", "gate-sable-brass", "Freight gate toward the outer haul loop."),
+      belt("brass-belt-alpha", "Brass Belt Alpha", 1660, 1280, "ferrite", "A broad ore belt worked by insured strip crews."),
+      beacon("brass-ops", "Transit Ops Beacon", 2060, 960, "Operations relay for long-haul convoy routing.", ["navigation"])
+    ],
+    asteroidFields: [{ beltId: "brass-belt-alpha", center: { x: 1660, y: 1280 }, count: 7, resource: "ferrite", spread: 220, richness: 12 }],
+    enemySpawns: [{ variantId: "cinder-pike", count: 2, center: { x: 2140, y: 1520 }, radius: 180 }]
+  },
+  {
+    id: "ashen-deep",
+    name: "Ashen Deep",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 5,
+    description: "A dim frontier trough where raiders cut across border routes under minimal sensor cover.",
+    flavorText: "Pilots enter Ashen Deep talking about courage and leave talking about reaction time.",
+    controllingFaction: "veilborn",
+    visualTheme: "Ash-violet fog, broken horizon arcs, and violent sensor bloom.",
+    economyTags: ["frontier", "combat", "salvage"],
+    missionTags: ["combat", "travel", "risk"],
+    traffic: "medium",
+    population: "Raider corridor",
+    width: 3500,
+    height: 3200,
+    backdrop: { nebula: "#22172f", dust: "#bc8fff" },
+    mapPosition: { x: 760, y: 150 },
+    neighbors: ["outer-verge", "blackwake", "revenant-crossing"],
+    destinations: [
+      station("ashen-anchor", "Ashen Anchor", 940, 2360, "A rough salvage dock where frontier hulls buy time and cheap repairs.", ["frontier", "repair", "market"]),
+      gate("gate-ashen-verge", "Verge Gate", 420, 620, "outer-verge", "gate-verge-ashen", "Border gate back toward the Verge."),
+      gate("gate-ashen-blackwake", "Blackwake Gate", 2440, 520, "blackwake", "gate-blackwake-ashen", "Shortcut gate into pirate-heavy space."),
+      gate("gate-ashen-revenant", "Revenant Gate", 2700, 2240, "revenant-crossing", "gate-revenant-ashen", "Deep frontier gate toward unstable salvage lanes."),
+      belt("ashen-belt-alpha", "Ashen Belt Alpha", 1540, 1300, "ghost-alloy", "A rare alloy field with poor rescue odds and good payouts."),
+      anomaly("ashen-breach", "Ashen Breach", 2100, 1580, "A violent frontier rupture favored by raider wings.", {
+        effect: "pull",
+        radius: 300,
+        strength: 220,
+        debrisCount: 12,
+        tint: "#b58eff"
+      })
+    ],
+    asteroidFields: [
+      {
+        beltId: "ashen-belt-alpha",
+        center: { x: 1540, y: 1300 },
+        count: 9,
+        resource: "ghost-alloy",
+        spread: 280,
+        richness: 17,
+        hostileSpawnChance: 0.68,
+        hostileSpawnCount: 2,
+        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "veil-stalker", count: 4, center: { x: 2100, y: 1560 }, radius: 250 },
+      { variantId: "reaver-gunship", count: 2, center: { x: 2360, y: 1780 }, radius: 210 }
+    ]
+  },
+  {
+    id: "hush-atlas",
+    name: "Hush Atlas",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 5,
+    description: "A quiet frontier charting system used by prospectors who trust their route data more than local law.",
+    flavorText: "The silence in Hush Atlas feels earned, which is rarely the same as safe.",
+    controllingFaction: "veilborn",
+    visualTheme: "Black-violet deadspace with soft ghostlight chart markers.",
+    economyTags: ["frontier", "research", "mining"],
+    missionTags: ["exploration", "survey", "combat"],
+    traffic: "low",
+    population: "Sparse survey lane",
+    width: 3600,
+    height: 3300,
+    backdrop: { nebula: "#160d26", dust: "#9c87ff" },
+    mapPosition: { x: 1120, y: 420 },
+    neighbors: ["vanta-expanse", "ghostlight-pocket", "revenant-crossing"],
+    destinations: [
+      station("hush-hold", "Hush Hold", 1040, 2460, "A hidden survey dock selling data, repairs, and quiet fuel.", ["frontier", "repair"]),
+      gate("gate-hush-vanta", "Vanta Gate", 420, 620, "vanta-expanse", "gate-vanta-hush", "Deep route gate back toward Vanta."),
+      gate("gate-hush-ghostlight", "Ghostlight Gate", 2560, 640, "ghostlight-pocket", "gate-ghostlight-hush", "Risky gate into the lucrative pocket."),
+      gate("gate-hush-revenant", "Revenant Gate", 2680, 2260, "revenant-crossing", "gate-revenant-hush", "Salvage route toward a darker frontier branch."),
+      belt("hush-belt-alpha", "Hush Belt Alpha", 1780, 1460, "ghost-alloy", "Thin alloy field charted by stubborn long-range miners."),
+      beacon("hush-chart", "Chart Beacon", 1440, 880, "A survey marker carrying route overlays and old distress data.", ["mission"])
+    ],
+    asteroidFields: [
+      {
+        beltId: "hush-belt-alpha",
+        center: { x: 1780, y: 1460 },
+        count: 9,
+        resource: "ghost-alloy",
+        spread: 260,
+        richness: 18,
+        hostileSpawnChance: 0.62,
+        hostileSpawnCount: 2,
+        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "veil-stalker", count: 3, center: { x: 2220, y: 1780 }, radius: 230 },
+      { variantId: "reaver-gunship", count: 2, center: { x: 2020, y: 1540 }, radius: 200 }
+    ]
+  },
+  {
+    id: "revenant-crossing",
+    name: "Revenant Crossing",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "A harsh deadspace crossing packed with salvage lanes, deep anomalies, and organized hostile patrols.",
+    flavorText: "The wrecks in Revenant Crossing look recent because many of them are.",
+    controllingFaction: "veilborn",
+    visualTheme: "Pale ghostlight fractures and heavy debris halos around unstable gravity folds.",
+    economyTags: ["frontier", "salvage", "combat"],
+    missionTags: ["endgame", "combat", "salvage"],
+    traffic: "low",
+    population: "Deadspace crossing",
+    width: 3800,
+    height: 3400,
+    backdrop: { nebula: "#221138", dust: "#d0b2ff" },
+    mapPosition: { x: 940, y: 170 },
+    neighbors: ["ashen-deep", "hush-atlas"],
+    destinations: [
+      station("revenant-haven", "Revenant Haven", 1180, 2560, "A dangerous frontier dock where salvage buyers pay without many questions.", ["frontier", "market", "repair"]),
+      gate("gate-revenant-ashen", "Ashen Gate", 420, 620, "ashen-deep", "gate-ashen-revenant", "Gate back toward the safer of two bad choices."),
+      gate("gate-revenant-hush", "Hush Gate", 2820, 760, "hush-atlas", "gate-hush-revenant", "Charted gate into quieter but still hostile space."),
+      belt("revenant-belt-alpha", "Revenant Belt Alpha", 1820, 1380, "ghost-alloy", "Rich alloy seam wrapped in fresh wreck signatures."),
+      wreck("revenant-vault", "Vault Scatter", 1340, 1180, "A field of torn cargo vaults and stripped escort hulls."),
+      anomaly("revenant-rift", "Revenant Rift", 2360, 1760, "A violent anomaly that drags fights into ugly ranges.", {
+        effect: "pull",
+        radius: 340,
+        strength: 250,
+        debrisCount: 15,
+        tint: "#d5b9ff"
+      })
+    ],
+    asteroidFields: [
+      {
+        beltId: "revenant-belt-alpha",
+        center: { x: 1820, y: 1380 },
+        count: 10,
+        resource: "ghost-alloy",
+        spread: 320,
+        richness: 20,
+        hostileSpawnChance: 0.8,
+        hostileSpawnCount: 3,
+        hostileSpawnVariantIds: ["reaver-gunship", "veil-stalker"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "reaver-gunship", count: 4, center: { x: 2320, y: 1820 }, radius: 240 },
+      { variantId: "veil-stalker", count: 4, center: { x: 1500, y: 1320 }, radius: 220 }
+    ]
+  }
+];
+
+const neighborAdditions: Partial<Record<string, string[]>> = {
+  "farpoint-market": ["glass-harbor", "crown-exchange"],
+  "auric-loop": ["glass-harbor"],
+  "sunward-span": ["crown-exchange"],
+  ironway: ["slag-arc"],
+  "ember-reach": ["slag-arc"],
+  "forge-plains": ["brass-strait"],
+  "sable-haul": ["brass-strait"],
+  "outer-verge": ["ashen-deep"],
+  blackwake: ["ashen-deep"],
+  "vanta-expanse": ["hush-atlas"],
+  "ghostlight-pocket": ["hush-atlas"]
+};
+
+const destinationAdditions: Partial<Record<string, SystemDestination[]>> = {
+  "farpoint-market": [
+    gate("gate-farpoint-glass", "Glass Gate", 680, 2360, "glass-harbor", "gate-glass-farpoint", "Trade gate toward the Harbor's refinement yards."),
+    gate("gate-farpoint-crown", "Crown Gate", 1520, 2440, "crown-exchange", "gate-crown-farpoint", "Premium market gate into the Exchange ring.")
+  ],
+  "auric-loop": [
+    gate("gate-auric-glass", "Glass Gate", 860, 2460, "glass-harbor", "gate-glass-auric", "Civilian route toward Glass Harbor.")
+  ],
+  "sunward-span": [
+    gate("gate-sunward-crown", "Crown Gate", 1120, 2200, "crown-exchange", "gate-crown-sunward", "Exchange lane gate for premium convoy routing.")
+  ],
+  ironway: [
+    gate("gate-ironway-slag", "Slag Gate", 1160, 2440, "slag-arc", "gate-slag-ironway", "Refinery lane gate into Slag Arc.")
+  ],
+  "ember-reach": [
+    gate("gate-ember-slag", "Slag Gate", 980, 2560, "slag-arc", "gate-slag-ember", "Back-channel refinery gate toward Slag Arc.")
+  ],
+  "forge-plains": [
+    gate("gate-forge-brass", "Brass Gate", 700, 2460, "brass-strait", "gate-brass-forge", "Freight route gate into Brass Strait.")
+  ],
+  "sable-haul": [
+    gate("gate-sable-brass", "Brass Gate", 980, 2480, "brass-strait", "gate-brass-sable", "Quieter freight gate toward Brass Strait.")
+  ],
+  "outer-verge": [
+    gate("gate-verge-ashen", "Ashen Gate", 1160, 2720, "ashen-deep", "gate-ashen-verge", "Frontier gate descending into Ashen Deep.")
+  ],
+  blackwake: [
+    gate("gate-blackwake-ashen", "Ashen Gate", 960, 2660, "ashen-deep", "gate-ashen-blackwake", "Secondary raider gate toward Ashen Deep.")
+  ],
+  "vanta-expanse": [
+    gate("gate-vanta-hush", "Hush Gate", 1160, 2840, "hush-atlas", "gate-hush-vanta", "Survey route gate toward Hush Atlas.")
+  ],
+  "ghostlight-pocket": [
+    gate("gate-ghostlight-hush", "Hush Gate", 980, 2900, "hush-atlas", "gate-hush-ghostlight", "Deep salvage gate toward Hush Atlas.")
+  ]
+};
+
+export const sectorCatalog: SolarSystemDefinition[] = [...baseSectorCatalog, ...expansionSectorCatalog].map((sector) => ({
+  ...sector,
+  neighbors: Array.from(new Set([...sector.neighbors, ...(neighborAdditions[sector.id] ?? [])])),
+  destinations: [...sector.destinations, ...(destinationAdditions[sector.id] ?? [])]
+}));
 
 export const regionById = Object.fromEntries(regionCatalog.map((region) => [region.id, region]));
 export const sectorById = Object.fromEntries(sectorCatalog.map((sector) => [sector.id, sector]));
