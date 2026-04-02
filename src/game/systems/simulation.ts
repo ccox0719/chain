@@ -2818,7 +2818,12 @@ function cleanupWorld(world: GameWorld) {
       "refined-alloys": 0,
       "frontier-survival-kits": 0,
       "luxury-goods": 0,
-      "salvage-scrap": 0
+      "salvage-scrap": 0,
+      "coolant-gel": 0,
+      "reactor-coils": 0,
+      "drone-parts": 0,
+      "archive-shards": 0,
+      "siege-stims": 0
     };
     world.player.credits = preservedCredits;
     world.player.missionCargo = [];

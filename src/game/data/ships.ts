@@ -876,7 +876,7 @@ export const playerShips: ShipHullDefinition[] = [
     archetype: "sniper",
     faction: "veilborn",
     role: "Rail sniper destroyer",
-    roleTags: ["Sniper", "Rail", "Speed"],
+    roleTags: ["Sniper", "Rail", "Kiter"],
     description: "A lean frontier destroyer built to kite wide arcs and land sharp rail bursts from distance.",
     price: 9100,
     color: "#d8b6ff",
