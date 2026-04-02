@@ -106,6 +106,11 @@ button:disabled { opacity: 0.38; cursor: default; }
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  cursor: grab;
+}
+
+.game-canvas:active {
+  cursor: grabbing;
 }
 
 /* ============================================
@@ -1260,6 +1265,56 @@ select {
   animation: modal-rise 0.17s cubic-bezier(0.2, 0, 0.2, 1);
 }
 
+.death-backdrop {
+  z-index: 40;
+}
+
+.death-panel {
+  width: min(740px, calc(100vw - 2rem));
+  gap: 0.8rem;
+}
+
+.death-hero {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.death-line {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.death-line strong {
+  color: #edf7ff;
+}
+
+.death-loss-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.85rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.death-loss-grid span {
+  color: var(--text-muted);
+}
+
+.death-loss-grid strong {
+  color: var(--text);
+}
+
+.death-steps {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.4rem;
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .starter-picker-panel {
   width: min(980px, calc(100vw - 2rem));
 }
@@ -1741,6 +1796,12 @@ select {
   color: #ffd4d4;
 }
 
+.status-chip-danger {
+  border-color: rgba(255, 128, 128, 0.28);
+  background: rgba(255, 128, 128, 0.08);
+  color: #ffdada;
+}
+
 .status-chip.active {
   border-color: rgba(127, 192, 255, 0.26);
   background: rgba(127, 192, 255, 0.1);
@@ -1850,7 +1911,7 @@ select {
   --fit-title-size: clamp(0.82rem, 1vw, 0.96rem);
   --fit-copy-size: clamp(0.68rem, 0.72vw, 0.78rem);
   gap: var(--fit-gap);
-  min-height: min(100%, calc(100dvh - 12rem));
+  min-height: min(100%, calc(100dvh - 8.75rem));
 }
 
 .fitting-header {
@@ -1928,9 +1989,9 @@ select {
 
 .fitting-shell-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(17rem, 0.92fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(19rem, 0.85fr);
   gap: var(--fit-gap);
-  align-items: start;
+  align-items: stretch;
 }
 
 .fitting-main-stage {
@@ -2005,6 +2066,8 @@ select {
 
 .ship-frame-shell {
   position: relative;
+  width: 100%;
+  min-height: clamp(34rem, 60vh, 48rem);
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid rgba(127, 192, 255, 0.14);
@@ -2032,10 +2095,12 @@ select {
 .ship-frame-body--diagram {
   padding: var(--fit-panel-pad);
   gap: calc(var(--fit-gap) * 0.75);
+  height: 100%;
+  align-content: start;
 }
 
 .ship-fitting-svg {
-  width: min(100%, clamp(16.5rem, 36vw, 27rem));
+  width: min(100%, clamp(24rem, 50vw, 44rem));
   height: auto;
   display: block;
   margin: 0 auto;
@@ -2271,11 +2336,11 @@ select {
   }
 
   .fitting-shell-layout {
-    grid-template-columns: minmax(0, 1.04fr) minmax(15rem, 0.96fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.95fr);
   }
 
   .ship-fitting-svg {
-    width: min(100%, clamp(15rem, 40vw, 22rem));
+    width: min(100%, clamp(20rem, 44vw, 32rem));
   }
 }
 
@@ -2293,7 +2358,7 @@ select {
   }
 
   .ship-fitting-svg {
-    width: min(100%, clamp(14rem, 72vw, 19rem));
+    width: min(100%, clamp(16rem, 84vw, 24rem));
   }
 
   .ship-frame-title strong {
@@ -2421,6 +2486,12 @@ select {
 .map-node.map-pickup       { stroke: rgba(141, 224, 174, 0.82); }
 .map-node.map-destination  { stroke: rgba(255, 200, 128, 0.82); }
 .map-node.mission-route-node { stroke: rgba(141, 224, 174, 0.9); stroke-width: 2.4; }
+.map-node.last-death-node {
+  fill: rgba(255, 128, 128, 0.09);
+  stroke: rgba(255, 128, 128, 0.9);
+  stroke-width: 2.4;
+  stroke-dasharray: 4 3;
+}
 
 .map-node.security-high     { fill: rgba(80, 165, 255, 0.18); }
 .map-node.security-medium   { fill: rgba(100, 195, 135, 0.18); }
@@ -2428,6 +2499,7 @@ select {
 .map-node.security-frontier { fill: rgba(180, 130, 255, 0.2); }
 
 .map-node-label   { fill: #cee0ff; font-size: 13px; }
+.map-node-label.last-death-label { fill: #ffdada; font-weight: 700; }
 .map-region-label { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; fill: rgba(255, 200, 135, 0.75); }
 
 /* ============================================
@@ -2496,6 +2568,10 @@ select {
     right: 0.55rem;
     padding: 0.34rem 0.62rem;
     font-size: 0.68rem;
+  }
+
+  .death-panel {
+    width: min(740px, calc(100vw - 1.2rem));
   }
 
   .system-badge {
@@ -2909,6 +2985,21 @@ select {
   color: var(--text-muted);
 }
 
+.license-level-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #a6d4ff;
+  letter-spacing: 0.06em;
+}
+
+.license-progress-sub {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 0.22rem;
+  letter-spacing: 0.03em;
+}
+
 .license-progress-bar {
   height: 8px;
   border-radius: 999px;
@@ -3047,6 +3138,80 @@ select {
 
 .ship-slot-label { color: var(--text-dim); }
 .ship-slot-val   { color: var(--text); font-weight: 600; margin-left: -0.3rem; }
+
+.ship-resist-section {
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.ship-resist-section h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ship-resist-grid {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.resist-block {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.74rem;
+}
+
+.resist-block-label {
+  color: var(--text-dim);
+  font-weight: 600;
+  padding-top: 0.12rem;
+}
+
+.resist-bar-stack {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.resist-bar-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 42px;
+  gap: 0.38rem;
+  align-items: center;
+  font-size: 0.68rem;
+}
+
+.resist-bar-label {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.resist-meter {
+  height: 6px;
+}
+
+.resist-fill {
+  transition: width 0.3s ease;
+}
+
+.resist-bar-value {
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.resist-bar-row.good .resist-bar-value { color: var(--good); }
+.resist-bar-row.bad .resist-bar-value { color: var(--bad); }
+
+.resist-em .resist-fill { background: linear-gradient(90deg, #7fc0ff, #b8d8ff); }
+.resist-thermal .resist-fill { background: linear-gradient(90deg, #ffbc7c, #ffd4a0); }
+.resist-kinetic .resist-fill { background: linear-gradient(90deg, #8de0ae, #caf3d8); }
+.resist-explosive .resist-fill { background: linear-gradient(90deg, #ff8f8f, #ffb7b7); }
 
 /* ============================================
    MARKET TAB
@@ -3358,6 +3523,109 @@ select {
   text-align: center;
 }
 
+/* Merged trade column (new market layout) */
+.mod-row-trade {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  flex-shrink: 0;
+  width: 116px;
+}
+
+.mod-trade-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.34rem 0.52rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  border: 1px solid transparent;
+}
+
+.mod-trade-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.mod-trade-btn.buy {
+  background: rgba(127, 192, 255, 0.1);
+  border-color: rgba(127, 192, 255, 0.22);
+  color: #a6d4ff;
+}
+
+.mod-trade-btn.buy:not(:disabled):hover {
+  background: rgba(127, 192, 255, 0.2);
+}
+
+.mod-trade-btn.sell {
+  background: rgba(255, 188, 124, 0.08);
+  border-color: rgba(255, 188, 124, 0.2);
+  color: #ffc47f;
+}
+
+.mod-trade-btn.sell:not(:disabled):hover {
+  background: rgba(255, 188, 124, 0.16);
+}
+
+.mod-trade-label {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+}
+
+.mod-trade-price {
+  font-size: 0.73rem;
+  opacity: 0.88;
+}
+
+/* Sort bar */
+.mod-sort-bar {
+  display: flex;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0 0.55rem;
+  border-bottom: 1px solid rgba(130, 158, 210, 0.1);
+  margin-bottom: 0.25rem;
+}
+
+.mod-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.22rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(130, 158, 210, 0.14);
+  color: var(--text-dim);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.mod-sort-btn:hover {
+  background: rgba(127, 192, 255, 0.08);
+  color: var(--text-muted);
+  border-color: rgba(127, 192, 255, 0.22);
+}
+
+.mod-sort-btn.active {
+  background: rgba(127, 192, 255, 0.12);
+  border-color: rgba(127, 192, 255, 0.32);
+  color: #a6d4ff;
+}
+
+.mod-sort-arrow {
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
 /* ============================================
    RISK PIPS (Missions tab)
    ============================================ */
@@ -3645,6 +3913,42 @@ select {
   font-size: 0.63rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  cursor: help;
+}
+
+.weapon-compare-row {
+  justify-content: flex-start !important;
+  margin-top: 0.38rem;
+  gap: 0.32rem !important;
+}
+
+.weapon-compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.2rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.weapon-compare-chip.up {
+  background: rgba(141, 224, 174, 0.1);
+  border: 1px solid rgba(141, 224, 174, 0.22);
+  color: #8de0ae;
+}
+
+.weapon-compare-chip.down {
+  background: rgba(255, 143, 143, 0.1);
+  border: 1px solid rgba(255, 143, 143, 0.22);
+  color: #ff9090;
+}
+
+.weapon-compare-pct {
+  opacity: 0.72;
+  font-size: 0.62rem;
 }
 
 .weapon-stat-grid {
@@ -3655,6 +3959,20 @@ select {
 
 .weapon-stat-grid.compact {
   grid-template-columns: 1fr;
+}
+
+.weapon-stat-list.compact {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.55rem;
+}
+
+.weapon-stat-item {
+  display: grid;
+  gap: 0.08rem;
+  padding: 0.28rem 0.38rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .weapon-stat-topline,
@@ -3756,6 +4074,24 @@ select {
   gap: 0.32rem;
 }
 
+.weapon-profile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.weapon-profile-section-head small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
 .weapon-profile-row {
   font-size: 0.73rem;
 }
@@ -3774,6 +4110,10 @@ select {
 .weapon-profile-fill.type-thermal { background: linear-gradient(90deg, #ff9f6d, #ffd29a); }
 .weapon-profile-fill.type-kinetic { background: linear-gradient(90deg, #9fd37a, #d5ffb9); }
 .weapon-profile-fill.type-explosive { background: linear-gradient(90deg, #ff7f7f, #ffc0a8); }
+.weapon-profile-fill.resist-em { background: linear-gradient(90deg, #7fc0ff, #b8d8ff); }
+.weapon-profile-fill.resist-thermal { background: linear-gradient(90deg, #ffbc7c, #ffd4a0); }
+.weapon-profile-fill.resist-kinetic { background: linear-gradient(90deg, #8de0ae, #caf3d8); }
+.weapon-profile-fill.resist-explosive { background: linear-gradient(90deg, #ff8f8f, #ffb7b7); }
 
 .weapon-rack-list {
   display: grid;

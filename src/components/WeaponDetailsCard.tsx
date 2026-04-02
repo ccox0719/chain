@@ -4,6 +4,8 @@ import {
   getCompactModuleMetrics,
   getDamageProfileEntries,
   getModuleRoleTag,
+  getModuleResistanceLabel,
+  getModuleResistanceProfile,
   getWeaponComparisonHighlights,
   getWeaponSummaryStats
 } from "../game/utils/weaponStats";
@@ -41,9 +43,12 @@ export function WeaponDetailsCard({
   const metrics = getCompactModuleMetrics(module);
   const roleTag = getModuleRoleTag(module);
   const weaponLike = module.slot === "weapon" && Boolean(module.damage && module.damageProfile);
+  const utilityLike = module.slot === "utility";
   const weaponStats = weaponLike ? getWeaponSummaryStats(module) : null;
   const comparisonHighlights = weaponLike ? getWeaponComparisonHighlights(module, compareTo) : [];
   const profileEntries = weaponLike ? getDamageProfileEntries(module.damageProfile) : [];
+  const resistanceEntries = weaponLike ? [] : getModuleResistanceProfile(module);
+  const resistanceLabel = resistanceEntries.length > 0 ? getModuleResistanceLabel(module) : "";
   const visibleMetrics = compactMode === "minimal" ? metrics.slice(0, 2) : metrics;
   const overflowMetrics = compactMode === "minimal" ? metrics.slice(2) : [];
 
@@ -57,63 +62,109 @@ export function WeaponDetailsCard({
           </div>
           <div className="weapon-tag-row">
             <span className="weapon-role-tag">{roleTag}</span>
-            {contextLabel && <span className="weapon-context-label">{contextLabel}</span>}
+            {contextLabel && (
+              <span
+                className="weapon-context-label"
+                title={contextLabel === "Market Analysis" ? "Stat bars and deltas compared to your currently equipped weapon" : undefined}
+              >
+                {contextLabel}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {comparisonHighlights.length > 0 && compactMode !== "minimal" && (
+      {comparisonHighlights.length > 0 && (
         <div className="weapon-compare-row">
           {comparisonHighlights.map((entry) => (
             <span key={entry.label} className={`weapon-compare-chip ${entry.direction === "up" ? "up" : "down"}`}>
               {entry.direction === "up" ? "+" : "-"} {entry.label}
+              <span className="weapon-compare-pct">{Math.round(entry.amount * 100)}%</span>
             </span>
           ))}
         </div>
       )}
 
-      <div className={`weapon-stat-grid compact${compactMode === "minimal" ? " weapon-stat-grid-minimal" : ""}`}>
-        {visibleMetrics.map((metric) => {
-          const delta = getMetricDelta(metric, compareTo);
-          return (
-            <div key={metric.id} className="weapon-stat-row compact">
-              <div className="weapon-stat-topline compact">
-                <span>{metric.label}</span>
-                <div className="weapon-stat-value-wrap">
-                  <strong>{metric.displayValue}</strong>
-                  <DeltaGlyph direction={delta} />
+      {utilityLike ? (
+        <div className="weapon-stat-list compact">
+          {visibleMetrics.map((metric) => {
+            const delta = getMetricDelta(metric, compareTo);
+            return (
+              <div key={metric.id} className="weapon-stat-item">
+                <div className="weapon-stat-topline compact">
+                  <span>{metric.label}</span>
+                  <div className="weapon-stat-value-wrap">
+                    <strong>{metric.displayValue}</strong>
+                    <DeltaGlyph direction={delta} />
+                  </div>
                 </div>
               </div>
-              <div className="weapon-stat-bar compact">
-                <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+            );
+          })}
+        </div>
+      ) : (
+        <div className={`weapon-stat-grid compact${compactMode === "minimal" ? " weapon-stat-grid-minimal" : ""}`}>
+          {visibleMetrics.map((metric) => {
+            const delta = getMetricDelta(metric, compareTo);
+            return (
+              <div key={metric.id} className="weapon-stat-row compact">
+                <div className="weapon-stat-topline compact">
+                  <span>{metric.label}</span>
+                  <div className="weapon-stat-value-wrap">
+                    <strong>{metric.displayValue}</strong>
+                    <DeltaGlyph direction={delta} />
+                  </div>
+                </div>
+                <div className="weapon-stat-bar compact">
+                  <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <details className="weapon-details-expander">
         <summary>{compactMode === "minimal" ? "Details" : "More Info"}</summary>
         {overflowMetrics.length > 0 && (
-          <div className="weapon-stat-grid compact weapon-stat-grid-overflow">
-            {overflowMetrics.map((metric) => {
-              const delta = getMetricDelta(metric, compareTo);
-              return (
-                <div key={metric.id} className="weapon-stat-row compact">
-                  <div className="weapon-stat-topline compact">
-                    <span>{metric.label}</span>
-                    <div className="weapon-stat-value-wrap">
-                      <strong>{metric.displayValue}</strong>
-                      <DeltaGlyph direction={delta} />
+          utilityLike ? (
+            <div className="weapon-stat-list compact weapon-stat-grid-overflow">
+              {overflowMetrics.map((metric) => {
+                const delta = getMetricDelta(metric, compareTo);
+                return (
+                  <div key={metric.id} className="weapon-stat-item">
+                    <div className="weapon-stat-topline compact">
+                      <span>{metric.label}</span>
+                      <div className="weapon-stat-value-wrap">
+                        <strong>{metric.displayValue}</strong>
+                        <DeltaGlyph direction={delta} />
+                      </div>
                     </div>
                   </div>
-                  <div className="weapon-stat-bar compact">
-                    <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="weapon-stat-grid compact weapon-stat-grid-overflow">
+              {overflowMetrics.map((metric) => {
+                const delta = getMetricDelta(metric, compareTo);
+                return (
+                  <div key={metric.id} className="weapon-stat-row compact">
+                    <div className="weapon-stat-topline compact">
+                      <span>{metric.label}</span>
+                      <div className="weapon-stat-value-wrap">
+                        <strong>{metric.displayValue}</strong>
+                        <DeltaGlyph direction={delta} />
+                      </div>
+                    </div>
+                    <div className="weapon-stat-bar compact">
+                      <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )
         )}
         <div className="weapon-meta-grid compact">
           {weaponLike ? (
@@ -149,6 +200,43 @@ export function WeaponDetailsCard({
               <div className="weapon-meta-item">
                 <span>Armor pressure</span>
                 <strong>{weaponStats?.armorPressure.toFixed(1)}</strong>
+              </div>
+            </>
+          ) : utilityLike ? (
+            <>
+              <div className="weapon-meta-item">
+                <span>What it does</span>
+                <strong>{module.description}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Activation</span>
+                <strong>{module.activation}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Cycle / drain</span>
+                <strong>
+                  {module.cycleTime ? `${module.cycleTime.toFixed(1)} s` : module.capacitorDrain ? `${module.capacitorDrain.toFixed(1)}/s` : "Passive"}
+                </strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Range</span>
+                <strong>{module.range ? `${Math.round(module.range)} m` : "None"}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Cap use</span>
+                <strong>{module.capacitorUse ? `${module.capacitorUse}/cycle` : module.capacitorDrain ? `${module.capacitorDrain}/s` : "Cap-free"}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Role</span>
+                <strong>{roleTag}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Tags</span>
+                <strong>{module.roleTags?.length ? module.roleTags.join(" · ") : module.tags.slice(0, 3).join(" · ")}</strong>
+              </div>
+              <div className="weapon-meta-item">
+                <span>Price</span>
+                <strong>{module.price} cr</strong>
               </div>
             </>
           ) : (
@@ -198,6 +286,25 @@ export function WeaponDetailsCard({
                 <span>{entry.label}</span>
                 <div className="weapon-profile-bar">
                   <div className={`weapon-profile-fill type-${entry.type}`} style={{ width: `${entry.value * 100}%` }} />
+                </div>
+                <strong>{Math.round(entry.value * 100)}%</strong>
+              </div>
+            ))}
+          </div>
+        ) : resistanceEntries.length > 0 ? (
+          <div className="weapon-damage-profile compact weapon-resist-profile">
+            <div className="weapon-profile-section-head">
+              <span>{resistanceLabel}</span>
+              <small>Applies to all incoming damage types.</small>
+            </div>
+            {resistanceEntries.map((entry) => (
+              <div key={entry.type} className="weapon-profile-row">
+                <span>{entry.label}</span>
+                <div className="weapon-profile-bar">
+                  <div
+                    className={`weapon-profile-fill resist-${entry.type}`}
+                    style={{ width: `${Math.min(100, Math.max(0, entry.value * 100))}%` }}
+                  />
                 </div>
                 <strong>{Math.round(entry.value * 100)}%</strong>
               </div>

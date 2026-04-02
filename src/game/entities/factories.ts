@@ -1,6 +1,7 @@
 import {
   AsteroidState,
   BuildSwapState,
+  DeathSummary,
   EnemyState,
   GameWorld,
   MissionState,
@@ -74,6 +75,10 @@ function tacticalSlowState() {
     capPenaltyRemaining: 0,
     speedPenaltyRemaining: 0
   };
+}
+
+function emptyDeathSummary(): DeathSummary | null {
+  return null;
 }
 
 function cloneLoadout(loadout: PlayerState["equipped"]): PlayerState["equipped"] {
@@ -159,6 +164,7 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
     queuedUndockActions: [],
     effects: neutralEffects(),
     tacticalSlow: tacticalSlowState(),
+    deathSummary: emptyDeathSummary(),
     savedBuilds: [
       { id: "build-1", name: "Build 1", shipId: hull.id, equipped: cloneLoadout(starterFit), savedAt: Date.now() },
       { id: "build-2", name: "Build 2", shipId: hull.id, equipped: cloneLoadout(starterFit), savedAt: null },
@@ -266,7 +272,8 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
         activeTarget: null,
         modules: enemyModuleRuntime(variant.fittedModules),
         effects: neutralEffects(),
-        recentDamageTimer: 0
+        recentDamageTimer: 0,
+        pursuitTimer: 0
       });
     }
   });

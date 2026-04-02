@@ -319,7 +319,7 @@ function awardPilotLicenseProgress(world: GameWorld, amount: number) {
   if (amount <= 0) return;
   ensurePilotLicense(world);
   const previousLevel = world.player.pilotLicense.level;
-  const nextProgress = world.player.pilotLicense.progress + Math.max(1, Math.round(amount));
+  const nextProgress = world.player.pilotLicense.progress + Math.max(1, Math.round(amount * 1.2));
   world.player.pilotLicense.progress = nextProgress;
   world.player.pilotLicense.level = getPilotLicenseLevelForProgress(nextProgress);
   if (world.player.pilotLicense.level > previousLevel) {
@@ -1687,6 +1687,10 @@ export function activateTacticalSlow(world: GameWorld) {
   return true;
 }
 
+export function clearDeathSummary(world: GameWorld) {
+  world.player.deathSummary = null;
+}
+
 function issueNav(world: GameWorld, mode: NavigationState["mode"], target: SelectableRef | null, desiredRange = 0) {
   world.player.navigation.mode = mode;
   world.player.navigation.target = target;
@@ -2164,7 +2168,8 @@ function createEnemyFromVariant(
       lockRangeMultiplier: 1,
       capacitorRegenMultiplier: 1
     },
-    recentDamageTimer: 0
+    recentDamageTimer: 0,
+    pursuitTimer: 0
   };
 }
 
@@ -2409,6 +2414,7 @@ function aggroEnemyToPlayer(world: GameWorld, enemyId: string) {
   enemy.navigation.target = playerRef;
   enemy.navigation.mode = "approach";
   enemy.navigation.desiredRange = getEnemyPreferredRange(enemy.variantId);
+  enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 8);
 }
 
 function getEnemyHealthFraction(enemy: EnemyState, variant: EnemyVariant) {
@@ -2922,6 +2928,7 @@ function runPlayerModules(world: GameWorld, dt: number) {
             );
             if (appliedTotal > 0.01) {
               aggroEnemyToPlayer(world, enemy.id);
+              enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 8);
             }
             showHitText(world, enemy.position, appliedTotal, quality, "player");
           }
@@ -3196,15 +3203,24 @@ function runEnemyModules(world: GameWorld, dt: number) {
   sector.enemies.forEach((enemy) => {
     const variant = enemyVariantById[enemy.variantId];
     enemy.recentDamageTimer = Math.max(0, enemy.recentDamageTimer - dt);
+    enemy.pursuitTimer = Math.max(0, enemy.pursuitTimer - dt);
     enemy.shield = clamp(enemy.shield + 2.5 * (enemy.recentDamageTimer > 0 ? 0.03 : 0.18) * dt, 0, variant.shield);
-    enemy.capacitor = clamp(enemy.capacitor + variant.capacitorRegen * dt, 0, variant.capacitor);
+    enemy.capacitor = clamp(enemy.capacitor + variant.capacitorRegen * 0.6 * dt, 0, variant.capacitor);
 
     const playerRef: SelectableRef = { id: "player", type: "enemy" };
     const playerDistance = distance(enemy.position, world.player.position);
-    const seesPlayer = playerDistance <= variant.lockRange * enemy.effects.lockRangeMultiplier;
+    const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier;
+    const pursuitRange = Math.max(detectionRange * 1.95, getEnemyPreferredRange(enemy.variantId) * 2.2);
+    const seesPlayer = playerDistance <= detectionRange || (enemy.pursuitTimer > 0 && playerDistance <= pursuitRange);
     const retreating = seesPlayer && shouldEnemyRetreat(enemy, variant, playerDistance);
-    enemy.activeTarget = seesPlayer ? playerRef : null;
-    enemy.navigation.target = seesPlayer ? playerRef : null;
+    if (seesPlayer) {
+      enemy.activeTarget = playerRef;
+      enemy.navigation.target = playerRef;
+      enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 3.5);
+    } else if (enemy.pursuitTimer <= 0) {
+      enemy.activeTarget = null;
+      enemy.navigation.target = null;
+    }
     enemy.navigation.mode = seesPlayer
       ? retreating
         ? "retreat"
@@ -3332,6 +3348,7 @@ function updateProjectiles(world: GameWorld, dt: number) {
           );
           if (appliedTotal > 0.01) {
             aggroEnemyToPlayer(world, enemy.id);
+            enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 8);
           }
           addFloatingText(
             world,
@@ -3359,6 +3376,12 @@ function updateProjectiles(world: GameWorld, dt: number) {
         createDamagePacket(module?.damageProfile, projectile.damage),
         getPlayerLayerResists(world)
       );
+      const enemySource = projectile.target?.type === "enemy"
+        ? sector.enemies.find((entry) => entry.id === projectile.target?.id)
+        : null;
+      if (enemySource) {
+        enemySource.pursuitTimer = Math.max(enemySource.pursuitTimer, 6);
+      }
       addFloatingText(
         world,
         world.player.position,
@@ -3555,6 +3578,7 @@ function cleanupWorld(world: GameWorld) {
 
     const starter = createStarterPlayerState(world.player.starterConfigId ?? defaultStarterShipConfigId);
     const preservedCredits = Math.max(0, world.player.credits - droppedCredits - PLAYER_DEATH_FLAT_CREDIT_FEE);
+    const lostCredits = world.player.credits - preservedCredits;
     const preservedShips = world.player.hullId === starter.hullId
       ? Array.from(new Set([...world.player.ownedShips, starter.hullId]))
       : Array.from(new Set([...world.player.ownedShips.filter((shipId) => shipId !== world.player.hullId), starter.hullId]));
@@ -3562,6 +3586,8 @@ function cleanupWorld(world: GameWorld) {
     const startSystemId = "lumen-rest";
     const startStation = getSystemStation(startSystemId);
     if (!startStation) return;
+    const wreckSystemId = world.currentSectorId;
+    const wreckSystem = sectorById[wreckSystemId];
 
     world.player.hullId = starter.hullId;
     world.player.ownedShips = preservedShips;
@@ -3598,6 +3624,22 @@ function cleanupWorld(world: GameWorld) {
     world.player.queuedUndockActions = [];
     world.player.buildSwap = starter.buildSwap;
     world.player.recentDamageTimer = 0;
+    world.player.deathSummary = {
+      id: `death-${Date.now()}`,
+      shipId: playerHull?.id ?? world.player.hullId,
+      shipName: playerHull?.name ?? world.player.hullId,
+      respawnStationId: startStation.id,
+      respawnStationName: startStation.name,
+      respawnSystemId: startSystemId,
+      respawnSystemName: sectorById[startSystemId]?.name ?? startSystemId,
+      wreckSystemId,
+      wreckSystemName: wreckSystem?.name ?? wreckSystemId,
+      wreckPosition: deathPosition,
+      droppedCredits,
+      flatFee: PLAYER_DEATH_FLAT_CREDIT_FEE,
+      lostCredits,
+      lostLicenseProgress
+    };
     rebuildPlayerRuntime(world.player);
 
     world.currentSectorId = startSystemId;

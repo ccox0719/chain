@@ -1,5 +1,7 @@
 import { ModuleDefinition } from "../../types/game";
 
+const CAPACITOR_NEED_MULTIPLIER = 0.4;
+
 function scaleModifierValue(value: number, factor: number) {
   if (value === 0) return value;
   if (value > 0) return value * factor;
@@ -14,6 +16,10 @@ function scaleModifiers(
   return Object.fromEntries(
     Object.entries(modifiers).map(([key, value]) => [key, typeof value === "number" ? scaleModifierValue(value, factor) : value])
   ) as ModuleDefinition["modifiers"];
+}
+
+function scaleCapacitorNeed(value?: number) {
+  return value === undefined ? value : Number((value * CAPACITOR_NEED_MULTIPLIER).toFixed(1));
 }
 
 function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefinition {
@@ -1031,6 +1037,8 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
 
 const baseModuleCatalog: ModuleDefinition[] = baseModuleCatalogRaw.map((module) => ({
   ...module,
+  capacitorUse: scaleCapacitorNeed(module.capacitorUse),
+  capacitorDrain: scaleCapacitorNeed(module.capacitorDrain),
   techLevel: 1,
   classTier: "tech"
 }));

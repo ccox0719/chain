@@ -77,6 +77,7 @@ interface GameHudProps {
   onIssueCommand: (command: CommandAction) => void;
   onStopShip: () => void;
   onToggleAutopilot: () => void;
+  onRecenterView: () => void;
 }
 
 function getOverviewTypeSymbol(type: SelectableRef["type"]) {
@@ -232,7 +233,8 @@ export function GameHud({
   onActivateTacticalSlow,
   onIssueCommand,
   onStopShip,
-  onToggleAutopilot
+  onToggleAutopilot,
+  onRecenterView
 }: GameHudProps) {
   const {
     world,
@@ -475,6 +477,9 @@ export function GameHud({
                   </button>
                   <button type="button" className="ghost-button mini" onClick={onStopShip}>
                     Stop
+                  </button>
+                  <button type="button" className="ghost-button mini" onClick={onRecenterView} title="Snap view back to the player ship">
+                    Recenter
                   </button>
                   <button
                     type="button"

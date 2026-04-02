@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ContextMenu } from "../components/ContextMenu";
+import { DeathOverlay } from "../components/DeathOverlay";
 import { GameCanvas } from "../components/GameCanvas";
 import { GameHud } from "../components/GameHud";
 import { GameMenu } from "../components/GameMenu";
@@ -15,6 +16,7 @@ export function GamePage() {
   const [starterPickerOpen, setStarterPickerOpen] = useState(
     () => window.localStorage.getItem("starfall-world") === null
   );
+  const deathSummary = snapshot.world.player.deathSummary;
 
   return (
     <div className="game-shell">
@@ -24,6 +26,7 @@ export function GamePage() {
           onLeftClick={actions.handleCanvasLeftClick}
           onRightClick={actions.handleCanvasRightClick}
           onWheelZoom={actions.adjustZoom}
+          onPanBy={actions.panCamera}
         />
 
         <button
@@ -53,6 +56,7 @@ export function GamePage() {
           onIssueCommand={actions.issueCommand}
           onStopShip={() => actions.issueCommand({ type: "stop" })}
           onToggleAutopilot={() => actions.setRouteAutoFollow(!Boolean(snapshot.world.routePlan?.autoFollow))}
+          onRecenterView={actions.resetCameraView}
         />
 
         {overlay && (
@@ -123,6 +127,15 @@ export function GamePage() {
           onQueueUndockAction={actions.issueCommand}
           onClearUndockQueue={actions.clearUndockQueue}
         />
+
+        {deathSummary && (
+          <DeathOverlay
+            snapshot={snapshot}
+            onContinue={() => {
+              actions.clearDeathSummary();
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -295,6 +295,14 @@ export interface ModuleDefinition {
     maxSpeed?: number;
     lockRange?: number;
     warpSpeed?: number;
+    shieldRepairAmountMultiplier?: number;
+    armorRepairAmountMultiplier?: number;
+    commodityBuyMultiplier?: number;
+    commoditySellMultiplier?: number;
+    resourceSellMultiplier?: number;
+    moduleBuyMultiplier?: number;
+    moduleSellMultiplier?: number;
+    shipBuyMultiplier?: number;
     turretTrackingMultiplier?: number;
     turretOptimalMultiplier?: number;
     turretFalloffMultiplier?: number;
@@ -320,6 +328,14 @@ export interface ModuleDefinition {
     maxSpeed?: number;
     lockRange?: number;
     warpSpeed?: number;
+    shieldRepairAmountMultiplier?: number;
+    armorRepairAmountMultiplier?: number;
+    commodityBuyMultiplier?: number;
+    commoditySellMultiplier?: number;
+    resourceSellMultiplier?: number;
+    moduleBuyMultiplier?: number;
+    moduleSellMultiplier?: number;
+    shipBuyMultiplier?: number;
     turretTrackingMultiplier?: number;
     turretOptimalMultiplier?: number;
     turretFalloffMultiplier?: number;
@@ -349,6 +365,23 @@ export interface TacticalSlowState {
   cooldownRemaining: number;
   capPenaltyRemaining: number;
   speedPenaltyRemaining: number;
+}
+
+export interface DeathSummary {
+  id: string;
+  shipId: string;
+  shipName: string;
+  respawnStationId: string;
+  respawnStationName: string;
+  respawnSystemId: string;
+  respawnSystemName: string;
+  wreckSystemId: string;
+  wreckSystemName: string;
+  wreckPosition: Vec2;
+  droppedCredits: number;
+  flatFee: number;
+  lostCredits: number;
+  lostLicenseProgress: number;
 }
 
 export interface EnemyVariant {
@@ -583,6 +616,7 @@ export interface PlayerState {
   queuedUndockActions: CommandAction[];
   effects: CombatEffectsState;
   tacticalSlow: TacticalSlowState;
+  deathSummary: DeathSummary | null;
   savedBuilds: SavedBuild[];
   buildSwap: BuildSwapState;
   recentDamageTimer: number;
@@ -607,6 +641,7 @@ export interface EnemyState {
   modules: ModuleRuntimeState[];
   effects: CombatEffectsState;
   recentDamageTimer: number;
+  pursuitTimer: number;
 }
 
 export interface AsteroidState {

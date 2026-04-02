@@ -63,6 +63,7 @@ export function SidebarPanels({
   }, [onClose]);
 
   const { world, sector, currentRegion, nextRouteStep, activeTransportMission, activeMission } = snapshot;
+  const deathSummary = world.player.deathSummary;
   const selectedSystem = sectorById[selectedSystemId] ?? sector;
   const localDestinations = getSystemDestinations(world.currentSectorId);
   const objectiveInCurrentSystem =
@@ -306,6 +307,11 @@ export function SidebarPanels({
                 <div className="map-meta-row">
                   <span className="status-chip">{sector.name}</span>
                   <span className="status-chip">{currentRegion.name}</span>
+                  {deathSummary && (
+                    <span className="status-chip status-chip-danger">
+                      Last death · {deathSummary.wreckSystemName}
+                    </span>
+                  )}
                   {world.routePlan && (
                     <span className="status-chip">
                       Route {world.routePlan.steps.length} jumps{world.routePlan.autoFollow ? " · auto" : ""}
@@ -392,6 +398,14 @@ export function SidebarPanels({
                       <text x={20} y={5} className="map-node-label">
                         {system.name}
                       </text>
+                      {deathSummary?.wreckSystemId === system.id && (
+                        <>
+                          <circle r={20} className="map-node last-death-node" />
+                          <text x={20} y={18} className="map-node-label last-death-label">
+                            Last death
+                          </text>
+                        </>
+                      )}
                     </g>
                   ))}
                 </svg>
@@ -405,6 +419,9 @@ export function SidebarPanels({
                   <span className="status-chip">{selectedSystem.security.toUpperCase()}</span>
                   <span className="status-chip">{selectedSystem.traffic} traffic</span>
                   <span className="status-chip">{selectedSystem.population}</span>
+                  {deathSummary?.wreckSystemId === selectedSystem.id && (
+                    <span className="status-chip status-chip-danger">Last death here</span>
+                  )}
                 </div>
                 <div className="tag-row">
                   {selectedSystem.economyTags.map((tag) => (

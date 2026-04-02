@@ -6,6 +6,136 @@ const balancedShield: ResistProfile = { em: 0.1, thermal: 0.18, kinetic: 0.28, e
 const balancedArmor: ResistProfile = { em: 0.28, thermal: 0.24, kinetic: 0.18, explosive: 0.14 };
 const hullBase: ResistProfile = { em: 0.08, thermal: 0.08, kinetic: 0.08, explosive: 0.08 };
 
+function makeResists(em: number, thermal: number, kinetic: number, explosive: number): ResistProfile {
+  return { em, thermal, kinetic, explosive };
+}
+
+function clampResists(profile: ResistProfile): ResistProfile {
+  return {
+    em: Math.max(0.02, Math.min(0.82, profile.em)),
+    thermal: Math.max(0.02, Math.min(0.82, profile.thermal)),
+    kinetic: Math.max(0.02, Math.min(0.82, profile.kinetic)),
+    explosive: Math.max(0.02, Math.min(0.82, profile.explosive))
+  };
+}
+
+function offsetResists(profile: ResistProfile, delta: Partial<ResistProfile>): ResistProfile {
+  return clampResists({
+    em: profile.em + (delta.em ?? 0),
+    thermal: profile.thermal + (delta.thermal ?? 0),
+    kinetic: profile.kinetic + (delta.kinetic ?? 0),
+    explosive: profile.explosive + (delta.explosive ?? 0)
+  });
+}
+
+function shipBaseShieldResists(ship: ShipHullDefinition) {
+  if (ship.shipClass === "industrial") {
+    return ship.faction === "aurelian-league"
+      ? makeResists(0.14, 0.18, 0.26, 0.3)
+      : ship.faction === "cinder-union"
+        ? makeResists(0.08, 0.14, 0.24, 0.38)
+        : makeResists(0.08, 0.12, 0.28, 0.4);
+  }
+
+  if (ship.faction === "aurelian-league") return makeResists(0.22, 0.26, 0.22, 0.18);
+  if (ship.faction === "cinder-union") return makeResists(0.12, 0.18, 0.28, 0.38);
+  return makeResists(0.08, 0.14, 0.28, 0.42);
+}
+
+function shipBaseArmorResists(ship: ShipHullDefinition) {
+  if (ship.shipClass === "industrial") {
+    return ship.faction === "aurelian-league"
+      ? makeResists(0.3, 0.24, 0.18, 0.12)
+      : ship.faction === "cinder-union"
+        ? makeResists(0.34, 0.28, 0.2, 0.16)
+        : makeResists(0.26, 0.22, 0.16, 0.1);
+  }
+
+  if (ship.faction === "aurelian-league") return makeResists(0.4, 0.3, 0.14, 0.08);
+  if (ship.faction === "cinder-union") return makeResists(0.34, 0.28, 0.2, 0.14);
+  return makeResists(0.28, 0.22, 0.16, 0.1);
+}
+
+function shipBaseHullResists(ship: ShipHullDefinition) {
+  if (ship.shipClass === "industrial") return makeResists(0.14, 0.14, 0.14, 0.14);
+  if (ship.shipClass === "cruiser") return makeResists(0.1, 0.1, 0.08, 0.08);
+  if (ship.shipClass === "destroyer") return makeResists(0.08, 0.08, 0.06, 0.06);
+  return makeResists(0.05, 0.05, 0.05, 0.05);
+}
+
+function applyShipResistVariance(ship: ShipHullDefinition) {
+  let shield = shipBaseShieldResists(ship);
+  let armor = shipBaseArmorResists(ship);
+  let hull = shipBaseHullResists(ship);
+
+  if (ship.archetype === "skirmisher") {
+    shield = offsetResists(shield, { em: -0.02, thermal: -0.01, kinetic: 0.01, explosive: 0.04 });
+    armor = offsetResists(armor, { em: -0.02, thermal: -0.01, kinetic: 0.02, explosive: 0.01 });
+    hull = offsetResists(hull, { kinetic: 0.01, explosive: 0.01 });
+  } else if (ship.archetype === "brawler") {
+    shield = offsetResists(shield, { thermal: 0.03, kinetic: 0.03, explosive: -0.02 });
+    armor = offsetResists(armor, { thermal: 0.02, kinetic: 0.03, explosive: 0.03 });
+    hull = offsetResists(hull, { em: 0.01, thermal: 0.01, kinetic: 0.01, explosive: 0.01 });
+  } else if (ship.archetype === "sniper") {
+    shield = offsetResists(shield, { em: 0.04, thermal: 0.02, explosive: -0.04 });
+    armor = offsetResists(armor, { em: 0.03, thermal: 0.02, kinetic: -0.01, explosive: -0.02 });
+    hull = offsetResists(hull, { em: 0.01 });
+  } else if (ship.archetype === "kiter") {
+    shield = offsetResists(shield, { thermal: -0.01, kinetic: 0.02, explosive: 0.03 });
+    armor = offsetResists(armor, { thermal: -0.01, kinetic: 0.01, explosive: 0.02 });
+    hull = offsetResists(hull, { explosive: 0.02 });
+  } else if (ship.archetype === "support") {
+    shield = offsetResists(shield, { thermal: 0.02, kinetic: 0.02, explosive: -0.01 });
+    armor = offsetResists(armor, { em: 0.02, thermal: 0.02, kinetic: -0.01 });
+    hull = offsetResists(hull, { em: 0.02, thermal: 0.02, kinetic: 0.01, explosive: 0.01 });
+  } else if (ship.archetype === "hauler" || ship.archetype === "miner") {
+    shield = offsetResists(shield, { em: -0.02, thermal: -0.01, explosive: 0.04 });
+    armor = offsetResists(armor, { em: -0.01, thermal: 0.01, kinetic: 0.02, explosive: 0.03 });
+    hull = offsetResists(hull, { em: 0.03, thermal: 0.03, kinetic: 0.03, explosive: 0.03 });
+  }
+
+  ship.shieldResists = clampResists(shield);
+  ship.armorResists = clampResists(armor);
+  ship.hullResists = clampResists(hull);
+}
+
+function applyEnemyResistVariance(variant: EnemyVariant) {
+  let shield =
+    variant.combatStyle === "shield"
+      ? makeResists(0.2, 0.26, 0.28, 0.3)
+      : variant.combatStyle === "armor"
+        ? makeResists(0.1, 0.16, 0.26, 0.36)
+        : makeResists(0.06, 0.12, 0.22, 0.34);
+  let armor =
+    variant.combatStyle === "shield"
+      ? makeResists(0.32, 0.26, 0.16, 0.1)
+      : variant.combatStyle === "armor"
+        ? makeResists(0.36, 0.3, 0.22, 0.14)
+        : makeResists(0.26, 0.2, 0.14, 0.08);
+  let hull =
+    variant.combatStyle === "shield"
+      ? makeResists(0.08, 0.08, 0.08, 0.08)
+      : variant.combatStyle === "armor"
+        ? makeResists(0.1, 0.1, 0.1, 0.1)
+        : makeResists(0.05, 0.05, 0.05, 0.05);
+
+  if (variant.faction === "aurelian-league") {
+    shield = offsetResists(shield, { em: 0.04, thermal: 0.02, explosive: -0.02 });
+    armor = offsetResists(armor, { em: 0.04, thermal: 0.02 });
+  } else if (variant.faction === "cinder-union") {
+    shield = offsetResists(shield, { kinetic: 0.03, explosive: 0.03, em: -0.02 });
+    armor = offsetResists(armor, { kinetic: 0.03, explosive: 0.02, thermal: -0.01 });
+    hull = offsetResists(hull, { em: 0.01, thermal: 0.01, kinetic: 0.01, explosive: 0.01 });
+  } else {
+    shield = offsetResists(shield, { kinetic: 0.04, explosive: 0.04 });
+    armor = offsetResists(armor, { thermal: 0.02, kinetic: 0.01 });
+  }
+
+  variant.shieldResists = clampResists(shield);
+  variant.armorResists = clampResists(armor);
+  variant.hullResists = clampResists(hull);
+}
+
 export const playerShips: ShipHullDefinition[] = [
   {
     id: "rookie-sparrow",
@@ -1220,6 +1350,9 @@ export const enemyVariants: EnemyVariant[] = [
     hullResists: { em: 0.1, thermal: 0.1, kinetic: 0.1, explosive: 0.1 }
   }
 ];
+
+playerShips.forEach(applyShipResistVariance);
+enemyVariants.forEach(applyEnemyResistVariance);
 
 export const playerShipById = Object.fromEntries(playerShips.map((ship) => [ship.id, ship]));
 export const enemyVariantById = Object.fromEntries(enemyVariants.map((variant) => [variant.id, variant]));

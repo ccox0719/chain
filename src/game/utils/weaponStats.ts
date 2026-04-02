@@ -27,6 +27,12 @@ export interface CompactModuleMetric {
   tone: string;
 }
 
+export interface ResistanceProfileEntry {
+  type: DamageType;
+  label: string;
+  value: number;
+}
+
 export interface WeaponSummaryStats {
   damagePerCycle: number;
   dps: number;
@@ -46,6 +52,7 @@ export interface WeaponSummaryStats {
 export interface WeaponComparisonHighlight {
   label: string;
   direction: "up" | "down";
+  amount: number;
 }
 
 export interface WeaponMetricDelta {
@@ -424,6 +431,38 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
   ];
 }
 
+function getModuleResistanceBonus(module: ModuleDefinition) {
+  return (
+    module.resistBonus ??
+    module.modifiers.shieldResistBonus ??
+    module.modifiers.armorResistBonus ??
+    module.modifiers.hullResistBonus ??
+    module.activeModifiers?.shieldResistBonus ??
+    module.activeModifiers?.armorResistBonus ??
+    module.activeModifiers?.hullResistBonus ??
+    0
+  );
+}
+
+export function getModuleResistanceProfile(module: ModuleDefinition) {
+  const bonus = getModuleResistanceBonus(module);
+  if (bonus <= 0) return [];
+
+  return (["em", "thermal", "kinetic", "explosive"] as DamageType[]).map((type) => ({
+    type,
+    label: type === "em" ? "EM" : type === "thermal" ? "Thermal" : type === "kinetic" ? "Kinetic" : "Explosive",
+    value: bonus
+  })) as ResistanceProfileEntry[];
+}
+
+export function getModuleResistanceLabel(module: ModuleDefinition) {
+  if (module.kind === "hardener") return "Adaptive Resistance";
+  if (module.modifiers.shieldResistBonus || module.activeModifiers?.shieldResistBonus) return "Shield Resistance";
+  if (module.modifiers.armorResistBonus || module.activeModifiers?.armorResistBonus) return "Armor Resistance";
+  if (module.modifiers.hullResistBonus || module.activeModifiers?.hullResistBonus) return "Hull Resistance";
+  return "Resistance";
+}
+
 export function getCompactModuleMetrics(module: ModuleDefinition): CompactModuleMetric[] {
   if (isWeaponLikeModule(module)) {
     return getWeaponMetrics(module).map((metric) => ({ ...metric }));
@@ -508,7 +547,7 @@ export function getWeaponComparisonHighlights(
     .filter((entry) => entry.delta > 0.08)
     .sort((left, right) => right.delta - left.delta)
     .slice(0, 3)
-    .map(({ label, direction }) => ({ label, direction }));
+    .map(({ label, direction, delta }) => ({ label, direction, amount: delta }));
 }
 
 export function findComparableEquippedWeapon(

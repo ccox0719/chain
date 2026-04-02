@@ -22,6 +22,14 @@ function applyModuleModifiers(
   derived.lockRange += modifiers.lockRange ?? 0;
   derived.warpSpeed += modifiers.warpSpeed ?? 0;
   derived.cargoCapacity += modifiers.cargoCapacity ?? 0;
+  derived.shieldRepairAmountMultiplier *= modifiers.shieldRepairAmountMultiplier ?? 1;
+  derived.armorRepairAmountMultiplier *= modifiers.armorRepairAmountMultiplier ?? 1;
+  derived.commodityBuyMultiplier *= modifiers.commodityBuyMultiplier ?? 1;
+  derived.commoditySellMultiplier *= modifiers.commoditySellMultiplier ?? 1;
+  derived.resourceSellMultiplier *= modifiers.resourceSellMultiplier ?? 1;
+  derived.moduleBuyMultiplier *= modifiers.moduleBuyMultiplier ?? 1;
+  derived.moduleSellMultiplier *= modifiers.moduleSellMultiplier ?? 1;
+  derived.shipBuyMultiplier *= modifiers.shipBuyMultiplier ?? 1;
   derived.turretTrackingMultiplier *= modifiers.turretTrackingMultiplier ?? 1;
   derived.turretOptimalMultiplier *= modifiers.turretOptimalMultiplier ?? 1;
   derived.turretFalloffMultiplier *= modifiers.turretFalloffMultiplier ?? 1;
@@ -113,6 +121,7 @@ export function computeDerivedStats(player: PlayerState) {
   derived.moduleBuyMultiplier *= shipBonuses.moduleBuyMultiplier ?? 1;
   derived.moduleSellMultiplier *= shipBonuses.moduleSellMultiplier ?? 1;
   derived.shipBuyMultiplier *= shipBonuses.shipBuyMultiplier ?? 1;
+  derived.capacitorRegen *= 0.6;
 
   (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
     player.equipped[slotType]

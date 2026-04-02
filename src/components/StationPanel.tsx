@@ -21,7 +21,7 @@ import { transportMissionCatalog } from "../game/missions/data/transportMissions
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
 import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
-import { findComparableEquippedWeapon } from "../game/utils/weaponStats";
+import { findComparableEquippedWeapon, getWeaponSummaryStats } from "../game/utils/weaponStats";
 import { CommodityId, GameSnapshot, ModuleSlot, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
 type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
@@ -125,6 +125,51 @@ function StatBar({ value, max, fillClass }: { value: number; max: number; fillCl
   );
 }
 
+function ResistBlock({
+  label,
+  current,
+  preview
+}: {
+  label: string;
+  current: { em: number; thermal: number; kinetic: number; explosive: number };
+  preview: { em: number; thermal: number; kinetic: number; explosive: number };
+}) {
+  const entries: Array<{ key: keyof typeof preview; short: string; className: string }> = [
+    { key: "em", short: "EM", className: "em" },
+    { key: "thermal", short: "TH", className: "thermal" },
+    { key: "kinetic", short: "KI", className: "kinetic" },
+    { key: "explosive", short: "EX", className: "explosive" }
+  ];
+  return (
+    <div className="resist-block">
+      <span className="resist-block-label">{label}</span>
+      <div className="resist-bar-stack">
+        {entries.map((entry) => {
+          const currentValue = current[entry.key];
+          const previewValue = preview[entry.key];
+          const delta = previewValue - currentValue;
+          return (
+            <div
+              key={entry.key}
+              className={`resist-bar-row resist-${entry.className}${delta > 0.004 ? " good" : delta < -0.004 ? " bad" : ""}`}
+              title={`${label} ${entry.short} ${Math.round(previewValue * 100)}%`}
+            >
+              <span className="resist-bar-label">{entry.short}</span>
+              <div className="meter resist-meter">
+                <span
+                  className={`ship-stat-fill resist-fill resist-${entry.className}`}
+                  style={{ width: `${Math.min(100, Math.max(0, previewValue * 100))}%` }}
+                />
+              </div>
+              <span className="resist-bar-value">{Math.round(previewValue * 100)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function missionTypeLabel(type: string) {
   return MISSION_TYPE_LABELS[type] ?? type;
 }
@@ -176,6 +221,7 @@ export function StationPanel({
     key: "name",
     direction: "asc"
   });
+  const [moduleSort, setModuleSort] = useState<{ key: "name" | "dps" | "range" | "price" | "size"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
@@ -216,6 +262,7 @@ export function StationPanel({
   const currentHull = playerShipById[world.player.hullId];
   const previewHull = playerShipById[shipPreviewId] ?? currentHull;
   const currentStats = computeDerivedStats(world.player);
+  const currentBonuses = currentHull.bonuses ?? null;
   const roundedShieldMax = Math.round(currentStats.maxShield);
   const roundedArmorMax = Math.round(currentStats.maxArmor);
   const roundedHullMax = Math.round(currentStats.maxHull);
@@ -601,6 +648,80 @@ export function StationPanel({
                   <div className="license-progress-fill" style={{ width: `${pilotLicenseProgress}%` }} />
                 </div>
               </div>
+              <div className="ship-resist-section">
+                <h4>Current Ship Details</h4>
+                {currentBonuses && (
+                  <p className="ship-bonus-summary">
+                    {[
+                      currentBonuses.cargoCapacity !== undefined ? `cargo +${currentBonuses.cargoCapacity}` : null,
+                      currentBonuses.cargoCapacityMultiplier !== undefined ? `cargo x${currentBonuses.cargoCapacityMultiplier.toFixed(2)}` : null,
+                      currentBonuses.miningYieldMultiplier !== undefined ? `mining x${currentBonuses.miningYieldMultiplier.toFixed(2)}` : null,
+                      currentBonuses.commodityBuyMultiplier !== undefined ? `trade buy x${currentBonuses.commodityBuyMultiplier.toFixed(2)}` : null,
+                      currentBonuses.commoditySellMultiplier !== undefined ? `trade sell x${currentBonuses.commoditySellMultiplier.toFixed(2)}` : null,
+                      currentBonuses.resourceSellMultiplier !== undefined ? `ore sell x${currentBonuses.resourceSellMultiplier.toFixed(2)}` : null,
+                      currentBonuses.moduleKinds?.laser ? "laser bonus" : null,
+                      currentBonuses.moduleKinds?.railgun ? "rail bonus" : null,
+                      currentBonuses.moduleKinds?.missile ? "missile bonus" : null,
+                      currentBonuses.moduleKinds?.mining_laser ? "mining laser bonus" : null,
+                      currentBonuses.moduleKinds?.shield_booster ? "shield booster bonus" : null,
+                      currentBonuses.moduleKinds?.armor_repairer ? "armor repair bonus" : null
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                <div className="ship-stat-list svc-ship-stat-list">
+                  <div className="ship-stat-item">
+                    <span>Speed</span>
+                    <StatBar value={currentHull.maxSpeed} max={MAX_SHIP_SPEED} fillClass="speed-fill" />
+                    <strong>{currentHull.maxSpeed}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                  <div className="ship-stat-item">
+                    <span>Cargo</span>
+                    <StatBar value={currentHull.cargoCapacity} max={MAX_SHIP_CARGO} fillClass="cargo-fill-stat" />
+                    <strong>{currentHull.cargoCapacity}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                  <div className="ship-stat-item">
+                    <span>Shield</span>
+                    <StatBar value={currentHull.baseShield} max={MAX_SHIP_TANK / 3} fillClass="shield-fill" />
+                    <strong>{currentHull.baseShield}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                  <div className="ship-stat-item">
+                    <span>Armor</span>
+                    <StatBar value={currentHull.baseArmor} max={MAX_SHIP_TANK / 3} fillClass="armor-fill" />
+                    <strong>{currentHull.baseArmor}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                  <div className="ship-stat-item">
+                    <span>Hull</span>
+                    <StatBar value={currentHull.baseHull} max={MAX_SHIP_TANK / 3} fillClass="hull-fill" />
+                    <strong>{currentHull.baseHull}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                  <div className="ship-stat-item">
+                    <span>Capacitor</span>
+                    <StatBar value={currentHull.baseCapacitor} max={MAX_SHIP_CAP} fillClass="cap-fill" />
+                    <strong>{currentHull.baseCapacitor}</strong>
+                    <span className="stat-delta">Live</span>
+                  </div>
+                </div>
+                <div className="ship-slot-row">
+                  <span className="ship-slot-label">Weapon</span>
+                  <span className="ship-slot-val">{currentHull.slots.weapon}</span>
+                  <span className="ship-slot-label">Utility</span>
+                  <span className="ship-slot-val">{currentHull.slots.utility}</span>
+                  <span className="ship-slot-label">Defense</span>
+                  <span className="ship-slot-val">{currentHull.slots.defense}</span>
+                  <span className="ship-slot-label">Lock</span>
+                  <span className="ship-slot-val">{currentHull.lockRange}m</span>
+                </div>
+                <div className="ship-resist-grid">
+                  <ResistBlock label="Shield" current={currentHull.shieldResists} preview={currentStats.shieldResists} />
+                  <ResistBlock label="Armor" current={currentHull.armorResists} preview={currentStats.armorResists} />
+                  <ResistBlock label="Hull" current={currentHull.hullResists} preview={currentStats.hullResists} />
+                </div>
+              </div>
               <div className="action-row">
                 <button type="button" onClick={onRepair}>
                   Repair ({getRepairCost(world.player)} cr)
@@ -785,6 +906,15 @@ export function StationPanel({
                 <span className="ship-slot-label">Lock</span>
                 <span className="ship-slot-val">{previewHull.lockRange}m</span>
               </div>
+
+              <div className="ship-resist-section">
+                <h4>Resistance Profile</h4>
+                <div className="ship-resist-grid">
+                  <ResistBlock label="Shield" current={currentHull.shieldResists} preview={previewHull.shieldResists} />
+                  <ResistBlock label="Armor" current={currentHull.armorResists} preview={previewHull.armorResists} />
+                  <ResistBlock label="Hull" current={currentHull.hullResists} preview={previewHull.hullResists} />
+                </div>
+              </div>
             </article>
           </div>
         )}
@@ -905,16 +1035,55 @@ export function StationPanel({
               <div className="license-summary">
                 <div className="license-summary-head">
                   <span>Current Authorization</span>
-                  <span>L{pilotLicense.level} {pilotLicense.level >= 3 ? "· Maxed" : `· next ${pilotLicenseNextTarget}`}</span>
+                  <span className="license-level-badge">L{pilotLicense.level}</span>
                 </div>
                 <div className="license-progress-bar">
                   <div className="license-progress-fill" style={{ width: `${pilotLicenseProgress}%` }} />
                 </div>
+                <div className="license-progress-sub">
+                  {pilotLicense.level >= 3 ? "Authorization maxed" : `Next level: ${pilotLicenseNextTarget}`}
+                </div>
               </div>
             </article>
+            <div className="mod-sort-bar">
+              {(["name", "dps", "range", "price", "size"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`mod-sort-btn${moduleSort.key === key ? " active" : ""}`}
+                  onClick={() =>
+                    setModuleSort((prev) => ({
+                      key,
+                      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+                    }))
+                  }
+                >
+                  {key === "name" ? "Name" : key === "dps" ? "DPS" : key === "range" ? "Range" : key === "price" ? "Price" : "Size"}
+                  {moduleSort.key === key && <span className="mod-sort-arrow">{moduleSort.direction === "asc" ? "↑" : "↓"}</span>}
+                </button>
+              ))}
+            </div>
             {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => {
-              const slotModules = modulesBySlot[slotType];
-              if (slotModules.length === 0) return null;
+              const rawModules = modulesBySlot[slotType];
+              if (rawModules.length === 0) return null;
+              const slotModules = [...rawModules].sort((a, b) => {
+                const dir = moduleSort.direction === "asc" ? 1 : -1;
+                switch (moduleSort.key) {
+                  case "dps": {
+                    const aDps = a.slot === "weapon" && a.damage && a.cycleTime ? getWeaponSummaryStats(a).dps : 0;
+                    const bDps = b.slot === "weapon" && b.damage && b.cycleTime ? getWeaponSummaryStats(b).dps : 0;
+                    return (aDps - bDps) * dir;
+                  }
+                  case "range": return ((a.range ?? a.optimal ?? 0) - (b.range ?? b.optimal ?? 0)) * dir;
+                  case "price": {
+                    const ap = snapshot.economy.moduleBuyPrices[a.id] ?? a.price;
+                    const bp = snapshot.economy.moduleBuyPrices[b.id] ?? b.price;
+                    return (ap - bp) * dir;
+                  }
+                  case "size": return ((a.weaponClass ?? a.sizeClass ?? "").localeCompare(b.weaponClass ?? b.sizeClass ?? "")) * dir;
+                  default: return a.name.localeCompare(b.name) * dir;
+                }
+              });
               return (
                 <CollapsibleSection
                   key={slotType}
@@ -937,29 +1106,30 @@ export function StationPanel({
                           <span className="mod-kind-icon" title={module.kind}>{MODULE_KIND_ICONS[module.kind] ?? "·"}</span>
                           <div className="mod-row-info">
                             {owned > 0 && <span className="status-chip mod-owned-chip">{owned} owned</span>}
-                          {miningSummary && <p className="mod-detail">{miningSummary}</p>}
-                          <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Market Analysis" />
-                        </div>
-                          <div className="mod-row-prices">
-                            <div className="mod-price-pair">
-                              <span className="mod-price-label">Buy</span>
-                              <span className="mod-price-val">{buyPrice} cr</span>
-                            </div>
-                            <div className="mod-price-pair">
-                              <span className="mod-price-label">Sell</span>
-                              <span className="mod-price-val">{sellPrice} cr</span>
-                            </div>
+                            {miningSummary && <p className="mod-detail">{miningSummary}</p>}
+                            <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Market Analysis" compactMode="minimal" />
                           </div>
-                          <div className="mod-row-actions">
+                          <div className="mod-row-trade">
                             <button
                               type="button"
+                              className="mod-trade-btn buy"
                               onClick={() => onBuyModule(module.id)}
                               disabled={licenseLocked}
                               title={licenseLocked ? `Requires pilot license L${requiredLicenseLevel}` : `Buy ${module.name}`}
                             >
-                              Buy
+                              <span className="mod-trade-label">Buy</span>
+                              <span className="mod-trade-price">{buyPrice} cr</span>
                             </button>
-                            <button type="button" onClick={() => onSellModule(module.id)} disabled={owned <= 0}>Sell</button>
+                            <button
+                              type="button"
+                              className="mod-trade-btn sell"
+                              onClick={() => onSellModule(module.id)}
+                              disabled={owned <= 0}
+                              title={owned <= 0 ? "None in inventory" : `Sell ${module.name}`}
+                            >
+                              <span className="mod-trade-label">Sell</span>
+                              <span className="mod-trade-price">{sellPrice} cr</span>
+                            </button>
                           </div>
                         </div>
                       );

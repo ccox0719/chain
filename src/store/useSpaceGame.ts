@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { missionCatalog } from "../game/data/missions";
 import { moduleCatalog } from "../game/data/modules";
 import { playerShips } from "../game/data/ships";
-import { renderSector } from "../game/scenes/renderSector";
+import { getCameraFrame, renderSector } from "../game/scenes/renderSector";
+import { sectorById } from "../game/data/sectors";
 import {
   acceptMission,
   addCredits,
@@ -11,6 +12,7 @@ import {
   buyShip,
   activateTacticalSlow as triggerTacticalSlow,
   clearQueuedUndockActions,
+  clearDeathSummary,
   clearRouteDestination,
   createSnapshot,
   dock,
@@ -44,15 +46,16 @@ import { CommodityId, GameSnapshot, GameWorld, ModuleSlot, SelectableRef, Starte
 
 function worldPointFromClient(
   canvas: HTMLCanvasElement,
-  playerPosition: Vec2,
   zoom: number,
+  cameraX: number,
+  cameraY: number,
   clientX: number,
   clientY: number
 ) {
   const bounds = canvas.getBoundingClientRect();
   return {
-    x: (clientX - bounds.left - canvas.clientWidth / 2) / zoom + playerPosition.x,
-    y: (clientY - bounds.top - canvas.clientHeight / 2) / zoom + playerPosition.y
+    x: (clientX - bounds.left) / zoom + cameraX,
+    y: (clientY - bounds.top) / zoom + cameraY
   };
 }
 
@@ -67,6 +70,7 @@ export function useSpaceGame() {
       : Number(window.localStorage.getItem("starfall-zoom") ?? "1")
   );
   const zoomCurrentRef = useRef<number>(zoomTargetRef.current);
+  const cameraOffsetRef = useRef<Vec2>({ x: 0, y: 0 });
   const [snapshot, setSnapshot] = useState<GameSnapshot>(() => createSnapshot(worldRef.current));
   const [overlay, setOverlay] = useState<"map" | "inventory" | "fitting" | "missions" | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -167,7 +171,16 @@ export function useSpaceGame() {
 
       updateWorld(worldRef.current, dt);
       zoomCurrentRef.current += (zoomTargetRef.current - zoomCurrentRef.current) * Math.min(1, dt * 8);
-      renderSector(context, canvas, worldRef.current, zoomCurrentRef.current, isMobileRef.current);
+      const frameData = getCameraFrame(worldRef.current, canvas, zoomCurrentRef.current, cameraOffsetRef.current);
+      cameraOffsetRef.current = frameData.cameraOffset;
+      renderSector(
+        context,
+        canvas,
+        worldRef.current,
+        zoomCurrentRef.current,
+        cameraOffsetRef.current,
+        isMobileRef.current
+      );
 
       snapshotAccumulator += dt;
       if (snapshotAccumulator >= 0.2) {
@@ -242,6 +255,10 @@ export function useSpaceGame() {
         triggerTacticalSlow(worldRef.current);
         refresh();
       },
+      clearDeathSummary: () => {
+        clearDeathSummary(worldRef.current);
+        refresh();
+      },
       acceptMission: (missionId: string) => {
         acceptMission(worldRef.current, missionId);
         refresh();
@@ -306,13 +323,8 @@ export function useSpaceGame() {
       handleCanvasLeftClick: (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const point = worldPointFromClient(
-          canvas,
-          worldRef.current.player.position,
-          zoomCurrentRef.current,
-          clientX,
-          clientY
-        );
+        const frameData = getCameraFrame(worldRef.current, canvas, zoomCurrentRef.current, cameraOffsetRef.current);
+        const point = worldPointFromClient(canvas, zoomCurrentRef.current, frameData.cameraX, frameData.cameraY, clientX, clientY);
         const ref = resolveSelectionAtPoint(worldRef.current, point);
         selectObject(worldRef.current, ref);
         setContextMenu(null);
@@ -321,13 +333,8 @@ export function useSpaceGame() {
       handleCanvasRightClick: (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const point = worldPointFromClient(
-          canvas,
-          worldRef.current.player.position,
-          zoomCurrentRef.current,
-          clientX,
-          clientY
-        );
+        const frameData = getCameraFrame(worldRef.current, canvas, zoomCurrentRef.current, cameraOffsetRef.current);
+        const point = worldPointFromClient(canvas, zoomCurrentRef.current, frameData.cameraX, frameData.cameraY, clientX, clientY);
         const ref =
           resolveSelectionAtPoint(worldRef.current, point) ?? worldRef.current.selectedObject;
         if (!ref) {
@@ -342,6 +349,19 @@ export function useSpaceGame() {
         const next = clampZoom(zoomTargetRef.current + (deltaY > 0 ? -0.12 : 0.12));
         zoomTargetRef.current = next;
         window.localStorage.setItem("starfall-zoom", String(next));
+      },
+      panCamera: (deltaX: number, deltaY: number) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const nextOffset = {
+          x: cameraOffsetRef.current.x - deltaX / Math.max(zoomCurrentRef.current, 0.01),
+          y: cameraOffsetRef.current.y - deltaY / Math.max(zoomCurrentRef.current, 0.01)
+        };
+        const frameData = getCameraFrame(worldRef.current, canvas, zoomCurrentRef.current, nextOffset);
+        cameraOffsetRef.current = frameData.cameraOffset;
+      },
+      resetCameraView: () => {
+        cameraOffsetRef.current = { x: 0, y: 0 };
       },
       setDifficulty: (difficulty: GameWorld["difficulty"]) => {
         setDifficulty(worldRef.current, difficulty);
@@ -360,73 +380,6 @@ export function useSpaceGame() {
     }),
     []
   );
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchStartTime = 0;
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-    let pinchDistance = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = performance.now();
-        longPressTimer = setTimeout(() => {
-          longPressTimer = null;
-          actions.handleCanvasRightClick(touchStartX, touchStartY);
-        }, 400);
-      } else if (e.touches.length === 2) {
-        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        pinchDistance = Math.hypot(dx, dy);
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        if (pinchDistance > 0) actions.adjustZoom(pinchDistance - dist);
-        pinchDistance = dist;
-      } else if (e.touches.length === 1 && longPressTimer) {
-        const dx = e.touches[0].clientX - touchStartX;
-        const dy = e.touches[0].clientY - touchStartY;
-        if (Math.hypot(dx, dy) > 8) { clearTimeout(longPressTimer); longPressTimer = null; }
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length < 2) pinchDistance = 0;
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-        if (performance.now() - touchStartTime < 400) {
-          actions.handleCanvasLeftClick(touchStartX, touchStartY);
-        }
-      }
-    };
-
-    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
-
-    return () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      canvas.removeEventListener("touchend", onTouchEnd);
-      if (longPressTimer) clearTimeout(longPressTimer);
-    };
-  }, [actions]);
 
   return {
     canvasRef,
@@ -465,6 +418,8 @@ function loadWorld() {
                 ...enemy,
                 patrolBehavior: enemy.patrolBehavior ?? "anchor-patrol",
                 patrolTarget: enemy.patrolTarget ?? enemy.patrolAnchor ?? null,
+                recentDamageTimer: enemy.recentDamageTimer ?? 0,
+                pursuitTimer: enemy.pursuitTimer ?? 0,
                 effects: enemy.effects ?? {
                   speedMultiplier: 1,
                   signatureMultiplier: 1,
@@ -507,6 +462,12 @@ function loadWorld() {
           ...fallback.player.commodities,
           ...(parsed.player?.commodities ?? {})
         },
+        effects: {
+          ...fallback.player.effects,
+          ...(parsed.player?.effects ?? {})
+        },
+        tacticalSlow: parsed.player?.tacticalSlow ?? fallback.player.tacticalSlow,
+        deathSummary: parsed.player?.deathSummary ?? fallback.player.deathSummary,
         savedBuilds: mergedBuilds,
         buildSwap: parsed.player?.buildSwap
           ? {
@@ -516,7 +477,6 @@ function loadWorld() {
                 parsed.player.buildSwap.targetEquipped ?? fallback.player.buildSwap.targetEquipped
           }
           : fallback.player.buildSwap,
-        tacticalSlow: parsed.player?.tacticalSlow ?? fallback.player.tacticalSlow,
         recentDamageTimer: parsed.player?.recentDamageTimer ?? fallback.player.recentDamageTimer
       },
       sectors: {

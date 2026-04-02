@@ -26,6 +26,51 @@ function worldToScreen(point: Vec2, cameraX: number, cameraY: number, zoom: numb
   };
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+export function getCameraFrame(
+  world: GameWorld,
+  canvas: HTMLCanvasElement,
+  zoom: number,
+  cameraOffset: Vec2
+) {
+  const viewportWidth = canvas.clientWidth;
+  const viewportHeight = canvas.clientHeight;
+  const sectorDef = sectorById[world.currentSectorId];
+  const viewWidth = viewportWidth / zoom;
+  const viewHeight = viewportHeight / zoom;
+
+  let centerX = world.player.position.x + cameraOffset.x;
+  let centerY = world.player.position.y + cameraOffset.y;
+
+  if (viewWidth >= sectorDef.width) {
+    centerX = sectorDef.width / 2;
+  } else {
+    centerX = clamp(centerX, viewWidth / 2, sectorDef.width - viewWidth / 2);
+  }
+
+  if (viewHeight >= sectorDef.height) {
+    centerY = sectorDef.height / 2;
+  } else {
+    centerY = clamp(centerY, viewHeight / 2, sectorDef.height - viewHeight / 2);
+  }
+
+  return {
+    viewportWidth,
+    viewportHeight,
+    viewWidth,
+    viewHeight,
+    cameraX: centerX - viewWidth / 2,
+    cameraY: centerY - viewHeight / 2,
+    cameraOffset: {
+      x: centerX - world.player.position.x,
+      y: centerY - world.player.position.y
+    }
+  };
+}
+
 function drawShipShape(
   ctx: CanvasRenderingContext2D,
   silhouette: "dart" | "wing" | "heavy" | "needle" | "wedge" | "kite" | "box" | "claw",
@@ -353,20 +398,17 @@ export function renderSector(
   canvas: HTMLCanvasElement,
   world: GameWorld,
   zoom: number,
+  cameraOffset: Vec2,
   lowQuality = false
 ) {
   _lowQuality = lowQuality;
-  const viewportWidth = canvas.clientWidth;
-  const viewportHeight = canvas.clientHeight;
+  const frame = getCameraFrame(world, canvas, zoom, cameraOffset);
+  const { viewportWidth, viewportHeight, cameraX, cameraY, viewWidth, viewHeight } = frame;
   const sectorDef = sectorById[world.currentSectorId];
   const sector = world.sectors[world.currentSectorId];
   const playerHull = playerShipById[world.player.hullId];
   const derived = computeDerivedStats(world.player);
   const destinations = getSystemDestinations(world.currentSectorId);
-  const viewWidth = viewportWidth / zoom;
-  const viewHeight = viewportHeight / zoom;
-  const cameraX = world.player.position.x - viewWidth / 2;
-  const cameraY = world.player.position.y - viewHeight / 2;
 
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
   drawArenaBackdrop(ctx, viewportWidth, viewportHeight, world, zoom, cameraX, cameraY);
