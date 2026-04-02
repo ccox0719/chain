@@ -684,6 +684,8 @@ export interface SectorRuntime {
   floatingText: FloatingText[];
   particles: ParticleState[];
   beltSpawnCooldowns: Record<string, number>;
+  cameraShake?: number;
+  playerHitFlash?: number;
 }
 
 export interface DerivedShipStats {

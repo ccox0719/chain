@@ -500,7 +500,7 @@ export function GameHud({
                         <span>{build.name}</span>
                         <small>
                           {build.shipId === world.player.hullId
-                            ? `${changed ?? 0}Δ · ${swapTime?.toFixed(1) ?? "0.0"}s`
+                            ? changed === 0 ? "current" : `${changed}mod · ${swapTime?.toFixed(1)}s`
                             : "other hull"}
                         </small>
                       </button>
@@ -535,25 +535,22 @@ export function GameHud({
           <div className={`command-rail command-rail-left${targetCollapsed ? " collapsed" : ""}`}>
             {!targetCollapsed &&
               (selectedInfo ? (
-                <>
-                  <p className="eyebrow">Actions</p>
-                  <div className="command-rail-stack">
-                    {selectedButtons.map((item, index) => (
-                      <button
-                        key={`${item.label}-${index}`}
-                        type="button"
-                        className={`command-button${item.tone ? ` ${item.tone}` : ""}`}
-                        disabled={item.disabled}
-                        onClick={() => {
-                          if (item.onClick) item.onClick();
-                          if (item.command) onIssueCommand(item.command);
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
+                <div className="command-rail-stack">
+                  {selectedButtons.map((item, index) => (
+                    <button
+                      key={`${item.label}-${index}`}
+                      type="button"
+                      className={`command-button${item.tone ? ` ${item.tone}` : ""}`}
+                      disabled={item.disabled}
+                      onClick={() => {
+                        if (item.onClick) item.onClick();
+                        if (item.command) onIssueCommand(item.command);
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <div className="command-rail-empty">Select a target</div>
               ))}
@@ -744,24 +741,20 @@ export function GameHud({
 
       {hasMission && (
         <div className="mission-strip">
-          <strong>
-            {activeTransportMission?.title ?? activeMission?.title}
-          </strong>
-          {activeMissionLabel && !activeTransportMission && (
-            <span className="status-chip">{activeMissionLabel}</span>
-          )}
-          <p>
-            {activeTransportMission
-              ? `${activeTransportMission.objectiveText} · ${activeTransportMission.jumpsRemaining} jumps · ${activeTransportMission.routeRisk} risk`
-              : activeMission?.briefing}
-          </p>
+          <div className="mission-strip-head">
+            <strong>{activeTransportMission?.title ?? activeMission?.title}</strong>
+            {activeMissionLabel && !activeTransportMission && (
+              <span className="status-chip">{activeMissionLabel}</span>
+            )}
+          </div>
+          <p>{missionGuideRoute}</p>
           {objectiveRef && (
             <button
               type="button"
               className="ghost-button mini"
               onClick={() => onIssueCommand({ type: "warp", target: objectiveRef, range: 130 })}
             >
-              Warp to Objective
+              Warp
             </button>
           )}
         </div>

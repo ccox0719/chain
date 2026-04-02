@@ -26,7 +26,7 @@ import {
 } from "../../types/game";
 import { missionById, missionCatalog } from "../data/missions";
 import { moduleById } from "../data/modules";
-import { enemyVariantById, playerShipById } from "../data/ships";
+import { enemyVariantById, enemyVariants, playerShipById } from "../data/ships";
 import { getSystemBeacons, getSystemDestination, getSystemDestinations, getSystemGates, getSystemStation, regionById, sectorById } from "../data/sectors";
 import { defaultStarterShipConfigId } from "../data/starterShips";
 import { createProjectile, createStarterPlayerState, rebuildPlayerRuntime } from "../entities/factories";
@@ -123,9 +123,60 @@ function emitBurst(
   }
 }
 
-function emitImpact(world: GameWorld, position: Vec2, color: string) {
-  emitBurst(world, position, color, 8, 70, 200, 0.3, 3, "spark", 10);
-  emitBurst(world, position, "#ffffff", 3, 20, 60, 0.2, 2, "dot", 8);
+function emitImpact(world: GameWorld, position: Vec2, color: string, moduleId?: string) {
+  if (moduleId?.includes("missile")) {
+    // Missile: expanding orange fireball with slow debris
+    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.12, 28, "dot", 42);
+    emitBurst(world, position, "#ffb265", 1, 0, 0, 0.22, 20, "dot", 30);
+    emitBurst(world, position, "#ffb265", 18, 80, 300, 0.55, 5, "spark", 18);
+    emitBurst(world, position, "#ffffff", 6, 60, 180, 0.28, 3, "spark", 12);
+    emitBurst(world, position, "#ff8830", 10, 20, 90, 1.2, 5, "dot", 16);
+  } else if (moduleId?.includes("rail")) {
+    // Railgun: white kinetic punch + blue sparks
+    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.10, 22, "dot", 48);
+    emitBurst(world, position, "#b8e8ff", 14, 120, 380, 0.35, 3.5, "spark", 14);
+    emitBurst(world, position, "#ffffff", 5, 80, 220, 0.22, 2.5, "spark", 20);
+    emitBurst(world, position, "#88ccff", 6, 10, 60, 0.6, 4, "dot", 12);
+  } else {
+    // Laser: tight cyan flash + thin sparks
+    emitBurst(world, position, color, 1, 0, 0, 0.10, 12, "dot", 24);
+    emitBurst(world, position, color, 10, 60, 220, 0.28, 2.8, "spark", 12);
+    emitBurst(world, position, "#ffffff", 4, 20, 70, 0.18, 2, "dot", 10);
+  }
+}
+
+function emitShieldHit(world: GameWorld, position: Vec2) {
+  // Ripple of blue/cyan dots — shield absorbing energy
+  emitBurst(world, position, "#5ae0ff", 12, 30, 130, 0.35, 3.5, "dot", 18);
+  emitBurst(world, position, "#ffffff", 4, 20, 70, 0.18, 2.5, "dot", 14);
+  emitBurst(world, position, "#a0eeff", 8, 50, 160, 0.26, 2, "spark", 10);
+}
+
+function emitArmorHit(world: GameWorld, position: Vec2) {
+  // Chunky orange/gold sparks — plating taking damage
+  emitBurst(world, position, "#ffdd80", 1, 0, 0, 0.12, 14, "dot", 32);
+  emitBurst(world, position, "#ffaa44", 14, 60, 220, 0.42, 4, "spark", 16);
+  emitBurst(world, position, "#ffffff", 5, 40, 130, 0.22, 2.5, "spark", 12);
+  emitBurst(world, position, "#ff8820", 8, 10, 55, 0.7, 5, "dot", 18);
+}
+
+function emitHullHit(world: GameWorld, position: Vec2) {
+  // Red/white intense burst — structural damage
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.14, 22, "dot", 50);
+  emitBurst(world, position, "#ff3030", 18, 80, 290, 0.5, 4.5, "spark", 22);
+  emitBurst(world, position, "#ffffff", 8, 60, 200, 0.28, 3, "spark", 16);
+  emitBurst(world, position, "#ff6040", 10, 20, 80, 1.0, 5, "dot", 18);
+  emitBurst(world, position, "#ff2020", 5, 5, 35, 1.4, 6, "dot", 22);
+}
+
+function emitRepairPulse(world: GameWorld, position: Vec2, kind: "shield" | "armor") {
+  if (kind === "shield") {
+    emitBurst(world, position, "#5ae0ff", 10, 20, 90, 0.55, 3.5, "dot", 18);
+    emitBurst(world, position, "#ffffff", 4, 10, 45, 0.35, 2, "dot", 12);
+  } else {
+    emitBurst(world, position, "#ffaa44", 10, 20, 90, 0.55, 3.5, "dot", 18);
+    emitBurst(world, position, "#ffdd80", 4, 10, 45, 0.35, 2, "dot", 12);
+  }
 }
 
 function emitExplosion(world: GameWorld, position: Vec2, color: string) {
@@ -163,26 +214,71 @@ function emitWarpActivate(world: GameWorld, position: Vec2, rotation: number) {
   const sector = world.sectors[world.currentSectorId];
   if (!sector.particles) sector.particles = [];
   const backAngle = rotation + Math.PI;
-  for (let i = 0; i < 20; i++) {
-    const spread = (Math.random() - 0.5) * 0.7;
-    const spd = 150 + Math.random() * 320;
+  // Heavy directional engine jets
+  for (let i = 0; i < 44; i++) {
+    const spread = (Math.random() - 0.5) * 0.85;
+    const spd = 200 + Math.random() * 520;
     const angle = backAngle + spread;
     sector.particles.push(
-      spawnParticle(world, position, { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd }, "#7ae0ff", 3, 0.55, "spark", 12)
+      spawnParticle(world, position, { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd }, "#7ae0ff", 3 + Math.random() * 2, 0.65, "spark", 14)
     );
   }
-  emitBurst(world, position, "#ffffff", 8, 10, 40, 0.4, 4, "dot", 16);
+  // Blinding core flash
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.22, 40, "dot", 58);
+  emitBurst(world, position, "#a0f0ff", 1, 0, 0, 0.32, 26, "dot", 42);
+  // Omnidirectional shockwave ring
+  emitBurst(world, position, "#7ae0ff", 20, 80, 200, 0.5, 3.5, "dot", 18);
+  emitBurst(world, position, "#ffffff", 10, 40, 100, 0.4, 4, "dot", 22);
+}
+
+function emitWarpSpool(world: GameWorld, position: Vec2, rotation: number, progress: number) {
+  // Progressive engine spool — particles grow denser as warpProgress climbs
+  const sector = world.sectors[world.currentSectorId];
+  if (!sector.particles) sector.particles = [];
+  const backAngle = rotation + Math.PI;
+  const count = Math.ceil(3 + progress * 10);
+  for (let i = 0; i < count; i++) {
+    const spread = (Math.random() - 0.5) * (0.5 + progress * 0.35);
+    const spd = 50 + Math.random() * (80 + progress * 220);
+    const angle = backAngle + spread;
+    sector.particles.push(
+      spawnParticle(world, position, { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd }, "#7ae0ff", 1.8 + Math.random() * 1.5, 0.25 + progress * 0.2, "spark", 8 + progress * 8)
+    );
+  }
 }
 
 function emitWarpArrive(world: GameWorld, position: Vec2) {
-  emitBurst(world, position, "#7ae0ff", 16, 60, 180, 0.5, 3, "spark", 12);
-  emitBurst(world, position, "#ffffff", 8, 20, 60, 0.6, 5, "dot", 18);
-  emitBurst(world, position, "#a0f0ff", 4, 5, 20, 0.8, 7, "diamond", 20);
+  // Deceleration wash
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.18, 32, "dot", 50);
+  emitBurst(world, position, "#a0f0ff", 1, 0, 0, 0.28, 20, "dot", 36);
+  emitBurst(world, position, "#7ae0ff", 22, 80, 220, 0.55, 3.5, "spark", 14);
+  emitBurst(world, position, "#ffffff", 10, 30, 80, 0.6, 5, "dot", 20);
+  emitBurst(world, position, "#a0f0ff", 6, 8, 30, 0.9, 7, "diamond", 22);
+}
+
+function emitGateJump(world: GameWorld, position: Vec2) {
+  // Gate activation ring — bright orange/white burst
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.25, 48, "dot", 64);
+  emitBurst(world, position, "#ff9d6a", 1, 0, 0, 0.36, 32, "dot", 48);
+  emitBurst(world, position, "#ff9d6a", 36, 130, 520, 0.55, 4.5, "spark", 22);
+  emitBurst(world, position, "#ffffff", 18, 90, 340, 0.38, 3, "spark", 18);
+  emitBurst(world, position, "#ffcc88", 14, 30, 130, 1.2, 6, "dot", 24);
+  emitBurst(world, position, "#ffffff", 8, 5, 40, 1.8, 7, "dot", 28);
+  const sector = world.sectors[world.currentSectorId];
+  sector.cameraShake = Math.min(12, (sector.cameraShake ?? 0) + 8);
+}
+
+function emitDockPulse(world: GameWorld, position: Vec2) {
+  emitBurst(world, position, "#84e8ff", 14, 25, 110, 0.65, 3.5, "dot", 16);
+  emitBurst(world, position, "#ffffff", 6, 15, 55, 0.45, 2.5, "dot", 12);
+  emitBurst(world, position, "#cefbff", 8, 40, 140, 0.4, 2, "spark", 10);
 }
 
 function updateParticles(world: GameWorld, dt: number) {
   const sector = world.sectors[world.currentSectorId];
   if (!sector.particles) { sector.particles = []; return; }
+  if (sector.cameraShake) sector.cameraShake = Math.max(0, sector.cameraShake - dt * 24);
+  if (sector.playerHitFlash) sector.playerHitFlash = Math.max(0, sector.playerHitFlash - dt * 5);
   for (const p of sector.particles) {
     p.position = add(p.position, scale(p.velocity, dt));
     // Sparks decelerate fast; dots and diamonds drift longer
@@ -373,6 +469,55 @@ function applyPlayerControlEffects(world: GameWorld) {
         1 - (module.lockRangePenalty ?? 0)
       );
     }
+  });
+}
+
+function applyEnemyControlEffects(world: GameWorld) {
+  const player = world.player;
+  const sector = getCurrentSector(world);
+  sector.enemies.forEach((enemy) => {
+    const variant = enemyVariantById[enemy.variantId];
+    if (!variant) return;
+    const playerDistance = distance(enemy.position, player.position);
+    const seesPlayer = playerDistance <= variant.lockRange * enemy.effects.lockRangeMultiplier;
+    if (!seesPlayer) return;
+
+    enemy.modules.forEach((runtime) => {
+      if (!runtime.active || !runtime.moduleId) return;
+      const module = moduleById[runtime.moduleId];
+      if (!module) return;
+      if (
+        module.kind !== "webifier" &&
+        module.kind !== "target_painter" &&
+        module.kind !== "tracking_disruptor" &&
+        module.kind !== "sensor_dampener"
+      ) {
+        return;
+      }
+      if (module.range && playerDistance > module.range) return;
+
+      if (module.kind === "webifier") {
+        player.effects.speedMultiplier = Math.min(player.effects.speedMultiplier, 1 - (module.speedPenalty ?? 0));
+      }
+      if (module.kind === "target_painter") {
+        player.effects.signatureMultiplier = Math.max(
+          player.effects.signatureMultiplier,
+          1 + (module.signatureBonus ?? 0)
+        );
+      }
+      if (module.kind === "tracking_disruptor") {
+        player.effects.turretTrackingMultiplier = Math.min(
+          player.effects.turretTrackingMultiplier,
+          1 - (module.trackingPenalty ?? 0)
+        );
+      }
+      if (module.kind === "sensor_dampener") {
+        player.effects.lockRangeMultiplier = Math.min(
+          player.effects.lockRangeMultiplier,
+          1 - (module.lockRangePenalty ?? 0)
+        );
+      }
+    });
   });
 }
 
@@ -1862,12 +2007,13 @@ function createEnemyFromVariant(
   };
 }
 
-const HOSTILE_TRIGGER_COOLDOWN_SEC = 25;
+const HOSTILE_TRIGGER_COOLDOWN_SEC = 18;
+const MAX_TRIGGERED_HOSTILES_NEAR_PLAYER = 5;
 
 const HOSTILE_TRIGGER_PROFILES = {
-  low: { chance: 0.03, count: 1 },
-  mid: { chance: 0.06, count: 2 },
-  high: { chance: 0.09, count: 3 }
+  low: { chance: 0.1, count: 1 },
+  mid: { chance: 0.2, count: 2 },
+  high: { chance: 0.35, count: 3 }
 } as const;
 
 function getHostileTriggerProfile(sectorId: string) {
@@ -1885,6 +2031,170 @@ function getSectorResponseVariants(sectorId: string, preferredVariantIds?: strin
     ...sectorDef.enemySpawns.map((spawn) => spawn.variantId)
   ].filter((variantId, index, all) => Boolean(variantId) && all.indexOf(variantId) === index);
   return variantIds.length ? variantIds : ["dust-raider"];
+}
+
+type HostilePackRole = "tackle" | "sniper" | "brawler" | "support" | "skirmisher" | "anchor" | "escort";
+type TriggerContext = "belt" | "gate";
+
+interface HostilePackTemplate {
+  roles: HostilePackRole[];
+  weight: number;
+}
+
+interface TriggeredHostileSpawn {
+  role: HostilePackRole;
+  variantId: string;
+}
+
+function getEnemyVariantModuleKinds(variantId: string) {
+  const variant = enemyVariantById[variantId];
+  return new Set(
+    (variant?.fittedModules ?? [])
+      .map((moduleId) => moduleById[moduleId]?.kind)
+      .filter((kind): kind is NonNullable<typeof kind> => Boolean(kind))
+  );
+}
+
+function scoreEnemyVariantForHostileRole(variantId: string, role: HostilePackRole, preferredVariantIds?: string[]) {
+  const variant = enemyVariantById[variantId];
+  if (!variant) return Number.NEGATIVE_INFINITY;
+  const moduleKinds = getEnemyVariantModuleKinds(variantId);
+  const totalBulk = variant.shield + variant.armor + variant.hull;
+  let score = preferredVariantIds?.includes(variantId) ? 1.5 : 0;
+
+  if (role === "tackle") {
+    if (variant.combatStyle === "speed") score += 3.2;
+    if (variant.speed >= 108) score += 1.6;
+    if (variant.preferredRange <= 220) score += 1.0;
+    if (moduleKinds.has("missile") || moduleKinds.has("railgun")) score += 0.5;
+  } else if (role === "sniper") {
+    if (variant.preferredRange >= 260) score += 2.6;
+    if (variant.lockRange >= 600) score += 1.0;
+    if (variant.combatStyle === "armor") score += 1.6;
+    if (moduleKinds.has("railgun")) score += 2.2;
+    if (moduleKinds.has("missile")) score += 0.7;
+  } else if (role === "brawler") {
+    if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 2.6;
+    if (variant.preferredRange <= 240) score += 2.0;
+    if (totalBulk >= 260) score += 1.0;
+    if (moduleKinds.has("laser")) score += 0.6;
+  } else if (role === "support") {
+    if (moduleKinds.has("webifier")) score += 3.0;
+    if (moduleKinds.has("target_painter")) score += 3.0;
+    if (moduleKinds.has("tracking_disruptor")) score += 2.4;
+    if (moduleKinds.has("sensor_dampener")) score += 2.4;
+    if (moduleKinds.has("shield_booster")) score += 1.3;
+    if (moduleKinds.has("armor_repairer")) score += 1.3;
+    if (variant.combatStyle === "speed") score += 0.5;
+  } else if (role === "skirmisher") {
+    if (variant.combatStyle === "speed") score += 3.0;
+    if (variant.speed >= 110) score += 1.5;
+    if (variant.preferredRange >= 190 && variant.preferredRange <= 340) score += 1.5;
+    if (moduleKinds.has("missile") || moduleKinds.has("railgun") || moduleKinds.has("laser")) score += 0.5;
+  } else if (role === "anchor") {
+    if (totalBulk >= 280) score += 3.2;
+    if (variant.speed <= 100) score += 1.5;
+    if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 1.5;
+    if (moduleKinds.has("shield_booster") || moduleKinds.has("armor_repairer")) score += 1.0;
+  } else if (role === "escort") {
+    if (variant.combatStyle === "speed") score += 2.2;
+    if (variant.speed >= 112) score += 1.2;
+    if (moduleKinds.has("missile")) score += 1.8;
+    if (moduleKinds.has("railgun")) score += 1.4;
+    if (moduleKinds.has("laser")) score += 0.8;
+    if (totalBulk <= 250) score += 1.2;
+  }
+
+  return score;
+}
+
+function pickEnemyVariantForHostileRole(
+  role: HostilePackRole,
+  preferredVariantIds: string[] | undefined,
+  usedVariantIds: Set<string>
+) {
+  const scored = enemyVariants
+    .map((variant) => ({
+      variant,
+      score:
+        scoreEnemyVariantForHostileRole(variant.id, role, preferredVariantIds) -
+        (usedVariantIds.has(variant.id) ? 0.4 : 0)
+    }))
+    .sort((left, right) => right.score - left.score);
+  const topScore = scored[0]?.score ?? Number.NEGATIVE_INFINITY;
+  const shortlist = scored.filter((entry) => entry.score >= topScore - 0.75).slice(0, 4);
+  const pickPool = shortlist.length ? shortlist : scored.slice(0, 1);
+  return pickPool[Math.floor(Math.random() * pickPool.length)]?.variant.id ?? "dust-raider";
+}
+
+function chooseHostilePackTemplate(context: TriggerContext, sectorId: string) {
+  const danger = sectorById[sectorId]?.danger ?? 1;
+  const templates: HostilePackTemplate[] =
+    context === "belt"
+      ? danger >= 5
+        ? [
+            { roles: ["anchor", "escort"] as HostilePackRole[], weight: 4 },
+            { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 3 },
+            { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 2 }
+          ]
+        : danger >= 3
+          ? [
+              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
+              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
+              { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
+            ]
+          : [
+              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
+              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 }
+            ]
+      : danger >= 5
+        ? [
+            { roles: ["anchor", "escort"] as HostilePackRole[], weight: 4 },
+            { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
+            { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
+          ]
+        : danger >= 3
+          ? [
+              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
+              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
+              { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
+            ]
+          : [
+              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
+              { roles: ["brawler", "support"] as HostilePackRole[], weight: 2 }
+            ];
+
+  const totalWeight = templates.reduce((sum, template) => sum + template.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const template of templates) {
+    roll -= template.weight;
+    if (roll <= 0) return template;
+  }
+  return templates[0];
+}
+
+function buildTriggeredHostilePack(
+  context: TriggerContext,
+  sectorId: string,
+  preferredVariantIds?: string[]
+): TriggeredHostileSpawn[] {
+  const template = chooseHostilePackTemplate(context, sectorId);
+  const usedVariantIds = new Set<string>();
+  return template.roles.map((role) => {
+    const variantId = pickEnemyVariantForHostileRole(role, preferredVariantIds, usedVariantIds);
+    usedVariantIds.add(variantId);
+    return { role, variantId };
+  });
+}
+
+function getTriggerSpawnRadius(role: HostilePackRole) {
+  if (role === "tackle") return 180 + Math.random() * 60;
+  if (role === "sniper") return 280 + Math.random() * 90;
+  if (role === "support") return 240 + Math.random() * 80;
+  if (role === "anchor") return 300 + Math.random() * 90;
+  if (role === "escort") return 210 + Math.random() * 70;
+  if (role === "skirmisher") return 210 + Math.random() * 70;
+  return 220 + Math.random() * 80;
 }
 
 function updateBeltSpawnCooldowns(world: GameWorld, dt: number) {
@@ -1964,34 +2274,30 @@ function spawnTriggeredHostiles(
   world: GameWorld,
   sectorId: string,
   anchorPosition: Vec2,
-  variantIds: string[],
-  spawnCount: number
+  pack: TriggeredHostileSpawn[]
 ) {
   const sector = world.sectors[sectorId];
   const sectorDef = sectorById[sectorId];
   const nearbyHostiles = sector.enemies.filter(
     (enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= 720
   ).length;
-  if (nearbyHostiles >= 3) return;
+  if (nearbyHostiles >= MAX_TRIGGERED_HOSTILES_NEAR_PLAYER) return;
 
-  const actualCount = Math.min(Math.max(1, spawnCount), Math.max(1, 3 - nearbyHostiles));
+  const actualPack = pack.slice(0, Math.max(1, MAX_TRIGGERED_HOSTILES_NEAR_PLAYER - nearbyHostiles));
   const spawnedNames: string[] = [];
 
-  for (let index = 0; index < actualCount; index += 1) {
+  for (let index = 0; index < actualPack.length; index += 1) {
+    const entry = actualPack[index];
     const angle = Math.random() * Math.PI * 2;
-    const radius = 220 + Math.random() * 140 + index * 24;
+    const radius = getTriggerSpawnRadius(entry.role) + index * 18;
     const spawnPosition = {
       x: clamp(anchorPosition.x + Math.cos(angle) * radius, 80, sectorDef.width - 80),
       y: clamp(anchorPosition.y + Math.sin(angle) * radius, 80, sectorDef.height - 80)
     };
-    const enemy = createEnemyFromVariant(
-      variantIds[Math.floor(Math.random() * variantIds.length)] ?? "dust-raider",
-      spawnPosition,
-      anchorPosition
-    );
+    const enemy = createEnemyFromVariant(entry.variantId, spawnPosition, anchorPosition);
     sector.enemies.push(enemy);
     aggroEnemyToPlayer(world, enemy.id);
-    spawnedNames.push(enemyVariantById[enemy.variantId]?.name ?? "hostile");
+    spawnedNames.push(`${entry.role}: ${enemyVariantById[enemy.variantId]?.name ?? "hostile"}`);
   }
 
   const originalSectorId = world.currentSectorId;
@@ -2010,26 +2316,26 @@ function maybeTriggerMiningSpawn(
   const sector = getCurrentSector(world);
   if (sector.beltSpawnCooldowns[beltId] && sector.beltSpawnCooldowns[beltId] > 0) return;
   const profile = getHostileTriggerProfile(world.currentSectorId);
-  if (Math.random() > profile.chance) return;
+  const triggerChance = Math.min(0.5, profile.chance + 0.08);
+  if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
     world.currentSectorId,
     anchorPosition,
-    getSectorResponseVariants(world.currentSectorId, preferredVariantIds),
-    profile.count
+    buildTriggeredHostilePack("belt", world.currentSectorId, getSectorResponseVariants(world.currentSectorId, preferredVariantIds))
   );
   sector.beltSpawnCooldowns[beltId] = HOSTILE_TRIGGER_COOLDOWN_SEC;
 }
 
 function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, anchorPosition: Vec2) {
   const profile = getHostileTriggerProfile(destinationSectorId);
-  if (Math.random() > profile.chance) return;
+  const triggerChance = Math.min(0.65, profile.chance + 0.12);
+  if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
     destinationSectorId,
     anchorPosition,
-    getSectorResponseVariants(destinationSectorId),
-    profile.count
+    buildTriggeredHostilePack("gate", destinationSectorId, getSectorResponseVariants(destinationSectorId))
   );
 }
 
@@ -2124,6 +2430,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
           world.missions[gate.unlockMissionId]?.status === "completed" ||
           world.unlockedSectorIds.includes(gate.connectedSystemId))
       ) {
+        emitGateJump(world, world.player.position);
         world.currentSectorId = gate.connectedSystemId;
         const arrival = gate.arrivalGateId ? getSystemDestination(gate.connectedSystemId, gate.arrivalGateId) : null;
         if (arrival) {
@@ -2151,6 +2458,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   if (nav.mode === "docking" && nav.target) {
     targetPosition = getObjectPosition(world, nav.target);
     if (targetPosition && distance(player.position, targetPosition) <= derived.interactionRange) {
+      emitDockPulse(world, player.position);
       dock(world);
       return;
     }
@@ -2170,7 +2478,15 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     const alignment = Math.abs(shortestAngleDiff(player.rotation, desiredAngle));
     if (nav.desiredRange >= 0) {
       const aligned = alignment < 0.08 && length(player.velocity) >= derived.maxSpeed * 0.74;
+      const prevProgress = nav.warpProgress;
       nav.warpProgress = aligned ? clamp(nav.warpProgress + dt * 1.6, 0, 1) : 0;
+      // Emit spool thrust at 4 thresholds as progress builds
+      if (aligned && nav.warpProgress > 0) {
+        const spoolInterval = 0.22;
+        if (Math.floor(nav.warpProgress / spoolInterval) > Math.floor(prevProgress / spoolInterval)) {
+          emitWarpSpool(world, player.position, player.rotation, nav.warpProgress);
+        }
+      }
       if (nav.warpProgress >= 1) {
         nav.mode = "warping";
         nav.warpFrom = { ...player.position };
@@ -2541,12 +2857,14 @@ function runPlayerModules(world: GameWorld, dt: number) {
           0,
           derived.maxShield
         );
+        emitRepairPulse(world, player.position, "shield");
       } else if (module.kind === "armor_repairer") {
         player.armor = clamp(
           player.armor + Math.round((module.repairAmount ?? 0) * derived.armorRepairAmountMultiplier),
           0,
           derived.maxArmor
         );
+        emitRepairPulse(world, player.position, "armor");
       }
 
       runtime.cycleRemaining = (module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived);
@@ -2785,7 +3103,7 @@ function updateProjectiles(world: GameWorld, dt: number) {
           );
           if (projectile.damage >= 1) {
             const impactColor = projectile.moduleId.includes("missile") ? "#ffb265" : "#6feeff";
-            emitImpact(world, projectile.position, impactColor);
+            emitImpact(world, projectile.position, impactColor, projectile.moduleId);
           }
           consumed = true;
           break;
@@ -2793,6 +3111,9 @@ function updateProjectiles(world: GameWorld, dt: number) {
       }
     } else if (distance(projectile.position, world.player.position) <= projectile.radius + 18) {
       const module = moduleById[projectile.moduleId];
+      const shieldBefore = world.player.shield;
+      const armorBefore = world.player.armor;
+      const hullBefore = world.player.hull;
       applyDamageToTarget(
         world.player,
         createDamagePacket(module?.damageProfile, projectile.damage),
@@ -2805,7 +3126,23 @@ function updateProjectiles(world: GameWorld, dt: number) {
         projectile.damage < 1 ? "#c4d1e8" : "#ff7d7d"
       );
       if (projectile.damage >= 1) {
-        emitImpact(world, projectile.position, "#ff5544");
+        const hullDamaged = hullBefore > world.player.hull;
+        const armorDamaged = armorBefore > world.player.armor;
+        const shieldDamaged = shieldBefore > world.player.shield;
+        const sector = world.sectors[world.currentSectorId];
+        if (hullDamaged) {
+          emitHullHit(world, projectile.position);
+          sector.cameraShake = Math.min(10, (sector.cameraShake ?? 0) + 4 + projectile.damage * 0.04);
+          sector.playerHitFlash = Math.max(sector.playerHitFlash ?? 0, 0.22);
+        } else if (armorDamaged) {
+          emitArmorHit(world, projectile.position);
+          sector.cameraShake = Math.min(7, (sector.cameraShake ?? 0) + 2 + projectile.damage * 0.02);
+          sector.playerHitFlash = Math.max(sector.playerHitFlash ?? 0, 0.14);
+        } else if (shieldDamaged) {
+          emitShieldHit(world, projectile.position);
+          sector.cameraShake = Math.min(3.5, (sector.cameraShake ?? 0) + 0.8 + projectile.damage * 0.01);
+          sector.playerHitFlash = Math.max(sector.playerHitFlash ?? 0, 0.06);
+        }
       }
       consumed = true;
     }
@@ -2891,6 +3228,11 @@ function cleanupWorld(world: GameWorld) {
     awardPilotLicenseProgress(world, bounty / 55);
     addFloatingText(world, enemy.position, `+${bounty}cr bounty`, "#9fe3b6");
     emitExplosion(world, enemy.position, variant.color);
+    const distToPlayer = distance(enemy.position, world.player.position);
+    if (distToPlayer < 320) {
+      const shakeStrength = 5 * Math.max(0, 1 - distToPlayer / 320);
+      sector.cameraShake = Math.min(10, (sector.cameraShake ?? 0) + shakeStrength);
+    }
     sector.wrecks.push({
       id: `wreck-${Date.now()}-${enemy.id}`,
       position: { ...enemy.position },
@@ -2945,6 +3287,9 @@ function cleanupWorld(world: GameWorld) {
 
   if (world.player.hull <= 0) {
     const deathPosition = { ...world.player.position };
+    const playerHull = playerShipById[world.player.hullId];
+    emitExplosion(world, deathPosition, playerHull?.color ?? "#d8ff9b");
+    sector.cameraShake = 12;
     const droppedModules = [
       ...world.player.equipped.weapon,
       ...world.player.equipped.utility,
@@ -3169,6 +3514,7 @@ export function updateWorld(world: GameWorld, dt: number) {
   updateBuildSwap(world, dt);
   resetCombatEffects(world);
   applyPlayerControlEffects(world);
+  applyEnemyControlEffects(world);
   updateRouteAutopilot(world);
   updatePlayerNavigation(world, dt);
   applyAnomalyFields(world, dt);

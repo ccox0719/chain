@@ -371,6 +371,14 @@ export function renderSector(
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
   drawArenaBackdrop(ctx, viewportWidth, viewportHeight, world, zoom, cameraX, cameraY);
 
+  if (sector.playerHitFlash && sector.playerHitFlash > 0) {
+    const flashAlpha = Math.min(0.45, sector.playerHitFlash * 2.2);
+    ctx.save();
+    ctx.fillStyle = `rgba(255, 28, 28, ${flashAlpha})`;
+    ctx.fillRect(0, 0, viewportWidth, viewportHeight);
+    ctx.restore();
+  }
+
   if (world.player.navigation.mode === "warping" && !lowQuality) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
@@ -384,9 +392,13 @@ export function renderSector(
     ctx.restore();
   }
 
+  const shakeAmt = sector.cameraShake ?? 0;
+  const shakeX = shakeAmt > 0 ? Math.sin(world.elapsedTime * 74) * shakeAmt : 0;
+  const shakeY = shakeAmt > 0 ? Math.cos(world.elapsedTime * 67) * shakeAmt : 0;
+
   ctx.save();
   ctx.scale(zoom, zoom);
-  ctx.translate(-cameraX, -cameraY);
+  ctx.translate(-(cameraX + shakeX), -(cameraY + shakeY));
 
   destinations.filter((entry) => entry.kind === "belt").forEach((belt) => {
     ctx.strokeStyle = "rgba(110, 245, 255, 0.36)";
