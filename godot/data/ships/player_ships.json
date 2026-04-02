@@ -1,0 +1,20 @@
+{
+  "default_ship_id": "lumen-runner",
+  "ships": [
+    {
+      "id": "lumen-runner",
+      "name": "Lumen Runner",
+      "speed": 260,
+      "turn_speed": 5.5,
+      "weapon_range": 760,
+      "weapon_damage": 18,
+      "weapon_hardpoints": 2,
+      "utility_hardpoints": 2,
+      "defense_hardpoints": 1,
+      "power_capacity": 100,
+      "cargo_capacity": 20,
+      "max_hp": 100,
+      "start_position": { "x": 0, "y": 0 }
+    }
+  ]
+}

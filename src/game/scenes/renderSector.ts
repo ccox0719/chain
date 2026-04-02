@@ -5,12 +5,16 @@ import { getSystemDestinations, sectorById } from "../data/sectors";
 import { computeDerivedStats } from "../utils/stats";
 import { getObjectInfo } from "../world/spaceObjects";
 
+let _lowQuality = false;
+
 function setGlow(ctx: CanvasRenderingContext2D, color: string, blur: number) {
+  if (_lowQuality) return;
   ctx.shadowColor = color;
   ctx.shadowBlur = blur;
 }
 
 function clearGlow(ctx: CanvasRenderingContext2D) {
+  if (_lowQuality) return;
   ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
 }
@@ -109,6 +113,57 @@ function drawDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, radius
   ctx.stroke();
 }
 
+let backdropCache: { width: number; height: number; canvas: HTMLCanvasElement } | null = null;
+
+function buildBackdropCache(width: number, height: number) {
+  if (backdropCache && backdropCache.width === width && backdropCache.height === height) {
+    return backdropCache.canvas;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const cacheCtx = canvas.getContext("2d");
+  if (!cacheCtx) return canvas;
+
+  cacheCtx.fillStyle = "#020611";
+  cacheCtx.fillRect(0, 0, width, height);
+
+  const radialA = cacheCtx.createRadialGradient(width * 0.25, height * 0.3, 10, width * 0.25, height * 0.3, width * 0.65);
+  radialA.addColorStop(0, "rgba(52, 114, 255, 0.20)");
+  radialA.addColorStop(1, "rgba(0, 0, 0, 0)");
+  cacheCtx.fillStyle = radialA;
+  cacheCtx.fillRect(0, 0, width, height);
+
+  const radialB = cacheCtx.createRadialGradient(width * 0.7, height * 0.58, 10, width * 0.7, height * 0.58, width * 0.58);
+  radialB.addColorStop(0, "rgba(255, 106, 76, 0.14)");
+  radialB.addColorStop(1, "rgba(0, 0, 0, 0)");
+  cacheCtx.fillStyle = radialB;
+  cacheCtx.fillRect(0, 0, width, height);
+
+  cacheCtx.strokeStyle = "rgba(102, 196, 255, 0.20)";
+  cacheCtx.lineWidth = 1;
+  cacheCtx.beginPath();
+  for (let x = 0; x <= width; x += 34) {
+    cacheCtx.moveTo(x, 10);
+    cacheCtx.lineTo(x, height - 10);
+  }
+  for (let y = 0; y <= height; y += 34) {
+    cacheCtx.moveTo(10, y);
+    cacheCtx.lineTo(width - 10, y);
+  }
+  cacheCtx.stroke();
+
+  cacheCtx.strokeStyle = "rgba(114, 206, 255, 0.45)";
+  cacheCtx.lineWidth = 2;
+  cacheCtx.strokeRect(12, 12, width - 24, height - 24);
+  cacheCtx.strokeStyle = "rgba(202, 242, 255, 0.18)";
+  cacheCtx.strokeRect(6, 6, width - 12, height - 12);
+
+  backdropCache = { width, height, canvas };
+  return canvas;
+}
+
 function drawArenaBackdrop(
   ctx: CanvasRenderingContext2D,
   viewportWidth: number,
@@ -118,106 +173,7 @@ function drawArenaBackdrop(
   cameraX: number,
   cameraY: number
 ) {
-  const time = world.elapsedTime;
-
-  ctx.fillStyle = "#020611";
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-
-  const radialA = ctx.createRadialGradient(
-    viewportWidth * 0.25,
-    viewportHeight * 0.3,
-    10,
-    viewportWidth * 0.25,
-    viewportHeight * 0.3,
-    viewportWidth * 0.65
-  );
-  radialA.addColorStop(0, "rgba(52, 114, 255, 0.20)");
-  radialA.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = radialA;
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-
-  const radialB = ctx.createRadialGradient(
-    viewportWidth * 0.7,
-    viewportHeight * 0.58,
-    10,
-    viewportWidth * 0.7,
-    viewportHeight * 0.58,
-    viewportWidth * 0.58
-  );
-  radialB.addColorStop(0, "rgba(255, 106, 76, 0.14)");
-  radialB.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = radialB;
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(10, 10, viewportWidth - 20, viewportHeight - 20);
-  ctx.clip();
-
-  ctx.strokeStyle = "rgba(102, 196, 255, 0.28)";
-  ctx.lineWidth = 1;
-  setGlow(ctx, "#4ecbff", 5);
-
-  const spacing = 34;
-  const offsetX = ((cameraX * zoom) % spacing + spacing) % spacing;
-  const offsetY = ((cameraY * zoom) % spacing + spacing) % spacing;
-  const centerX = viewportWidth / 2;
-  const centerY = viewportHeight / 2;
-
-  for (let x = -spacing * 2; x <= viewportWidth + spacing * 2; x += spacing) {
-    ctx.beginPath();
-    for (let y = -spacing * 2; y <= viewportHeight + spacing * 2; y += 12) {
-      const distanceToCenter = (y - centerY) / viewportHeight;
-      const warp =
-        Math.sin((y + time * 120 + x * 0.16) * 0.013) * 10 +
-        Math.sin((x + time * 70) * 0.01) * 5 +
-        distanceToCenter * Math.sin((x - centerX) * 0.012) * 24;
-      const pointX = x - offsetX + warp;
-      if (y === -spacing * 2) {
-        ctx.moveTo(pointX, y);
-      } else {
-        ctx.lineTo(pointX, y);
-      }
-    }
-    ctx.stroke();
-  }
-
-  for (let y = -spacing * 2; y <= viewportHeight + spacing * 2; y += spacing) {
-    ctx.beginPath();
-    for (let x = -spacing * 2; x <= viewportWidth + spacing * 2; x += 12) {
-      const distanceToCenter = (x - centerX) / viewportWidth;
-      const warp =
-        Math.sin((x + time * 90 + y * 0.14) * 0.013) * 10 +
-        Math.cos((y + time * 60) * 0.012) * 5 +
-        distanceToCenter * Math.cos((y - centerY) * 0.012) * 24;
-      const pointY = y - offsetY + warp;
-      if (x === -spacing * 2) {
-        ctx.moveTo(x, pointY);
-      } else {
-        ctx.lineTo(x, pointY);
-      }
-    }
-    ctx.stroke();
-  }
-
-  clearGlow(ctx);
-  ctx.restore();
-
-  for (let index = 0; index < 36; index += 1) {
-    const px = ((index * 179 + time * 40) % (viewportWidth + 120)) - 60;
-    const py = ((index * 97 + time * 24) % (viewportHeight + 80)) - 40;
-    const size = 1 + (index % 3);
-    ctx.fillStyle = `rgba(182, 232, 255, ${0.10 + (index % 4) * 0.04})`;
-    ctx.fillRect(px, py, size, size);
-  }
-
-  ctx.strokeStyle = "rgba(114, 206, 255, 0.45)";
-  ctx.lineWidth = 2;
-  setGlow(ctx, "#72ceff", 14);
-  ctx.strokeRect(12, 12, viewportWidth - 24, viewportHeight - 24);
-  ctx.strokeStyle = "rgba(202, 242, 255, 0.18)";
-  ctx.strokeRect(6, 6, viewportWidth - 12, viewportHeight - 12);
-  clearGlow(ctx);
+  ctx.drawImage(buildBackdropCache(viewportWidth, viewportHeight), 0, 0);
 }
 
 function drawEnergyArc(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, rotation: number) {
@@ -396,8 +352,10 @@ export function renderSector(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   world: GameWorld,
-  zoom: number
+  zoom: number,
+  lowQuality = false
 ) {
+  _lowQuality = lowQuality;
   const viewportWidth = canvas.clientWidth;
   const viewportHeight = canvas.clientHeight;
   const sectorDef = sectorById[world.currentSectorId];
@@ -413,7 +371,7 @@ export function renderSector(
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
   drawArenaBackdrop(ctx, viewportWidth, viewportHeight, world, zoom, cameraX, cameraY);
 
-  if (world.player.navigation.mode === "warping") {
+  if (world.player.navigation.mode === "warping" && !lowQuality) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     setGlow(ctx, "#6ed7ff", 12);
@@ -608,7 +566,7 @@ export function renderSector(
     clearGlow(ctx);
     ctx.restore();
 
-    drawEnergyArc(ctx, enemy.position.x, enemy.position.y, 28 + (index % 3) * 2, "rgba(255, 120, 102, 0.72)", world.elapsedTime + index);
+    if (!lowQuality) drawEnergyArc(ctx, enemy.position.x, enemy.position.y, 28 + (index % 3) * 2, "rgba(255, 120, 102, 0.72)", world.elapsedTime + index);
 
     ctx.fillStyle = "rgba(255,255,255,0.10)";
     ctx.fillRect(enemy.position.x - 18, enemy.position.y + 18, 36, 3);
@@ -626,17 +584,19 @@ export function renderSector(
   clearGlow(ctx);
   ctx.restore();
 
-  drawEnergyArc(ctx, world.player.position.x, world.player.position.y, 30, "rgba(182, 255, 112, 0.70)", -world.elapsedTime * 1.4);
+  if (!lowQuality) {
+    drawEnergyArc(ctx, world.player.position.x, world.player.position.y, 30, "rgba(182, 255, 112, 0.70)", -world.elapsedTime * 1.4);
 
-  const playerScreen = worldToScreen(world.player.position, cameraX, cameraY, zoom);
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  const playerAura = ctx.createRadialGradient(playerScreen.x, playerScreen.y, 0, playerScreen.x, playerScreen.y, 80 * zoom);
-  playerAura.addColorStop(0, "rgba(166, 255, 93, 0.14)");
-  playerAura.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = playerAura;
-  ctx.fillRect(playerScreen.x - 90 * zoom, playerScreen.y - 90 * zoom, 180 * zoom, 180 * zoom);
-  ctx.restore();
+    const playerScreen = worldToScreen(world.player.position, cameraX, cameraY, zoom);
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const playerAura = ctx.createRadialGradient(playerScreen.x, playerScreen.y, 0, playerScreen.x, playerScreen.y, 80 * zoom);
+    playerAura.addColorStop(0, "rgba(166, 255, 93, 0.14)");
+    playerAura.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = playerAura;
+    ctx.fillRect(playerScreen.x - 90 * zoom, playerScreen.y - 90 * zoom, 180 * zoom, 180 * zoom);
+    ctx.restore();
+  }
 
   const selectedInfo = getObjectInfo(world, world.selectedObject);
   if (selectedInfo) {

@@ -198,6 +198,12 @@ function pushStory(world: GameWorld, message: string) {
   world.storyLog = [message, ...world.storyLog].slice(0, 7);
 }
 
+export function addCredits(world: GameWorld, amount: number) {
+  if (!Number.isFinite(amount) || amount === 0) return;
+  world.player.credits = Math.max(0, world.player.credits + Math.round(amount));
+  pushStory(world, `DEV: added ${Math.round(amount)} credits.`);
+}
+
 function ensurePilotLicense(world: GameWorld) {
   world.player.pilotLicense = normalizePilotLicense(world.player.pilotLicense);
 }

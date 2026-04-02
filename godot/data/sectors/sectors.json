@@ -1,0 +1,119 @@
+{
+  "default_sector_id": "lumen-rest",
+  "sectors": [
+    {
+      "id": "lumen-rest",
+      "name": "Lumen Rest",
+      "grid": 48,
+      "player_start": { "x": 0, "y": 0 },
+      "travel_destinations": ["cinder-anchor", "hush-basin"],
+      "stations": [
+        {
+          "id": "lumen-rest-station",
+          "name": "Lumen Rest Station",
+          "position": { "x": 120, "y": -80 },
+          "radius": 36,
+          "dock_radius": 88,
+          "market": {
+            "scrap": { "buy_price": 16, "sell_price": 12 },
+            "fuel-cells": { "buy_price": 52, "sell_price": 41 },
+            "medical-supplies": { "buy_price": 110, "sell_price": 86 }
+          }
+        }
+      ],
+      "enemies": [
+        {
+          "id": "enemy-1",
+          "variant_id": "shard-skirmisher",
+          "position": { "x": 460, "y": -170 }
+        },
+        {
+          "id": "enemy-2",
+          "variant_id": "rift-hound",
+          "position": { "x": -320, "y": 260 }
+        },
+        {
+          "id": "enemy-3",
+          "variant_id": "static-needle",
+          "position": { "x": 160, "y": 380 }
+        }
+      ]
+    },
+    {
+      "id": "cinder-anchor",
+      "name": "Cinder Anchor",
+      "grid": 56,
+      "player_start": { "x": 0, "y": 0 },
+      "travel_destinations": ["lumen-rest", "hush-basin"],
+      "stations": [
+        {
+          "id": "cinder-anchor-station",
+          "name": "Cinder Anchor Station",
+          "position": { "x": -160, "y": 140 },
+          "radius": 40,
+          "dock_radius": 96,
+          "market": {
+            "scrap": { "buy_price": 32, "sell_price": 26 },
+            "fuel-cells": { "buy_price": 38, "sell_price": 29 },
+            "medical-supplies": { "buy_price": 132, "sell_price": 101 }
+          }
+        }
+      ],
+      "enemies": [
+        {
+          "id": "enemy-1",
+          "variant_id": "rift-hound",
+          "position": { "x": 380, "y": 120 }
+        },
+        {
+          "id": "enemy-2",
+          "variant_id": "rift-hound",
+          "position": { "x": -360, "y": -260 }
+        },
+        {
+          "id": "enemy-3",
+          "variant_id": "shard-skirmisher",
+          "position": { "x": 180, "y": -340 }
+        }
+      ]
+    },
+    {
+      "id": "hush-basin",
+      "name": "Hush Basin",
+      "grid": 44,
+      "player_start": { "x": 0, "y": 0 },
+      "travel_destinations": ["lumen-rest", "cinder-anchor"],
+      "stations": [
+        {
+          "id": "hush-basin-station",
+          "name": "Hush Basin Exchange",
+          "position": { "x": 190, "y": 60 },
+          "radius": 34,
+          "dock_radius": 90,
+          "market": {
+            "scrap": { "buy_price": 14, "sell_price": 10 },
+            "fuel-cells": { "buy_price": 72, "sell_price": 58 },
+            "medical-supplies": { "buy_price": 62, "sell_price": 48 }
+          }
+        }
+      ],
+      "enemies": [
+        {
+          "id": "enemy-1",
+          "variant_id": "static-needle",
+          "position": { "x": 330, "y": -150 }
+        },
+        {
+          "id": "enemy-2",
+          "variant_id": "static-needle",
+          "position": { "x": -240, "y": 300 }
+        },
+        {
+          "id": "enemy-3",
+          "variant_id": "shard-skirmisher",
+          "position": { "x": -420, "y": -60 }
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import { playerShips } from "../game/data/ships";
 import { renderSector } from "../game/scenes/renderSector";
 import {
   acceptMission,
+  addCredits,
   buyCommodity,
   buyModule,
   buyShip,
@@ -57,6 +58,8 @@ function worldPointFromClient(
 export function useSpaceGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef<GameWorld>(loadWorld());
+  const autosaveRef = useRef<number | null>(null);
+  const isMobileRef = useRef<boolean>(window.innerWidth < 768);
   const zoomTargetRef = useRef<number>(
     window.innerWidth < 768
       ? 0.28
@@ -70,6 +73,11 @@ export function useSpaceGame() {
     y: number;
     target: SelectableRef;
   } | null>(null);
+
+  const refresh = () => {
+    setSnapshot(createSnapshot(worldRef.current));
+    saveWorld(worldRef.current);
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -89,6 +97,10 @@ export function useSpaceGame() {
         case "escape":
           setContextMenu(null);
           break;
+        case "f8":
+          addCredits(worldRef.current, 10000);
+          refresh();
+          break;
         default:
           break;
       }
@@ -99,13 +111,29 @@ export function useSpaceGame() {
   }, []);
 
   useEffect(() => {
-    saveWorld(worldRef.current);
-  }, [snapshot]);
-
-  useEffect(() => {
     const handleWindowClick = () => setContextMenu(null);
     window.addEventListener("click", handleWindowClick);
     return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
+
+  useEffect(() => {
+    const saveNow = () => {
+      saveWorld(worldRef.current);
+    };
+
+    saveNow();
+    autosaveRef.current = window.setInterval(saveNow, 2000);
+    window.addEventListener("beforeunload", saveNow);
+    window.addEventListener("pagehide", saveNow);
+
+    return () => {
+      if (autosaveRef.current !== null) {
+        window.clearInterval(autosaveRef.current);
+        autosaveRef.current = null;
+      }
+      window.removeEventListener("beforeunload", saveNow);
+      window.removeEventListener("pagehide", saveNow);
+    };
   }, []);
 
   useEffect(() => {
@@ -115,10 +143,12 @@ export function useSpaceGame() {
     if (!context) return;
 
     const resize = () => {
+      isMobileRef.current = window.innerWidth < 768;
       const bounds = canvas.getBoundingClientRect();
-      canvas.width = Math.floor(bounds.width * window.devicePixelRatio);
-      canvas.height = Math.floor(bounds.height * window.devicePixelRatio);
-      context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+      canvas.width = Math.floor(bounds.width * pixelRatio);
+      canvas.height = Math.floor(bounds.height * pixelRatio);
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     };
 
     resize();
@@ -134,12 +164,12 @@ export function useSpaceGame() {
       const dt = Math.min(0.033, (time - lastTime) / 1000);
       lastTime = time;
 
-        updateWorld(worldRef.current, dt);
-        zoomCurrentRef.current += (zoomTargetRef.current - zoomCurrentRef.current) * Math.min(1, dt * 8);
-        renderSector(context, canvas, worldRef.current, zoomCurrentRef.current);
+      updateWorld(worldRef.current, dt);
+      zoomCurrentRef.current += (zoomTargetRef.current - zoomCurrentRef.current) * Math.min(1, dt * 8);
+      renderSector(context, canvas, worldRef.current, zoomCurrentRef.current, isMobileRef.current);
 
       snapshotAccumulator += dt;
-      if (snapshotAccumulator >= 0.1) {
+      if (snapshotAccumulator >= 0.2) {
         snapshotAccumulator = 0;
         setSnapshot(createSnapshot(worldRef.current));
       }
@@ -156,8 +186,6 @@ export function useSpaceGame() {
       window.visualViewport?.removeEventListener("resize", resize);
     };
   }, []);
-
-  const refresh = () => setSnapshot(createSnapshot(worldRef.current));
 
   const actions = useMemo(
     () => ({
@@ -327,6 +355,73 @@ export function useSpaceGame() {
     }),
     []
   );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let pinchDistance = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = performance.now();
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          actions.handleCanvasRightClick(touchStartX, touchStartY);
+        }, 400);
+      } else if (e.touches.length === 2) {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchDistance = Math.hypot(dx, dy);
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (pinchDistance > 0) actions.adjustZoom(pinchDistance - dist);
+        pinchDistance = dist;
+      } else if (e.touches.length === 1 && longPressTimer) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.hypot(dx, dy) > 8) { clearTimeout(longPressTimer); longPressTimer = null; }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length < 2) pinchDistance = 0;
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        if (performance.now() - touchStartTime < 400) {
+          actions.handleCanvasLeftClick(touchStartX, touchStartY);
+        }
+      }
+    };
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      if (longPressTimer) clearTimeout(longPressTimer);
+    };
+  }, [actions]);
 
   return {
     canvasRef,

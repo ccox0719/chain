@@ -1,0 +1,17 @@
+res://autoload/game_state.gd
+res://autoload/save_manager.gd
+res://scenes/boot/boot.gd
+res://autoload/event_bus.gd
+res://autoload/input_router.gd
+res://scripts/content/enemy_loader.gd
+res://scripts/content/mission_loader.gd
+res://scripts/content/module_loader.gd
+res://scripts/content/sector_loader.gd
+res://scripts/content/ship_loader.gd
+res://scripts/content/trade_good_loader.gd
+res://scenes/game/game_root.gd
+res://scenes/game/sector_view.gd
+res://node_2d.tscn
+res://scenes/station/station_panel.gd
+res://scenes/ui/hud.gd
+res://scenes/ui/map_panel.gd
