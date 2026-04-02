@@ -472,7 +472,14 @@ export function getModuleRoleTag(module: ModuleDefinition) {
   if (module.kind === "mining_laser") return "Mining";
   if (module.kind === "salvager") return "Salvage";
   if (module.kind === "shield_booster" || module.kind === "armor_repairer" || module.kind === "hardener") return "Tank";
-  if (module.kind === "webifier" || module.kind === "target_painter" || module.kind === "tracking_disruptor" || module.kind === "sensor_dampener") return "Control";
+  if (
+    module.kind === "webifier" ||
+    module.kind === "warp_disruptor" ||
+    module.kind === "target_painter" ||
+    module.kind === "tracking_disruptor" ||
+    module.kind === "sensor_dampener" ||
+    module.kind === "energy_neutralizer"
+  ) return "Control";
   if (module.kind === "passive") return "Support";
   return "Utility";
 }

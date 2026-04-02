@@ -176,6 +176,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
           .filter(([, amount]) => (amount ?? 0) > 0)
           .map(([commodityId, amount]) => `${amount} ${commodityById[commodityId]?.name ?? commodityId}`)
           .join(", ");
+        const shipSummary = wreck.shipId ? `${playerShipById[wreck.shipId]?.name ?? wreck.shipId} hull` : "";
         const moduleSummary = wreck.modules.length > 0 ? `${wreck.modules.length} modules` : "";
         return {
           ref,
@@ -184,7 +185,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
           position,
           distance: distanceFromPlayer,
           velocity: 0,
-          subtitle: [resourceSummary || `${wreck.credits} credits`, commoditySummary, moduleSummary].filter(Boolean).join(" • "),
+          subtitle: [resourceSummary || `${wreck.credits} credits`, commoditySummary, shipSummary, moduleSummary].filter(Boolean).join(" • "),
           threatLabel: "Salvage",
           signatureRadius: 28,
           lootCredits: wreck.credits

@@ -92,9 +92,11 @@ export type ModuleKind =
   | "missile"
   | "afterburner"
   | "webifier"
+  | "warp_disruptor"
   | "target_painter"
   | "tracking_disruptor"
   | "sensor_dampener"
+  | "energy_neutralizer"
   | "shield_booster"
   | "armor_repairer"
   | "hardener"
@@ -274,9 +276,11 @@ export interface ModuleDefinition {
   speedBonus?: number;
   resistBonus?: number;
   speedPenalty?: number;
+  warpDisruptStrength?: number;
   signatureBonus?: number;
   trackingPenalty?: number;
   lockRangePenalty?: number;
+  capacitorNeutralizeAmount?: number;
   tracking?: number;
   signatureResolution?: number;
   weaponClass?: SizeClass;
@@ -337,6 +341,14 @@ export interface CombatEffectsState {
   signatureMultiplier: number;
   turretTrackingMultiplier: number;
   lockRangeMultiplier: number;
+  capacitorRegenMultiplier: number;
+}
+
+export interface TacticalSlowState {
+  activeRemaining: number;
+  cooldownRemaining: number;
+  capPenaltyRemaining: number;
+  speedPenaltyRemaining: number;
 }
 
 export interface EnemyVariant {
@@ -417,6 +429,7 @@ export interface MissionDefinition {
   briefing: string;
   rewardCredits: number;
   requiredMissionId?: string;
+  minPowerTier?: number;
   unlockSystemId?: string;
   targetCount?: number;
   targetResource?: ResourceId;
@@ -569,6 +582,7 @@ export interface PlayerState {
   navigation: NavigationState;
   queuedUndockActions: CommandAction[];
   effects: CombatEffectsState;
+  tacticalSlow: TacticalSlowState;
   savedBuilds: SavedBuild[];
   buildSwap: BuildSwapState;
   recentDamageTimer: number;
@@ -633,6 +647,7 @@ export interface WreckState {
   resources: Partial<Record<ResourceId, number>>;
   commodities: Partial<Record<CommodityId, number>>;
   sourceName: string;
+  shipId?: string;
   modules: string[];
 }
 

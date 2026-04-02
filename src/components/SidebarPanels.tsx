@@ -136,10 +136,10 @@ export function SidebarPanels({
   }, []);
   const equippedWeaponIds = world.player.equipped.weapon;
   const storedModuleEntries = moduleCatalog
-    .filter((module) => (world.player.inventory.modules[module.id] ?? 0) > 0)
+    .filter((module) => Number(world.player.inventory.modules[module.id] ?? 0) > 0)
     .map((module) => ({
       module,
-      count: world.player.inventory.modules[module.id] ?? 0,
+      count: Number(world.player.inventory.modules[module.id] ?? 0),
       compareTo: findComparableEquippedWeapon(module, equippedWeaponIds)
     }));
   const equippedModuleEntries = equippedWeaponIds

@@ -9,6 +9,7 @@ import {
   buyCommodity,
   buyModule,
   buyShip,
+  activateTacticalSlow as triggerTacticalSlow,
   clearQueuedUndockActions,
   clearRouteDestination,
   createSnapshot,
@@ -235,6 +236,10 @@ export function useSpaceGame() {
       },
       activateBuild: (buildId: "build-1" | "build-2" | "build-3") => {
         startBuildSwap(worldRef.current, buildId);
+        refresh();
+      },
+      activateTacticalSlow: () => {
+        triggerTacticalSlow(worldRef.current);
         refresh();
       },
       acceptMission: (missionId: string) => {
@@ -464,7 +469,8 @@ function loadWorld() {
                   speedMultiplier: 1,
                   signatureMultiplier: 1,
                   turretTrackingMultiplier: 1,
-                  lockRangeMultiplier: 1
+                  lockRangeMultiplier: 1,
+                  capacitorRegenMultiplier: 1
                 }
               })) ?? fallbackSector.enemies,
             asteroids: parsedSector?.asteroids ?? fallbackSector.asteroids,
@@ -508,8 +514,9 @@ function loadWorld() {
               ...parsed.player.buildSwap,
               targetEquipped:
                 parsed.player.buildSwap.targetEquipped ?? fallback.player.buildSwap.targetEquipped
-            }
+          }
           : fallback.player.buildSwap,
+        tacticalSlow: parsed.player?.tacticalSlow ?? fallback.player.tacticalSlow,
         recentDamageTimer: parsed.player?.recentDamageTimer ?? fallback.player.recentDamageTimer
       },
       sectors: {

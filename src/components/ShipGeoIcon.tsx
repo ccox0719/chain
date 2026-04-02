@@ -138,6 +138,62 @@ const SHIP_SHAPES: Record<string, ShapeData> = {
     details: ["M -20 0 L 20 0", "M 8 -8 L 8 8", "M -14 -10 L -14 10"],
   },
 
+  // ── ADDITIONAL PLAYER HULLS ───────────────────────────────────────────────
+
+  // Sharper dart, borrowing the scout language with a slightly broader spine
+  "helion-dart": {
+    path: "M 21 0 L 3 -5 L -13 -8 L -9 0 L -13 8 L 3 5 Z",
+    details: ["M -9 0 L 21 0", "M 3 -5 L 3 5"],
+  },
+
+  // Lean raider wing with a longer rear taper
+  "relay-jackal": {
+    path: "M 19 0 L 6 -10 L -10 -12 L -14 0 L -10 12 L 6 10 Z",
+    details: ["M -14 0 L 19 0", "M 6 -10 L 6 10"],
+  },
+
+  // Needle-hauler hybrid, reused from the hostile pike language
+  "kiln-harrier": {
+    path: "M 22 0 L 8 -4 L 6 -11 L 1 -4 L -13 -6 L -11 0 L -13 6 L 1 4 L 6 11 L 8 4 Z",
+    details: ["M -11 0 L 22 0"],
+  },
+
+  // Fast spectral kite with a narrower spine
+  "dusk-claimer": {
+    path: "M 19 0 L 7 -11 L -9 -13 L -15 0 L -9 13 L 7 11 Z",
+    details: ["M -15 0 L 19 0", "M 7 -11 L 7 11"],
+  },
+
+  // Defensive shell, pulled from the gunship/bulwark family
+  "solar-bulwark": {
+    path: "M 17 -8 L 17 8 L 5 14 L -15 10 L -18 0 L -15 -10 L 5 -14 Z",
+    details: ["M -18 0 L 17 0", "M 5 -14 L 5 14"],
+  },
+
+  // Angular cruiser with a forward-swept nose
+  "ashen-arc": {
+    path: "M 21 0 L 8 -6 L 4 -12 L -4 -8 L -16 -10 L -14 0 L -16 10 L -4 8 L 4 12 L 8 6 Z",
+    details: ["M -14 0 L 21 0", "M 4 -12 L 4 12"],
+  },
+
+  // Quiet spectral hull, using a more open wing profile
+  "null-choir": {
+    path: "M 18 -6 L 7 -13 L -12 -10 L -16 0 L -12 10 L 7 13 L 18 6 L 8 0 Z",
+    details: ["M 8 0 L -16 0"],
+  },
+
+  // Heavy logistics frame with a cargo-first profile
+  "drift-warehouse": {
+    path: "M 17 -8 L 17 8 L -17 12 L -20 0 L -17 -12 Z",
+    details: ["M -20 0 L 17 0", "M 0 -10 L 0 10", "M -9 -11 L -9 11"],
+  },
+
+  // Small agile work hull, borrowing the enemy drone language
+  "ember-hopper": {
+    path: "M 21 0 L -11 -4 L -8 0 L -11 4 Z",
+    details: ["M -8 0 L 21 0", "M -2 -3 L -2 3"],
+  },
+
   // ── ENEMIES ─────────────────────────────────────────────────────────────────
 
   // Tiny sliver — small fast scout

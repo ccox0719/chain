@@ -32,6 +32,7 @@ import { defaultStarterShipConfigId } from "../data/starterShips";
 import { createProjectile, createStarterPlayerState, rebuildPlayerRuntime } from "../entities/factories";
 import {
   getPilotLicenseLevelForProgress,
+  getPilotLicenseProgressRange,
   getRequiredPilotLicenseLevel,
   hasPilotLicenseForModule,
   normalizePilotLicense
@@ -64,6 +65,16 @@ import {
   subtract
 } from "../utils/vector";
 import { findObjectAtPoint, getObjectInfo, getObjectPosition, getOverviewEntries } from "../world/spaceObjects";
+
+const TACTICAL_SLOW_CONFIG = {
+  timeScale: 0.4,
+  durationSec: 4,
+  cooldownSec: 55,
+  capPenaltySec: 10,
+  speedPenaltySec: 8,
+  speedPenaltyMultiplier: 0.85,
+  capacitorRegenPenaltyMultiplier: 0.8
+} as const;
 
 function addFloatingText(world: GameWorld, position: Vec2, text: string, color: string) {
   world.sectors[world.currentSectorId].floatingText.push({
@@ -316,6 +327,18 @@ function awardPilotLicenseProgress(world: GameWorld, amount: number) {
   }
 }
 
+function reducePilotLicenseProgress(world: GameWorld, amount: number) {
+  if (amount <= 0) return 0;
+  ensurePilotLicense(world);
+  const currentLevel = world.player.pilotLicense.level;
+  const currentProgress = world.player.pilotLicense.progress;
+  const { start } = getPilotLicenseProgressRange(currentLevel);
+  const nextProgress = Math.max(start, currentProgress - Math.max(1, Math.round(amount)));
+  world.player.pilotLicense.progress = nextProgress;
+  world.player.pilotLicense.level = currentLevel;
+  return currentProgress - nextProgress;
+}
+
 function getCurrentSector(world: GameWorld) {
   return world.sectors[world.currentSectorId];
 }
@@ -345,6 +368,40 @@ function getDifficultyModifiers(world: GameWorld) {
     playerDamageMultiplier: 1,
     enemyDamageMultiplier: 1
   };
+}
+
+function getTacticalSlowState(world: GameWorld) {
+  return world.player.tacticalSlow;
+}
+
+function getWorldTimeScale(world: GameWorld) {
+  return getTacticalSlowState(world).activeRemaining > 0 ? TACTICAL_SLOW_CONFIG.timeScale : 1;
+}
+
+function getShipPowerTier(shipId: string) {
+  const ship = playerShipById[shipId];
+  if (!ship) return 1;
+  if (ship.shipClass === "cruiser") return 3;
+  if (ship.shipClass === "destroyer") return 2;
+  return 1;
+}
+
+function getPlayerPowerTier(world: GameWorld) {
+  const shipTier = getShipPowerTier(world.player.hullId);
+  const equippedModuleIds = [
+    ...world.player.equipped.weapon,
+    ...world.player.equipped.utility,
+    ...world.player.equipped.defense
+  ].filter((moduleId): moduleId is string => Boolean(moduleId));
+  if (equippedModuleIds.length === 0) return shipTier;
+  const moduleTechValues = equippedModuleIds.map((moduleId) => moduleById[moduleId]?.techLevel ?? 1);
+  const averageTech = moduleTechValues.reduce((sum, value) => sum + value, 0) / moduleTechValues.length;
+  const highWater = Math.max(...moduleTechValues);
+  let tier = shipTier;
+  if (averageTech >= 2.4) tier += 1;
+  if (averageTech >= 3.2 || highWater >= 4) tier += 1;
+  if (shipTier >= 3 && highWater >= 3) tier = Math.max(tier, 3);
+  return Math.max(1, Math.min(4, tier));
 }
 
 function cloneLoadout(loadout: EquippedLoadout): EquippedLoadout {
@@ -411,16 +468,34 @@ function resetCombatEffects(world: GameWorld) {
     speedMultiplier: 1,
     signatureMultiplier: 1,
     turretTrackingMultiplier: 1,
-    lockRangeMultiplier: 1
+    lockRangeMultiplier: 1,
+    capacitorRegenMultiplier: 1
   };
   getCurrentSector(world).enemies.forEach((enemy) => {
     enemy.effects = {
       speedMultiplier: 1,
       signatureMultiplier: 1,
       turretTrackingMultiplier: 1,
-      lockRangeMultiplier: 1
+      lockRangeMultiplier: 1,
+      capacitorRegenMultiplier: 1
     };
   });
+}
+
+function applyTacticalSlowEffects(world: GameWorld) {
+  const tacticalSlow = getTacticalSlowState(world);
+  if (tacticalSlow.speedPenaltyRemaining > 0) {
+    world.player.effects.speedMultiplier = Math.min(
+      world.player.effects.speedMultiplier,
+      TACTICAL_SLOW_CONFIG.speedPenaltyMultiplier
+    );
+  }
+  if (tacticalSlow.capPenaltyRemaining > 0) {
+    world.player.effects.capacitorRegenMultiplier = Math.min(
+      world.player.effects.capacitorRegenMultiplier,
+      TACTICAL_SLOW_CONFIG.capacitorRegenPenaltyMultiplier
+    );
+  }
 }
 
 function applyPlayerControlEffects(world: GameWorld) {
@@ -432,6 +507,7 @@ function applyPlayerControlEffects(world: GameWorld) {
     if (!module) return;
     if (
       module.kind !== "webifier" &&
+      module.kind !== "warp_disruptor" &&
       module.kind !== "target_painter" &&
       module.kind !== "tracking_disruptor" &&
       module.kind !== "sensor_dampener"
@@ -488,6 +564,7 @@ function applyEnemyControlEffects(world: GameWorld) {
       if (!module) return;
       if (
         module.kind !== "webifier" &&
+        module.kind !== "warp_disruptor" &&
         module.kind !== "target_painter" &&
         module.kind !== "tracking_disruptor" &&
         module.kind !== "sensor_dampener"
@@ -517,6 +594,24 @@ function applyEnemyControlEffects(world: GameWorld) {
           1 - (module.lockRangePenalty ?? 0)
         );
       }
+    });
+  });
+}
+
+function getHostileWarpDisruptor(world: GameWorld) {
+  const player = world.player;
+  const sector = getCurrentSector(world);
+  return sector.enemies.find((enemy) => {
+    const variant = enemyVariantById[enemy.variantId];
+    if (!variant || enemy.hull <= 0) return false;
+    const playerDistance = distance(enemy.position, player.position);
+    const seesPlayer = playerDistance <= variant.lockRange * enemy.effects.lockRangeMultiplier;
+    if (!seesPlayer) return false;
+    return enemy.modules.some((runtime) => {
+      if (!runtime.active || !runtime.moduleId) return false;
+      const module = moduleById[runtime.moduleId];
+      if (!module || module.kind !== "warp_disruptor") return false;
+      return !module.range || playerDistance <= module.range;
     });
   });
 }
@@ -671,6 +766,14 @@ function getSavedBuild(world: GameWorld, buildId: BuildSlotId) {
   return world.player.savedBuilds.find((entry) => entry.id === buildId) ?? null;
 }
 
+function setInventoryModuleCount(world: GameWorld, moduleId: string, count: number) {
+  if (count > 0) {
+    world.player.inventory.modules[moduleId] = count;
+    return;
+  }
+  delete world.player.inventory.modules[moduleId];
+}
+
 function findMatchingBuild(world: GameWorld): BuildSlotId | null {
   const match = world.player.savedBuilds.find(
     (entry) =>
@@ -748,6 +851,7 @@ function updateBuildSwap(world: GameWorld, dt: number) {
   if (swap.remaining > 0) return;
   if (swap.targetEquipped) {
     applyBuildLoadout(world, swap.targetEquipped);
+    ensureMissionUnlocks(world);
     pushStory(
       world,
       `Reconfiguration complete: ${swap.targetBuildName ?? swap.targetBuildId ?? "saved build"}.`
@@ -763,6 +867,14 @@ function updateBuildSwap(world: GameWorld, dt: number) {
     remaining: 0,
     changedModuleCount: 0
   };
+}
+
+function updateTacticalSlowTimers(world: GameWorld, dt: number) {
+  const tacticalSlow = getTacticalSlowState(world);
+  tacticalSlow.activeRemaining = Math.max(0, tacticalSlow.activeRemaining - dt);
+  tacticalSlow.cooldownRemaining = Math.max(0, tacticalSlow.cooldownRemaining - dt);
+  tacticalSlow.capPenaltyRemaining = Math.max(0, tacticalSlow.capPenaltyRemaining - dt);
+  tacticalSlow.speedPenaltyRemaining = Math.max(0, tacticalSlow.speedPenaltyRemaining - dt);
 }
 
 function showHitText(
@@ -960,6 +1072,7 @@ function completeTransportMission(world: GameWorld, mission: TransportMissionDef
 }
 
 function ensureMissionUnlocks(world: GameWorld) {
+  const playerPowerTier = getPlayerPowerTier(world);
   missionCatalog.forEach((mission) => {
     const missionState = world.missions[mission.id];
     if (missionState.status !== "locked") return;
@@ -967,6 +1080,9 @@ function ensureMissionUnlocks(world: GameWorld) {
       mission.requiredMissionId &&
       world.missions[mission.requiredMissionId]?.status !== "completed"
     ) {
+      return;
+    }
+    if (mission.minPowerTier && playerPowerTier < mission.minPowerTier - 1) {
       return;
     }
     missionState.status = "available";
@@ -1336,7 +1452,7 @@ export function buyModule(world: GameWorld, moduleId: string, priceOverride?: nu
     return false;
   }
   world.player.credits -= price;
-  world.player.inventory.modules[moduleId] = (world.player.inventory.modules[moduleId] ?? 0) + 1;
+  setInventoryModuleCount(world, moduleId, (world.player.inventory.modules[moduleId] ?? 0) + 1);
   pushStory(world, `Purchased ${module.name} (${price}cr).`);
   return true;
 }
@@ -1347,7 +1463,7 @@ export function sellModule(world: GameWorld, moduleId: string, priceOverride?: n
   const owned = world.player.inventory.modules[moduleId] ?? 0;
   if (owned <= 0) return false;
   const saleValue = priceOverride ?? getLocalEconomySnapshot(world).moduleSellPrices[moduleId] ?? Math.max(1, Math.floor(module.price * 0.55));
-  world.player.inventory.modules[moduleId] = owned - 1;
+  setInventoryModuleCount(world, moduleId, owned - 1);
   world.player.credits += saleValue;
   pushStory(world, `Sold ${module.name} for ${saleValue} credits.`);
   return true;
@@ -1367,6 +1483,7 @@ export function buyShip(world: GameWorld, shipId: string, priceOverride?: number
   }
   world.player.credits -= price;
   world.player.ownedShips.push(shipId);
+  ensureMissionUnlocks(world);
   pushStory(world, `Ship acquired: ${ship.name} (${price}cr).`);
   return true;
 }
@@ -1380,6 +1497,7 @@ export function switchShip(world: GameWorld, shipId: string) {
     utility: Array.from({ length: hull.slots.utility }, (_, index) => world.player.equipped.utility[index] ?? null),
     defense: Array.from({ length: hull.slots.defense }, (_, index) => world.player.equipped.defense[index] ?? null)
   });
+  ensureMissionUnlocks(world);
   pushStory(world, `Active ship switched to ${hull.name}.`);
   return true;
 }
@@ -1413,6 +1531,7 @@ export function loadBuildSlot(world: GameWorld, buildId: BuildSlotId) {
     switchShip(world, build.shipId);
   }
   applyBuildLoadout(world, cloneLoadout(build.equipped));
+  ensureMissionUnlocks(world);
   pushStory(world, `Loaded build ${build.name}.`);
   return true;
 }
@@ -1482,11 +1601,11 @@ export function equipModuleToSlot(
     }
   }
   if (currentId) {
-    world.player.inventory.modules[currentId] = (world.player.inventory.modules[currentId] ?? 0) + 1;
+    setInventoryModuleCount(world, currentId, (world.player.inventory.modules[currentId] ?? 0) + 1);
   }
   if (moduleId) {
     const count = world.player.inventory.modules[moduleId] ?? 0;
-    world.player.inventory.modules[moduleId] = count - 1;
+    setInventoryModuleCount(world, moduleId, count - 1);
   }
   slots[slotIndex] = moduleId;
   rebuildPlayerRuntime(world.player);
@@ -1495,6 +1614,7 @@ export function equipModuleToSlot(
   world.player.armor = Math.min(world.player.armor, derived.maxArmor);
   world.player.shield = Math.min(world.player.shield, derived.maxShield);
   world.player.capacitor = Math.min(world.player.capacitor, derived.capacitorCapacity);
+  ensureMissionUnlocks(world);
   return true;
 }
 
@@ -1538,6 +1658,33 @@ export function setActiveTarget(world: GameWorld, ref: SelectableRef | null) {
   if (locked) {
     world.activeTarget = locked;
   }
+}
+
+export function activateTacticalSlow(world: GameWorld) {
+  const tacticalSlow = getTacticalSlowState(world);
+  if (world.dockedStationId) {
+    pushStory(world, "Tactical slow cannot be activated while docked.");
+    return false;
+  }
+  if (world.player.buildSwap.active) {
+    pushStory(world, "Tactical slow cannot be activated during reconfiguration.");
+    return false;
+  }
+  if (tacticalSlow.activeRemaining > 0 || tacticalSlow.cooldownRemaining > 0) {
+    pushStory(
+      world,
+      tacticalSlow.activeRemaining > 0
+        ? "Tactical slow is already active."
+        : `Tactical slow recharging (${Math.ceil(tacticalSlow.cooldownRemaining)}s).`
+    );
+    return false;
+  }
+  tacticalSlow.activeRemaining = TACTICAL_SLOW_CONFIG.durationSec;
+  tacticalSlow.cooldownRemaining = TACTICAL_SLOW_CONFIG.cooldownSec;
+  tacticalSlow.capPenaltyRemaining = TACTICAL_SLOW_CONFIG.capPenaltySec;
+  tacticalSlow.speedPenaltyRemaining = TACTICAL_SLOW_CONFIG.speedPenaltySec;
+  pushStory(world, "Tactical slow engaged.");
+  return true;
 }
 
 function issueNav(world: GameWorld, mode: NavigationState["mode"], target: SelectableRef | null, desiredRange = 0) {
@@ -1735,6 +1882,12 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
     return true;
   }
   if (command.type === "warp") {
+    const warpDisruptor = getHostileWarpDisruptor(world);
+    if (warpDisruptor) {
+      const hostile = enemyVariantById[warpDisruptor.variantId];
+      pushStory(world, `Warp drive pinned by ${hostile?.name ?? "hostile disruptor"}. Break tackle first.`);
+      return false;
+    }
     disableAutopilot(world);
     issueNav(world, "align", command.target, command.range ?? 120);
     world.player.navigation.mode = "align";
@@ -1942,7 +2095,14 @@ function getEnemyCombatMode(enemyVariantId: string) {
   if (!variant) return "orbit" as const;
   const modules = variant.fittedModules.map((moduleId) => moduleById[moduleId]).filter(Boolean);
   if (variant.combatStyle === "speed") {
-    return modules.some((module) => module.kind === "missile" || module.kind === "railgun")
+    return modules.some((module) =>
+      module.kind === "missile" ||
+      module.kind === "railgun" ||
+      module.kind === "warp_disruptor" ||
+      module.kind === "target_painter" ||
+      module.kind === "tracking_disruptor" ||
+      module.kind === "sensor_dampener"
+    )
       ? "keep_range"
       : "orbit";
   }
@@ -2001,7 +2161,8 @@ function createEnemyFromVariant(
       speedMultiplier: 1,
       signatureMultiplier: 1,
       turretTrackingMultiplier: 1,
-      lockRangeMultiplier: 1
+      lockRangeMultiplier: 1,
+      capacitorRegenMultiplier: 1
     },
     recentDamageTimer: 0
   };
@@ -2055,17 +2216,25 @@ function getEnemyVariantModuleKinds(variantId: string) {
   );
 }
 
-function scoreEnemyVariantForHostileRole(variantId: string, role: HostilePackRole, preferredVariantIds?: string[]) {
+function scoreEnemyVariantForHostileRole(
+  variantId: string,
+  role: HostilePackRole,
+  preferredVariantIds: string[] | undefined,
+  playerPowerTier: number
+) {
   const variant = enemyVariantById[variantId];
   if (!variant) return Number.NEGATIVE_INFINITY;
   const moduleKinds = getEnemyVariantModuleKinds(variantId);
   const totalBulk = variant.shield + variant.armor + variant.hull;
   let score = preferredVariantIds?.includes(variantId) ? 1.5 : 0;
+  const techPressure = Math.max(0, playerPowerTier - 1);
 
   if (role === "tackle") {
     if (variant.combatStyle === "speed") score += 3.2;
     if (variant.speed >= 108) score += 1.6;
     if (variant.preferredRange <= 220) score += 1.0;
+    if (moduleKinds.has("warp_disruptor")) score += 4.2;
+    if (moduleKinds.has("webifier")) score += 2.8;
     if (moduleKinds.has("missile") || moduleKinds.has("railgun")) score += 0.5;
   } else if (role === "sniper") {
     if (variant.preferredRange >= 260) score += 2.6;
@@ -2080,22 +2249,27 @@ function scoreEnemyVariantForHostileRole(variantId: string, role: HostilePackRol
     if (moduleKinds.has("laser")) score += 0.6;
   } else if (role === "support") {
     if (moduleKinds.has("webifier")) score += 3.0;
+    if (moduleKinds.has("warp_disruptor")) score += 3.1;
     if (moduleKinds.has("target_painter")) score += 3.0;
     if (moduleKinds.has("tracking_disruptor")) score += 2.4;
     if (moduleKinds.has("sensor_dampener")) score += 2.4;
+    if (moduleKinds.has("energy_neutralizer")) score += 3.4;
     if (moduleKinds.has("shield_booster")) score += 1.3;
     if (moduleKinds.has("armor_repairer")) score += 1.3;
     if (variant.combatStyle === "speed") score += 0.5;
+    score += techPressure * 0.35;
   } else if (role === "skirmisher") {
     if (variant.combatStyle === "speed") score += 3.0;
     if (variant.speed >= 110) score += 1.5;
     if (variant.preferredRange >= 190 && variant.preferredRange <= 340) score += 1.5;
     if (moduleKinds.has("missile") || moduleKinds.has("railgun") || moduleKinds.has("laser")) score += 0.5;
+    score += techPressure * 0.2;
   } else if (role === "anchor") {
     if (totalBulk >= 280) score += 3.2;
     if (variant.speed <= 100) score += 1.5;
     if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 1.5;
     if (moduleKinds.has("shield_booster") || moduleKinds.has("armor_repairer")) score += 1.0;
+    score += techPressure * 0.25;
   } else if (role === "escort") {
     if (variant.combatStyle === "speed") score += 2.2;
     if (variant.speed >= 112) score += 1.2;
@@ -2103,6 +2277,14 @@ function scoreEnemyVariantForHostileRole(variantId: string, role: HostilePackRol
     if (moduleKinds.has("railgun")) score += 1.4;
     if (moduleKinds.has("laser")) score += 0.8;
     if (totalBulk <= 250) score += 1.2;
+    score += techPressure * 0.3;
+  }
+
+  if (playerPowerTier >= 3) {
+    if (moduleKinds.has("warp_disruptor")) score += 0.8;
+    if (moduleKinds.has("tracking_disruptor")) score += 0.7;
+    if (moduleKinds.has("sensor_dampener")) score += 0.7;
+    if (moduleKinds.has("energy_neutralizer")) score += 0.8;
   }
 
   return score;
@@ -2111,13 +2293,14 @@ function scoreEnemyVariantForHostileRole(variantId: string, role: HostilePackRol
 function pickEnemyVariantForHostileRole(
   role: HostilePackRole,
   preferredVariantIds: string[] | undefined,
-  usedVariantIds: Set<string>
+  usedVariantIds: Set<string>,
+  playerPowerTier: number
 ) {
   const scored = enemyVariants
     .map((variant) => ({
       variant,
       score:
-        scoreEnemyVariantForHostileRole(variant.id, role, preferredVariantIds) -
+        scoreEnemyVariantForHostileRole(variant.id, role, preferredVariantIds, playerPowerTier) -
         (usedVariantIds.has(variant.id) ? 0.4 : 0)
     }))
     .sort((left, right) => right.score - left.score);
@@ -2127,7 +2310,7 @@ function pickEnemyVariantForHostileRole(
   return pickPool[Math.floor(Math.random() * pickPool.length)]?.variant.id ?? "dust-raider";
 }
 
-function chooseHostilePackTemplate(context: TriggerContext, sectorId: string) {
+function chooseHostilePackTemplate(context: TriggerContext, sectorId: string, playerPowerTier: number) {
   const danger = sectorById[sectorId]?.danger ?? 1;
   const templates: HostilePackTemplate[] =
     context === "belt"
@@ -2176,12 +2359,20 @@ function chooseHostilePackTemplate(context: TriggerContext, sectorId: string) {
 function buildTriggeredHostilePack(
   context: TriggerContext,
   sectorId: string,
+  playerPowerTier: number,
   preferredVariantIds?: string[]
 ): TriggeredHostileSpawn[] {
-  const template = chooseHostilePackTemplate(context, sectorId);
+  const template = chooseHostilePackTemplate(context, sectorId, playerPowerTier);
   const usedVariantIds = new Set<string>();
-  return template.roles.map((role) => {
-    const variantId = pickEnemyVariantForHostileRole(role, preferredVariantIds, usedVariantIds);
+  const roles = [...template.roles];
+  if (playerPowerTier >= 4 && sectorById[sectorId]?.danger >= 4 && Math.random() < 0.35) {
+    roles.push(context === "belt" ? "support" : "escort");
+  }
+  if (playerPowerTier >= 4 && sectorById[sectorId]?.security === "frontier" && Math.random() < 0.25) {
+    roles.push("support");
+  }
+  return roles.map((role) => {
+    const variantId = pickEnemyVariantForHostileRole(role, preferredVariantIds, usedVariantIds, playerPowerTier);
     usedVariantIds.add(variantId);
     return { role, variantId };
   });
@@ -2316,26 +2507,36 @@ function maybeTriggerMiningSpawn(
   const sector = getCurrentSector(world);
   if (sector.beltSpawnCooldowns[beltId] && sector.beltSpawnCooldowns[beltId] > 0) return;
   const profile = getHostileTriggerProfile(world.currentSectorId);
-  const triggerChance = Math.min(0.5, profile.chance + 0.08);
+  const playerPowerTier = getPlayerPowerTier(world);
+  const frontierBoost = getCurrentSectorDef(world).security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.02 : 0;
+  const triggerChance = Math.min(0.5, profile.chance + 0.05 + frontierBoost);
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
     world.currentSectorId,
     anchorPosition,
-    buildTriggeredHostilePack("belt", world.currentSectorId, getSectorResponseVariants(world.currentSectorId, preferredVariantIds))
+    buildTriggeredHostilePack(
+      "belt",
+      world.currentSectorId,
+      playerPowerTier,
+      getSectorResponseVariants(world.currentSectorId, preferredVariantIds)
+    )
   );
   sector.beltSpawnCooldowns[beltId] = HOSTILE_TRIGGER_COOLDOWN_SEC;
 }
 
 function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, anchorPosition: Vec2) {
   const profile = getHostileTriggerProfile(destinationSectorId);
-  const triggerChance = Math.min(0.65, profile.chance + 0.12);
+  const destinationDef = sectorById[destinationSectorId];
+  const playerPowerTier = getPlayerPowerTier(world);
+  const frontierBoost = destinationDef?.security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.025 : 0;
+  const triggerChance = Math.min(0.65, profile.chance + 0.08 + frontierBoost);
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
     destinationSectorId,
     anchorPosition,
-    buildTriggeredHostilePack("gate", destinationSectorId, getSectorResponseVariants(destinationSectorId))
+    buildTriggeredHostilePack("gate", destinationSectorId, playerPowerTier, getSectorResponseVariants(destinationSectorId))
   );
 }
 
@@ -2401,7 +2602,11 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   player.recentDamageTimer = Math.max(0, player.recentDamageTimer - dt);
   const passiveShieldFactor = player.recentDamageTimer > 0 ? 0.02 : 0.18;
   player.shield = clamp(player.shield + derived.shieldRegen * passiveShieldFactor * dt, 0, derived.maxShield);
-  player.capacitor = clamp(player.capacitor + derived.capacitorRegen * dt, 0, derived.capacitorCapacity);
+  player.capacitor = clamp(
+    player.capacitor + derived.capacitorRegen * player.effects.capacitorRegenMultiplier * dt,
+    0,
+    derived.capacitorCapacity
+  );
 
   const nav = player.navigation;
   const currentTargetPosition = nav.target ? getObjectPosition(world, nav.target) : null;
@@ -2477,6 +2682,9 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     desiredVelocity = scale(fromAngle(desiredAngle), maxSpeed * 0.82);
     const alignment = Math.abs(shortestAngleDiff(player.rotation, desiredAngle));
     if (nav.desiredRange >= 0) {
+      if (getHostileWarpDisruptor(world)) {
+        nav.warpProgress = 0;
+      } else {
       const aligned = alignment < 0.08 && length(player.velocity) >= derived.maxSpeed * 0.74;
       const prevProgress = nav.warpProgress;
       nav.warpProgress = aligned ? clamp(nav.warpProgress + dt * 1.6, 0, 1) : 0;
@@ -2493,6 +2701,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
         nav.warpProgress = 0;
         player.velocity = { x: 0, y: 0 };
         emitWarpActivate(world, player.position, player.rotation);
+      }
       }
     } else {
       nav.warpProgress = 0;
@@ -2795,11 +3004,21 @@ function runPlayerModules(world: GameWorld, dt: number) {
         const commodityEntries = Object.entries(wreck.commodities).filter(([, amount]) => (amount ?? 0) > 0) as Array<
           [CommodityId, number]
         >;
-        if (wreck.credits <= 0 && resourceEntries.length === 0 && commodityEntries.length === 0) {
+        if (wreck.credits <= 0 && resourceEntries.length === 0 && commodityEntries.length === 0 && !wreck.shipId) {
           sector.wrecks = sector.wrecks.filter((entry) => entry.id !== wreck.id);
           return;
         }
         let transferredAny = false;
+        if (wreck.shipId) {
+          if (!player.ownedShips.includes(wreck.shipId)) {
+            player.ownedShips.push(wreck.shipId);
+            const recoveredShip = playerShipById[wreck.shipId];
+            addFloatingText(world, wreck.position, `+${recoveredShip?.name ?? "ship"} recovered`, "#9fe3b6");
+            pushStory(world, `Recovered lost hull: ${recoveredShip?.name ?? wreck.shipId}.`);
+            transferredAny = true;
+          }
+          wreck.shipId = undefined;
+        }
         if (wreck.credits > 0) {
           player.credits += wreck.credits;
           addFloatingText(world, wreck.position, `+${wreck.credits}cr`, "#9fe3b6");
@@ -2846,6 +3065,7 @@ function runPlayerModules(world: GameWorld, dt: number) {
         if (
           wreck.credits <= 0 &&
           wreck.modules.length === 0 &&
+          !wreck.shipId &&
           Object.values(wreck.resources).every((amount) => (amount ?? 0) <= 0) &&
           Object.values(wreck.commodities ?? {}).every((amount) => (amount ?? 0) <= 0)
         ) {
@@ -2865,6 +3085,14 @@ function runPlayerModules(world: GameWorld, dt: number) {
           derived.maxArmor
         );
         emitRepairPulse(world, player.position, "armor");
+      } else if (module.kind === "energy_neutralizer" && target?.type === "enemy") {
+        const enemy = sector.enemies.find((entry) => entry.id === target.id);
+        if (!enemy) return;
+        const drained = Math.min(enemy.capacitor, module.capacitorNeutralizeAmount ?? 0);
+        if (drained > 0) {
+          enemy.capacitor = Math.max(0, enemy.capacitor - drained);
+          addFloatingText(world, enemy.position, `-${Math.round(drained)} cap`, "#8fe7ff");
+        }
       }
 
       runtime.cycleRemaining = (module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived);
@@ -2998,7 +3226,13 @@ function runEnemyModules(world: GameWorld, dt: number) {
       if (runtime.cycleRemaining > 0) {
         runtime.cycleRemaining = Math.max(0, runtime.cycleRemaining - dt);
       }
-      if (!runtime.active || runtime.cycleRemaining > 0 || !seesPlayer) return;
+      if (!runtime.active || !seesPlayer) return;
+      if (module.capacitorDrain) {
+        const drainAmount = module.capacitorDrain * dt;
+        if (enemy.capacitor < drainAmount) return;
+        enemy.capacitor -= drainAmount;
+      }
+      if (runtime.cycleRemaining > 0) return;
       if ((module.capacitorUse ?? 0) > enemy.capacitor) return;
       if (module.range && playerDistance > module.range) return;
 
@@ -3050,6 +3284,12 @@ function runEnemyModules(world: GameWorld, dt: number) {
         enemy.shield = clamp(enemy.shield + (module.repairAmount ?? 0), 0, variant.shield);
       } else if (module.kind === "armor_repairer") {
         enemy.armor = clamp(enemy.armor + (module.repairAmount ?? 0), 0, variant.armor);
+      } else if (module.kind === "energy_neutralizer") {
+        const drained = Math.min(world.player.capacitor, module.capacitorNeutralizeAmount ?? 0);
+        if (drained > 0) {
+          world.player.capacitor = Math.max(0, world.player.capacitor - drained);
+          addFloatingText(world, world.player.position, `-${Math.round(drained)} cap`, "#8fe7ff");
+        }
       }
 
       runtime.cycleRemaining = module.cycleTime ?? 0;
@@ -3286,6 +3526,9 @@ function cleanupWorld(world: GameWorld) {
     .filter((entry) => entry.ttl > 0);
 
   if (world.player.hull <= 0) {
+    const PLAYER_DEATH_CREDIT_DROP_FRACTION = 0.7;
+    const PLAYER_DEATH_FLAT_CREDIT_FEE = 200;
+    const PLAYER_DEATH_LICENSE_PROGRESS_LOSS = 180;
     const deathPosition = { ...world.player.position };
     const playerHull = playerShipById[world.player.hullId];
     emitExplosion(world, deathPosition, playerHull?.color ?? "#d8ff9b");
@@ -3297,7 +3540,8 @@ function cleanupWorld(world: GameWorld) {
     ].filter((moduleId): moduleId is string => Boolean(moduleId));
     const droppedResources = { ...world.player.cargo };
     const droppedCommodities = { ...world.player.commodities };
-    const droppedCredits = Math.floor(world.player.credits * 0.12);
+    const droppedCredits = Math.floor(world.player.credits * PLAYER_DEATH_CREDIT_DROP_FRACTION);
+    const lostLicenseProgress = reducePilotLicenseProgress(world, PLAYER_DEATH_LICENSE_PROGRESS_LOSS);
     sector.wrecks.push({
       id: `wreck-player-${Date.now()}`,
       position: deathPosition,
@@ -3305,12 +3549,15 @@ function cleanupWorld(world: GameWorld) {
       resources: droppedResources,
       commodities: droppedCommodities,
       sourceName: "Player",
+      shipId: world.player.hullId,
       modules: droppedModules
     });
 
     const starter = createStarterPlayerState(world.player.starterConfigId ?? defaultStarterShipConfigId);
-    const preservedCredits = Math.max(0, world.player.credits - droppedCredits - 200);
-    const preservedShips = Array.from(new Set([...world.player.ownedShips, starter.hullId]));
+    const preservedCredits = Math.max(0, world.player.credits - droppedCredits - PLAYER_DEATH_FLAT_CREDIT_FEE);
+    const preservedShips = world.player.hullId === starter.hullId
+      ? Array.from(new Set([...world.player.ownedShips, starter.hullId]))
+      : Array.from(new Set([...world.player.ownedShips.filter((shipId) => shipId !== world.player.hullId), starter.hullId]));
     const preservedInventory = { ...world.player.inventory.modules };
     const startSystemId = "lumen-rest";
     const startStation = getSystemStation(startSystemId);
@@ -3360,7 +3607,10 @@ function cleanupWorld(world: GameWorld) {
     world.activeTarget = null;
     world.routePlan = null;
 
-    pushStory(world, "Ship destroyed. You woke up back at Lumen Rest. Your wreck was left behind with your fit and cargo.");
+    pushStory(
+      world,
+      `Ship destroyed. You woke up back at Lumen Rest. Your wreck was left behind with your fit, cargo, and ${droppedCredits} credits for salvage recovery.${lostLicenseProgress > 0 ? ` Pilot license progress reduced by ${lostLicenseProgress}, but your level held.` : ""}`
+    );
   }
 }
 
@@ -3502,7 +3752,10 @@ function getNavLabel(world: GameWorld) {
 
 export function updateWorld(world: GameWorld, dt: number) {
   world.elapsedTime += dt;
-  updateBeltSpawnCooldowns(world, dt);
+  const timeScale = getWorldTimeScale(world);
+  const simDt = dt * timeScale;
+  updateTacticalSlowTimers(world, dt);
+  updateBeltSpawnCooldowns(world, simDt);
   ensureMissionUnlocks(world);
   normalizeTransportMissionStates(world);
   normalizeDeliveryMissionStates(world);
@@ -3513,17 +3766,18 @@ export function updateWorld(world: GameWorld, dt: number) {
   }
   updateBuildSwap(world, dt);
   resetCombatEffects(world);
+  applyTacticalSlowEffects(world);
   applyPlayerControlEffects(world);
   applyEnemyControlEffects(world);
   updateRouteAutopilot(world);
-  updatePlayerNavigation(world, dt);
-  applyAnomalyFields(world, dt);
+  updatePlayerNavigation(world, simDt);
+  applyAnomalyFields(world, simDt);
   autoEngageNearbyHostile(world);
-  runPlayerModules(world, dt);
-  runEnemyModules(world, dt);
-  updateProjectiles(world, dt);
+  runPlayerModules(world, simDt);
+  runEnemyModules(world, simDt);
+  updateProjectiles(world, simDt);
   cleanupWorld(world);
-  updateParticles(world, dt);
+  updateParticles(world, simDt);
   evaluateWorldInteractions(world);
 }
 

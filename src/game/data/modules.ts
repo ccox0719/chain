@@ -457,6 +457,23 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     modifiers: {}
   },
   {
+    id: "warp-disruptor",
+    name: "Warp Disruptor",
+    slot: "utility",
+    category: "control",
+    kind: "warp_disruptor",
+    price: 1180,
+    description: "Long-point interdiction beam that prevents hostile warp spool while pressure is maintained.",
+    tags: ["utility", "control", "military", "high-tech"],
+    roleTags: ["Control", "Support"],
+    activation: "toggle",
+    requiresTarget: ["enemy"],
+    range: 340,
+    capacitorDrain: 6.4,
+    warpDisruptStrength: 1,
+    modifiers: {}
+  },
+  {
     id: "target-painter",
     name: "Target Painter",
     slot: "utility",
@@ -505,6 +522,24 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 340,
     capacitorDrain: 5.2,
     lockRangePenalty: 0.36,
+    modifiers: {}
+  },
+  {
+    id: "energy-neutralizer",
+    name: "Energy Neutralizer",
+    slot: "utility",
+    category: "control",
+    kind: "energy_neutralizer",
+    price: 1240,
+    description: "Hostile capacitor spike that strips energy and punishes brawlers that stay committed too long.",
+    tags: ["utility", "control", "military", "high-tech"],
+    roleTags: ["Control", "Support"],
+    activation: "cycle",
+    requiresTarget: ["enemy"],
+    cycleTime: 4.2,
+    range: 255,
+    capacitorUse: 16,
+    capacitorNeutralizeAmount: 22,
     modifiers: {}
   },
   {

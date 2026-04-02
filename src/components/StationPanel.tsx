@@ -56,9 +56,11 @@ const MODULE_KIND_ICONS: Record<string, string> = {
   mining_laser:        "⛏",
   afterburner:         "➤",
   webifier:            "⟲",
+  warp_disruptor:      "⌖",
   target_painter:      "◍",
   tracking_disruptor:  "≋",
   sensor_dampener:     "◌",
+  energy_neutralizer:  "ϟ",
   salvager:            "◇",
   shield_booster:      "⬡",
   armor_repairer:      "◼",
@@ -175,6 +177,8 @@ export function StationPanel({
     direction: "asc"
   });
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
   const stationTags = currentStation?.tags ?? [];
   const security = snapshot.sector.security;
@@ -294,10 +298,10 @@ export function StationPanel({
     return groups;
   }, [availableModules]);
   const ownedModuleEntries = Object.entries(world.player.inventory.modules)
-    .filter(([, count]) => count > 0)
+    .filter(([, count]) => Number(count) > 0)
     .map(([moduleId, count]) => ({
       moduleId,
-      count,
+      count: Number(count),
       module: moduleById[moduleId] ?? null
     }));
   const inventoryModulesBySlot: Record<ModuleSlot, Array<{ moduleId: string; count: number; module: NonNullable<typeof ownedModuleEntries[number]["module"]> }>> = {
@@ -316,9 +320,13 @@ export function StationPanel({
   (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
     inventoryModulesBySlot[slotType].sort((left, right) => left.module.name.localeCompare(right.module.name));
   });
-  const allOwnedModules = (["weapon", "utility", "defense"] as ModuleSlot[]).flatMap((slotType) => inventoryModulesBySlot[slotType]);
   const equippedWeaponIds = world.player.equipped.weapon;
   const unknownOwnedModules = ownedModuleEntries.filter((entry) => !entry.module);
+  const selectedModule = selectedModuleId ? moduleById[selectedModuleId] ?? null : null;
+  const focusedSlotKey = focusedSlot ? `${focusedSlot.slotType}-${focusedSlot.index}` : null;
+  const focusedEquippedModuleId = focusedSlot ? world.player.equipped[focusedSlot.slotType][focusedSlot.index] ?? null : null;
+  const focusedEquippedModule = focusedEquippedModuleId ? moduleById[focusedEquippedModuleId] ?? null : null;
+  const focusedSlotModules = focusedSlot ? inventoryModulesBySlot[focusedSlot.slotType] : [];
 
   if (!currentStation) return null;
 
@@ -359,12 +367,94 @@ export function StationPanel({
   }
 
   function handleSlotDrop(slotType: ModuleSlot, index: number) {
+    setFocusedSlot({ slotType, index });
     if (!draggedModuleId) return;
     const module = moduleById[draggedModuleId];
     if (!module || module.slot !== slotType) return;
     onEquip(slotType, index, draggedModuleId);
     setDraggedModuleId(null);
+    setSelectedModuleId(null);
     setHoveredSlotKey(null);
+  }
+
+  function handleSlotTap(slotType: ModuleSlot, index: number) {
+    setFocusedSlot({ slotType, index });
+    if (!selectedModuleId) return;
+    const module = moduleById[selectedModuleId];
+    if (!module || module.slot !== slotType) return;
+    onEquip(slotType, index, selectedModuleId);
+    setSelectedModuleId(null);
+    setHoveredSlotKey(null);
+  }
+
+  function renderFocusedSlotModuleCard(moduleId: string, count: number, module: NonNullable<typeof ownedModuleEntries[number]["module"]>) {
+    const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
+    const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
+    const compareTo = focusedEquippedModule ?? findComparableEquippedWeapon(module, equippedWeaponIds);
+    const isEquipped = focusedEquippedModuleId === moduleId;
+    const canFit = !licenseLocked && Boolean(focusedSlot) && !isEquipped;
+
+    function equipFocusedSlotModule() {
+      if (!focusedSlot || licenseLocked || isEquipped) return;
+      setSelectedModuleId(moduleId);
+      onEquip(focusedSlot.slotType, focusedSlot.index, moduleId);
+      setSelectedModuleId(null);
+      setHoveredSlotKey(null);
+    }
+
+    return (
+      <div
+        key={`slot-pick-${focusedSlotKey}-${moduleId}`}
+        className={`module-drag-card fitting-slot-picker-card${draggedModuleId === moduleId ? " dragging" : ""}${licenseLocked ? " locked" : ""}${isEquipped ? " selected" : ""}${canFit ? " actionable" : ""}`}
+        draggable={!licenseLocked}
+        onClick={() => {
+          equipFocusedSlotModule();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          equipFocusedSlotModule();
+        }}
+        onDragStart={() => {
+          if (licenseLocked) return;
+          setDraggedModuleId(moduleId);
+          setSelectedModuleId(moduleId);
+        }}
+        onDragEnd={() => {
+          setDraggedModuleId(null);
+          setHoveredSlotKey(null);
+        }}
+        role={canFit ? "button" : undefined}
+        tabIndex={canFit ? 0 : undefined}
+      >
+        <div className="module-drag-copy">
+          {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
+          <WeaponDetailsCard
+            module={module}
+            compareTo={compareTo}
+            contextLabel={isEquipped ? "Equipped Here" : "Socket Fit"}
+            compactMode="minimal"
+          />
+        </div>
+        <div className="module-drag-meta">
+          <span className="status-chip">x{count}</span>
+          <span>{module.price} cr</span>
+          <span className={`status-chip${isEquipped ? " active" : ""}`}>{isEquipped ? "Equipped" : "Tap To Fit"}</span>
+          <button
+            type="button"
+            className="ghost-button mini"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSellModule(module.id);
+            }}
+            disabled={count <= 0}
+            title={`Sell one ${module.name}`}
+          >
+            Sell 1
+          </button>
+        </div>
+      </div>
+    );
   }
 
   function transportRouteMetrics(mission: TransportMissionDefinition) {
@@ -886,10 +976,36 @@ export function StationPanel({
         {/* ── FITTING & BUILDS TAB ── */}
         {tab === "fitting" && (
           <article className="panel-lite fitting-panel">
-            <h3>Fitting Cradle</h3>
-            <p style={{ marginBottom: "0.75rem" }}>
-              {playerShipById[world.player.hullId]?.name} — drag modules from the locker onto the hull to fit them.
-            </p>
+            <div className="fitting-header">
+              <div>
+                <h3>Fitting Cradle</h3>
+                <p className="fitting-subcopy">
+                  {playerShipById[world.player.hullId]?.name} fitted for compact drag on desktop and tap-to-fit on touch.
+                </p>
+              </div>
+              <div className="fitting-summary-grid">
+                <div className="fitting-summary-card">
+                  <span>Slots</span>
+                  <strong>{currentHull.slots.weapon}/{currentHull.slots.utility}/{currentHull.slots.defense}</strong>
+                  <small>W / U / D</small>
+                </div>
+                <div className="fitting-summary-card">
+                  <span>Tank</span>
+                  <strong>{roundedShieldMax + roundedArmorMax + roundedHullMax}</strong>
+                  <small>shield + armor + hull</small>
+                </div>
+                <div className="fitting-summary-card">
+                  <span>Cap</span>
+                  <strong>{Math.round(currentStats.capacitorCapacity)}</strong>
+                  <small>{currentStats.capacitorRegen.toFixed(1)}/s regen</small>
+                </div>
+                <div className="fitting-summary-card">
+                  <span>Cargo</span>
+                  <strong>{roundedFreeCargo}/{roundedCargoCapacity}</strong>
+                  <small>{Math.round(missionCargoUsed)} reserved</small>
+                </div>
+              </div>
+            </div>
             <div className="ship-frame-shell fitting-shell">
               <div className="ship-frame-glow" />
               <div className="ship-frame-body ship-frame-body--diagram">
@@ -909,13 +1025,71 @@ export function StationPanel({
                       equipped={world.player.equipped}
                       draggedModuleId={draggedModuleId}
                       hoveredSlotKey={hoveredSlotKey}
+                      selectedModuleId={selectedModuleId}
+                      activeSlotKey={focusedSlotKey}
                       onSlotHover={setHoveredSlotKey}
                       onSlotDrop={handleSlotDrop}
+                      onSlotTap={handleSlotTap}
                       onClearSlot={(slotType, index) => onEquip(slotType, index, null)}
                     />
                   </div>
 
                   <div className="fitting-inset-column">
+                    <section className="fitting-inset-panel">
+                      <div className="fitting-inset-head">
+                        <strong>Selected Socket</strong>
+                        <span>
+                          {focusedSlot
+                            ? `${focusedSlot.slotType.toUpperCase()} ${focusedSlot.index + 1}`
+                            : "Tap a socket to focus its available fits"}
+                        </span>
+                      </div>
+                      {focusedSlot ? (
+                        <div className="fitting-slot-picker">
+                          <div className="fitting-slot-picker-head">
+                            <div>
+                              <strong>{focusedEquippedModule?.name ?? "Empty"}</strong>
+                              <span>
+                                {focusedEquippedModule
+                                  ? `${focusedSlotModules.length} compatible modules in storage`
+                                  : `${focusedSlotModules.length} available fits for this socket`}
+                              </span>
+                            </div>
+                            <div className="fitting-slot-picker-actions">
+                              {focusedEquippedModuleId && (
+                                <button
+                                  type="button"
+                                  className="ghost-button mini"
+                                  onClick={() => onEquip(focusedSlot.slotType, focusedSlot.index, null)}
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {selectedModule && selectedModule.slot === focusedSlot.slotType && (
+                            <div className="fit-empty-copy">
+                              Dragging {selectedModule.name}. Drop it on the hull socket or use Fit on a card below.
+                            </div>
+                          )}
+                          {focusedSlotModules.length > 0 ? (
+                            <div className="fitting-slot-picker-list">
+                              {focusedSlotModules.map(({ moduleId, count, module }) => renderFocusedSlotModuleCard(moduleId, count, module))}
+                            </div>
+                          ) : (
+                            <div className="fit-empty-copy">No stored {focusedSlot.slotType} modules available for this socket.</div>
+                          )}
+                          {unknownOwnedModules.length > 0 && (
+                            <div className="fit-empty-copy">
+                              {unknownOwnedModules.length} owned module {unknownOwnedModules.length === 1 ? "entry is" : "entries are"} out of sync and could not be rendered.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="fit-empty-copy">Focus a socket on the hull to get a direct module picker for that spot.</div>
+                      )}
+                    </section>
+
                     <section className="fitting-inset-panel">
                       <div className="fitting-inset-head">
                         <strong>Build Slots</strong>
@@ -936,121 +1110,6 @@ export function StationPanel({
                           </div>
                         ))}
                       </div>
-                    </section>
-
-                    <section className="fitting-inset-panel">
-                      <div className="fitting-inset-head">
-                        <strong>Module Locker</strong>
-                        <span>{allOwnedModules.length} owned modules</span>
-                      </div>
-                      <CollapsibleSection
-                        title="all owned modules"
-                        subtitle={`${allOwnedModules.length} items`}
-                        defaultOpen
-                        className="fit-group"
-                      >
-                        <div className="module-locker-list">
-                          {allOwnedModules.length > 0 ? (
-                            allOwnedModules.map(({ moduleId, module, count }) => {
-                              const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
-                              const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
-                              const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
-                              return (
-                              <div
-                                key={`owned-${moduleId}`}
-                                className={`module-drag-card${draggedModuleId === moduleId ? " dragging" : ""}${licenseLocked ? " locked" : ""}`}
-                                draggable={!licenseLocked}
-                                onDragStart={() => {
-                                  if (licenseLocked) return;
-                                  setDraggedModuleId(moduleId);
-                                }}
-                                onDragEnd={() => {
-                                  setDraggedModuleId(null);
-                                  setHoveredSlotKey(null);
-                                }}
-                              >
-                                <div className="module-drag-copy">
-                                  {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
-                                </div>
-                                <div className="module-drag-meta">
-                                  <span className="status-chip">x{count}</span>
-                                  <span>{module.price} cr</span>
-                                  <button
-                                    type="button"
-                                    className="ghost-button mini"
-                                    onClick={() => onSellModule(module.id)}
-                                    disabled={count <= 0}
-                                    title={`Sell one ${module.name}`}
-                                  >
-                                    Sell 1
-                                  </button>
-                                </div>
-                                <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Locker Fit" />
-                              </div>
-                            )})
-                          ) : (
-                            <div className="fit-empty-copy">No spare modules in storage.</div>
-                          )}
-                        </div>
-                      </CollapsibleSection>
-                      {unknownOwnedModules.length > 0 && (
-                        <div className="fit-empty-copy">
-                          {unknownOwnedModules.length} owned module {unknownOwnedModules.length === 1 ? "entry is" : "entries are"} out of sync and could not be rendered.
-                        </div>
-                      )}
-                      {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => (
-                        <CollapsibleSection
-                          key={slotType}
-                          title={`${slotType} locker`}
-                          subtitle={`${inventoryModulesBySlot[slotType].length} items`}
-                          defaultOpen={inventoryModulesBySlot[slotType].length > 0 || index === 0}
-                          className="fit-group"
-                        >
-                          <div className="module-locker-list">
-                            {inventoryModulesBySlot[slotType].length > 0 ? (
-                              inventoryModulesBySlot[slotType].map(({ moduleId, module, count }) => {
-                                const licenseLocked = !hasPilotLicenseForModule(pilotLicense, module);
-                                const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
-                                const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
-                                return (
-                                <div
-                                  key={moduleId}
-                                  className={`module-drag-card${draggedModuleId === moduleId ? " dragging" : ""}${licenseLocked ? " locked" : ""}`}
-                                  draggable={!licenseLocked}
-                                  onDragStart={() => {
-                                    if (licenseLocked) return;
-                                    setDraggedModuleId(moduleId);
-                                  }}
-                                  onDragEnd={() => {
-                                    setDraggedModuleId(null);
-                                    setHoveredSlotKey(null);
-                                  }}
-                                >
-                                <div className="module-drag-copy">
-                                    {licenseLocked && <span className="status-chip license-lock-chip">Pilot L{requiredLicenseLevel}</span>}
-                                  </div>
-                                  <div className="module-drag-meta">
-                                    <span className="status-chip">x{count}</span>
-                                    <span>{module.price} cr</span>
-                                    <button
-                                      type="button"
-                                      className="ghost-button mini"
-                                      onClick={() => onSellModule(module.id)}
-                                      disabled={count <= 0}
-                                      title={`Sell one ${module.name}`}
-                                    >
-                                      Sell 1
-                                    </button>
-                                  </div>
-                                  <WeaponDetailsCard module={module} compareTo={compareTo} contextLabel="Locker Fit" />
-                                </div>
-                              )})
-                            ) : (
-                              <div className="fit-empty-copy">No spare {slotType} modules in storage.</div>
-                            )}
-                          </div>
-                        </CollapsibleSection>
-                      ))}
                     </section>
                   </div>
                 </div>

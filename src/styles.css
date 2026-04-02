@@ -540,6 +540,36 @@ button:disabled { opacity: 0.38; cursor: default; }
   display: flex;
   gap: 0.35rem;
   margin-bottom: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.tactical-status-row {
+  display: flex;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.42rem;
+}
+
+.tactical-button.active {
+  border-color: rgba(127, 192, 255, 0.36);
+  color: #edf7ff;
+  background: linear-gradient(180deg, rgba(127, 192, 255, 0.16), rgba(8, 12, 22, 0.9));
+}
+
+.tactical-slow-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(127, 192, 255, 0.09), transparent 40%),
+    linear-gradient(180deg, rgba(127, 192, 255, 0.04), rgba(7, 10, 18, 0.18));
+  transition: opacity 180ms ease;
+}
+
+.tactical-slow-overlay.active {
+  opacity: 1;
 }
 
 /* ============================================
@@ -1711,6 +1741,12 @@ select {
   color: #ffd4d4;
 }
 
+.status-chip.active {
+  border-color: rgba(127, 192, 255, 0.26);
+  background: rgba(127, 192, 255, 0.1);
+  color: #edf7ff;
+}
+
 /* ============================================
    MARKET / ACTION ROWS
    ============================================ */
@@ -1788,8 +1824,8 @@ select {
    ============================================ */
 .fit-group {
   display: grid;
-  gap: 0.45rem;
-  margin-bottom: 0.7rem;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
 }
 
 .fit-group strong {
@@ -1808,37 +1844,112 @@ select {
 
 .fitting-panel {
   display: grid;
-  gap: 0.85rem;
+  --fit-gap: clamp(0.45rem, 0.7vw, 0.8rem);
+  --fit-panel-pad: clamp(0.5rem, 0.85vw, 0.8rem);
+  --fit-card-pad: clamp(0.42rem, 0.75vw, 0.68rem);
+  --fit-title-size: clamp(0.82rem, 1vw, 0.96rem);
+  --fit-copy-size: clamp(0.68rem, 0.72vw, 0.78rem);
+  gap: var(--fit-gap);
+  min-height: min(100%, calc(100dvh - 12rem));
+}
+
+.fitting-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr);
+  gap: var(--fit-gap);
+  align-items: start;
+}
+
+.fitting-subcopy {
+  margin: 0.18rem 0 0;
+  color: var(--text-dim);
+  font-size: var(--fit-copy-size);
+  line-height: 1.4;
+}
+
+.fitting-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(var(--fit-gap) * 0.7);
+}
+
+.fitting-summary-card {
+  display: grid;
+  gap: 0.18rem;
+  padding: var(--fit-card-pad);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(130, 158, 210, 0.1);
+  background: rgba(7, 12, 24, 0.72);
+}
+
+.fitting-summary-card span,
+.fitting-summary-card small {
+  color: var(--text-dim);
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.fitting-summary-card strong {
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.fitting-slot-picker {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.fitting-slot-picker-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fitting-slot-picker-head strong {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.fitting-slot-picker-head span {
+  color: var(--text-dim);
+  font-size: 0.69rem;
+}
+
+.fitting-slot-picker-list {
+  display: grid;
+  gap: calc(var(--fit-gap) * 0.55);
 }
 
 .fitting-shell {
-  min-height: min(78dvh, 980px);
+  /* height driven by content */
 }
 
 .fitting-shell-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.95fr) minmax(320px, 0.92fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.18fr) minmax(17rem, 0.92fr);
+  gap: var(--fit-gap);
   align-items: start;
-  min-height: 100%;
 }
 
 .fitting-main-stage {
   min-width: 0;
   display: grid;
+  gap: calc(var(--fit-gap) * 0.7);
   align-self: stretch;
 }
 
 .fitting-inset-column {
   display: grid;
-  gap: 0.85rem;
+  gap: calc(var(--fit-gap) * 0.8);
   align-content: start;
 }
 
 .fitting-inset-panel {
   display: grid;
-  gap: 0.75rem;
-  padding: 0.85rem;
+  gap: 0.42rem;
+  padding: var(--fit-panel-pad);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(130, 158, 210, 0.1);
   background:
@@ -1867,13 +1978,13 @@ select {
 .build-slot-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.6rem;
+  gap: calc(var(--fit-gap) * 0.65);
 }
 
 .build-slot-card {
   display: grid;
-  gap: 0.55rem;
-  padding: 0.72rem;
+  gap: 0.38rem;
+  padding: calc(var(--fit-card-pad) * 0.95);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(130, 158, 210, 0.1);
   background: rgba(7, 12, 24, 0.72);
@@ -1889,7 +2000,7 @@ select {
 .build-slot-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.45rem;
+  gap: 0.34rem;
 }
 
 .ship-frame-shell {
@@ -1914,18 +2025,17 @@ select {
 .ship-frame-body {
   position: relative;
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: var(--fit-gap);
+  padding: var(--fit-panel-pad);
 }
 
 .ship-frame-body--diagram {
-  padding: 1rem 1rem 0.55rem;
-  gap: 0.7rem;
-  min-height: min(76dvh, 920px);
+  padding: var(--fit-panel-pad);
+  gap: calc(var(--fit-gap) * 0.75);
 }
 
 .ship-fitting-svg {
-  width: 86%;
+  width: min(100%, clamp(16.5rem, 36vw, 27rem));
   height: auto;
   display: block;
   margin: 0 auto;
@@ -1938,28 +2048,27 @@ select {
 }
 
 .ship-frame-title strong {
-  font-size: 1.02rem;
+  font-size: var(--fit-title-size);
   letter-spacing: 0.04em;
 }
 
 .ship-frame-title span {
   color: var(--accent);
-  font-size: 0.74rem;
+  font-size: clamp(0.64rem, 0.68vw, 0.74rem);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .fit-slot-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.4rem;
 }
 
 .fit-slot {
   display: grid;
-  gap: 0.28rem;
-  padding: 0.72rem;
-  min-height: 136px;
+  gap: 0.2rem;
+  padding: 0.5rem;
   border-radius: var(--radius-sm);
   border: 1px dashed rgba(130, 158, 210, 0.16);
   background: rgba(8, 13, 24, 0.72);
@@ -2002,18 +2111,13 @@ select {
   min-height: 2.1em;
 }
 
-.module-locker-list {
-  display: grid;
-  gap: 0.65rem;
-}
-
 .module-drag-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   justify-content: space-between;
-  gap: 0.9rem;
+  gap: 0.45rem;
   align-items: start;
-  padding: 0.88rem 0.95rem;
+  padding: calc(var(--fit-card-pad) * 0.95);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(130, 158, 210, 0.1);
   background:
@@ -2050,7 +2154,7 @@ select {
 
 .module-drag-copy {
   display: grid;
-  gap: 0.28rem;
+  gap: 0.18rem;
   min-width: 0;
 }
 
@@ -2064,30 +2168,189 @@ select {
 
 .module-drag-card strong {
   display: block;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   margin-bottom: 0;
 }
 
 .module-drag-card span {
   color: var(--text-muted);
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.7rem;
+  line-height: 1.3;
 }
 
 .module-drag-meta {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.28rem;
   justify-items: end;
   white-space: nowrap;
 }
 
+.module-drag-card .weapon-details-card {
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.module-drag-card .weapon-tag-row {
+  margin-top: 0.16rem;
+}
+
+.module-drag-card .weapon-stat-grid.compact {
+  margin-top: 0.38rem;
+  gap: 0.28rem;
+}
+
+.module-drag-card .weapon-stat-grid-minimal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.28rem 0.38rem;
+}
+
+.module-drag-card .weapon-details-expander {
+  margin-top: 0.32rem;
+  padding-top: 0.3rem;
+}
+
+.module-drag-card .weapon-details-expander summary {
+  font-size: 0.62rem;
+}
+
 .fit-empty-copy {
-  padding: 0.72rem 0.8rem;
+  padding: 0.52rem 0.65rem;
   border-radius: var(--radius-sm);
   border: 1px dashed rgba(130, 158, 210, 0.12);
   color: var(--text-dim);
-  font-size: 0.76rem;
+  font-size: 0.73rem;
   background: rgba(5, 9, 18, 0.56);
+}
+
+/* ── Selected module state (tap-to-equip) ── */
+.module-drag-card.selected {
+  border-color: rgba(127, 192, 255, 0.48);
+  background:
+    linear-gradient(135deg, rgba(18, 30, 54, 0.98), rgba(11, 20, 36, 0.94)),
+    rgba(12, 20, 36, 0.88);
+  box-shadow: 0 0 14px rgba(127, 192, 255, 0.12), inset 0 1px 0 rgba(127, 192, 255, 0.08);
+}
+
+.fitting-slot-picker-card {
+  cursor: default;
+}
+
+.fitting-slot-picker-card.actionable {
+  cursor: pointer;
+}
+
+.fitting-slot-picker-card.actionable:focus-visible {
+  outline: 1px solid rgba(127, 192, 255, 0.55);
+  outline-offset: 2px;
+}
+
+.fitting-slot-picker-card .module-drag-meta {
+  min-width: 4.6rem;
+}
+
+/* ── Slot glow when a module is tapped/selected and can be placed ── */
+.fit-slot.tap-ready {
+  border-color: rgba(127, 192, 255, 0.38);
+  border-style: solid;
+  background: rgba(12, 22, 40, 0.9);
+  box-shadow: inset 0 0 10px rgba(127, 192, 255, 0.08);
+}
+
+/* ── Responsive: tablet (681–900px) ── */
+@media (min-width: 701px) and (max-width: 980px) {
+  .fitting-header {
+    grid-template-columns: 1fr;
+  }
+
+  .fitting-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fitting-shell-layout {
+    grid-template-columns: minmax(0, 1.04fr) minmax(15rem, 0.96fr);
+  }
+
+  .ship-fitting-svg {
+    width: min(100%, clamp(15rem, 40vw, 22rem));
+  }
+}
+
+@media (max-width: 700px) {
+  .fitting-header {
+    grid-template-columns: 1fr;
+  }
+
+  .fitting-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fitting-shell-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ship-fitting-svg {
+    width: min(100%, clamp(14rem, 72vw, 19rem));
+  }
+
+  .ship-frame-title strong {
+    font-size: 0.85rem;
+  }
+
+  .ship-frame-title span {
+    font-size: 0.67rem;
+  }
+
+  .fitting-inset-panel {
+    padding: 0.55rem;
+    gap: 0.45rem;
+  }
+
+  .fitting-inset-column {
+    gap: 0.45rem;
+  }
+
+  .build-slot-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .build-slot-card {
+    padding: 0.45rem;
+    gap: 0.3rem;
+  }
+
+  .build-slot-label {
+    font-size: 0.68rem;
+  }
+
+  .module-drag-card {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.48rem 0.52rem;
+    gap: 0.34rem;
+  }
+
+  .module-drag-card strong {
+    font-size: 0.78rem;
+  }
+
+  .module-drag-meta {
+    grid-auto-flow: column;
+    grid-template-columns: repeat(4, max-content);
+    justify-content: start;
+    white-space: normal;
+  }
+
+  .module-drag-card .weapon-stat-grid-minimal {
+    grid-template-columns: 1fr;
+  }
+
+  .fitting-panel {
+    min-height: auto;
+  }
 }
 
 /* ============================================

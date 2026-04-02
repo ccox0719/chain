@@ -281,9 +281,11 @@ const MODULE_KIND_ICONS: Record<string, string> = {
   mining_laser:       "⛏",
   afterburner:        "➤",
   webifier:           "⟲",
+  warp_disruptor:     "⌖",
   target_painter:     "◍",
   tracking_disruptor: "≋",
   sensor_dampener:    "◌",
+  energy_neutralizer: "ϟ",
   shield_booster:     "⬡",
   armor_repairer:     "◼",
   hardener:           "◆",
@@ -310,8 +312,11 @@ interface ShipFittingDiagramProps {
   equipped: EquippedLoadout;
   draggedModuleId: string | null;
   hoveredSlotKey: string | null;
+  selectedModuleId?: string | null;
+  activeSlotKey?: string | null;
   onSlotHover: (key: string | null) => void;
   onSlotDrop: (slotType: ModuleSlot, slotIndex: number) => void;
+  onSlotTap?: (slotType: ModuleSlot, slotIndex: number) => void;
   onClearSlot: (slotType: ModuleSlot, slotIndex: number) => void;
 }
 
@@ -320,8 +325,11 @@ export function ShipFittingDiagram({
   equipped,
   draggedModuleId,
   hoveredSlotKey,
+  selectedModuleId = null,
+  activeSlotKey = null,
   onSlotHover,
   onSlotDrop,
+  onSlotTap,
   onClearSlot,
 }: ShipFittingDiagramProps) {
   const silhouette = hull.silhouette;
@@ -337,8 +345,11 @@ export function ShipFittingDiagram({
         if (!pos) return null;
         const module = moduleId ? (moduleById[moduleId] ?? null) : null;
         const canAccept = Boolean(draggedModuleId && moduleById[draggedModuleId]?.slot === slotType);
+        const canAcceptSelected = Boolean(selectedModuleId && moduleById[selectedModuleId]?.slot === slotType);
         const isHovered = hoveredSlotKey === key && canAccept;
-        return { key, slotType, index, pos, moduleId, module, canAccept, isHovered };
+        const isFocused = activeSlotKey === key;
+        const isTapReady = canAcceptSelected && !draggedModuleId;
+        return { key, slotType, index, pos, moduleId, module, canAccept, canAcceptSelected, isHovered, isTapReady, isFocused };
       })
       .filter(Boolean) as Array<{
         key: string;
@@ -348,7 +359,10 @@ export function ShipFittingDiagram({
         moduleId: string | null;
         module: ModuleDefinition | null;
         canAccept: boolean;
+        canAcceptSelected: boolean;
         isHovered: boolean;
+        isTapReady: boolean;
+        isFocused: boolean;
       }>
   );
 
@@ -413,16 +427,17 @@ export function ShipFittingDiagram({
       ))}
 
       {/* Connector lines — drawn below socket circles */}
-      {sockets.map(({ key, slotType, pos, module, isHovered }) => {
+      {sockets.map(({ key, slotType, pos, module, isHovered, isTapReady, isFocused }) => {
         const c = SOCKET_COLORS[slotType];
-        const stroke = isHovered ? c.hoveredStroke : module ? c.stroke : c.dimStroke;
+        const active = isHovered || isTapReady || isFocused;
+        const stroke = active ? c.hoveredStroke : module ? c.stroke : c.dimStroke;
         return (
           <line
             key={`ln-${key}`}
             x1={pos.x}  y1={pos.y}
             x2={pos.ax} y2={pos.ay}
             stroke={stroke}
-            strokeWidth={isHovered ? 1.4 : 0.75}
+            strokeWidth={active ? 1.4 : 0.75}
             strokeOpacity={0.55}
             strokeDasharray={module ? undefined : "3 2"}
           />
@@ -430,11 +445,12 @@ export function ShipFittingDiagram({
       })}
 
       {/* Slot sockets */}
-      {sockets.map(({ key, slotType, index, pos, module, canAccept, isHovered }) => {
+      {sockets.map(({ key, slotType, index, pos, module, canAccept, isHovered, isTapReady, isFocused }) => {
         const c       = SOCKET_COLORS[slotType];
         const filled  = module !== null;
-        const stroke  = isHovered ? c.hoveredStroke : filled ? c.stroke : c.dimStroke;
-        const bgFill  = isHovered
+        const active  = isHovered || isTapReady || isFocused;
+        const stroke  = active ? c.hoveredStroke : filled ? c.stroke : c.dimStroke;
+        const bgFill  = active
           ? `${c.stroke}55`
           : filled ? c.filledFill : c.emptyFill;
         const icon    = filled
@@ -443,6 +459,7 @@ export function ShipFittingDiagram({
         const nameLabel  = filled ? moduleLabelText(module!.name) : "";
         const nameFontSize = moduleLabelFontSize(nameLabel);
         const slotLabel  = `${slotType.slice(0, 3).toUpperCase()} ${index + 1}`;
+        const interactive = canAccept || isTapReady;
 
         return (
           <g
@@ -458,14 +475,37 @@ export function ShipFittingDiagram({
               e.preventDefault();
               onSlotDrop(slotType, index);
             }}
-            style={{ cursor: canAccept ? "copy" : "default" }}
+            onClick={() => {
+              if (onSlotTap) onSlotTap(slotType, index);
+            }}
+            style={{ cursor: interactive ? "pointer" : "default" }}
           >
+            <circle
+              cx={pos.x}
+              cy={pos.y}
+              r={24}
+              fill="rgba(255,255,255,0.001)"
+              stroke="none"
+            />
+
+            {/* Tap-ready outer ring pulse */}
+            {(isTapReady || canAccept) && (
+              <circle
+                cx={pos.x} cy={pos.y} r={active ? 21 : 19}
+                fill="none"
+                stroke={active ? c.hoveredStroke : c.stroke}
+                strokeWidth={active ? 1.6 : 1}
+                strokeOpacity={active ? 0.55 : 0.28}
+                strokeDasharray={filled ? undefined : "3 3"}
+              />
+            )}
+
             {/* Socket background */}
             <circle
-              cx={pos.x} cy={pos.y} r={15}
+              cx={pos.x} cy={pos.y} r={13.5}
               fill={bgFill}
               stroke={stroke}
-              strokeWidth={isHovered ? 2 : filled ? 1.3 : 1}
+              strokeWidth={active ? 2 : filled ? 1.3 : 1}
               strokeDasharray={filled ? undefined : "4 3"}
             />
 
@@ -519,17 +559,17 @@ export function ShipFittingDiagram({
                 style={{ cursor: "pointer" }}
               >
                 <circle
-                  cx={pos.x + 12} cy={pos.y - 12} r={6}
+                  cx={pos.x + 13} cy={pos.y - 13} r={8}
                   fill="rgba(8,12,20,0.92)"
                   stroke={c.stroke}
-                  strokeWidth={0.8}
+                  strokeWidth={1}
                   strokeOpacity={0.55}
                 />
                 <text
-                  x={pos.x + 12} y={pos.y - 11}
+                  x={pos.x + 13} y={pos.y - 12}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={8}
+                  fontSize={9}
                   fill={c.stroke}
                   fillOpacity={0.75}
                   style={{ userSelect: "none" }}

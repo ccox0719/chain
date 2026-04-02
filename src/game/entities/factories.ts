@@ -62,7 +62,17 @@ function neutralEffects() {
     speedMultiplier: 1,
     signatureMultiplier: 1,
     turretTrackingMultiplier: 1,
-    lockRangeMultiplier: 1
+    lockRangeMultiplier: 1,
+    capacitorRegenMultiplier: 1
+  };
+}
+
+function tacticalSlowState() {
+  return {
+    activeRemaining: 0,
+    cooldownRemaining: 0,
+    capPenaltyRemaining: 0,
+    speedPenaltyRemaining: 0
   };
 }
 
@@ -148,6 +158,7 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
     navigation: idleNav(),
     queuedUndockActions: [],
     effects: neutralEffects(),
+    tacticalSlow: tacticalSlowState(),
     savedBuilds: [
       { id: "build-1", name: "Build 1", shipId: hull.id, equipped: cloneLoadout(starterFit), savedAt: Date.now() },
       { id: "build-2", name: "Build 2", shipId: hull.id, equipped: cloneLoadout(starterFit), savedAt: null },

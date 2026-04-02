@@ -21,9 +21,11 @@ const MODULE_KIND_ICON: Record<string, string> = {
   mining_laser: "⛏",
   afterburner: "➤",
   webifier: "⟲",
+  warp_disruptor: "⌖",
   target_painter: "◍",
   tracking_disruptor: "≋",
   sensor_dampener: "◌",
+  energy_neutralizer: "ϟ",
   salvager: "◇",
   shield_booster: "⬡",
   armor_repairer: "◼",
@@ -38,9 +40,11 @@ const MODULE_KIND_LABEL: Record<string, string> = {
   mining_laser: "Mining",
   afterburner: "Drive",
   webifier: "Web",
+  warp_disruptor: "Point",
   target_painter: "Painter",
   tracking_disruptor: "Disrupt",
   sensor_dampener: "Dampen",
+  energy_neutralizer: "Neut",
   salvager: "Salvage",
   shield_booster: "Shield",
   armor_repairer: "Armor",
@@ -69,6 +73,7 @@ interface GameHudProps {
   onUnlockTarget: (ref: SelectableRef) => void;
   onToggleModule: (slotType: ModuleSlot, slotIndex: number) => void;
   onActivateBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
+  onActivateTacticalSlow: () => void;
   onIssueCommand: (command: CommandAction) => void;
   onStopShip: () => void;
   onToggleAutopilot: () => void;
@@ -224,6 +229,7 @@ export function GameHud({
   onUnlockTarget,
   onToggleModule,
   onActivateBuild,
+  onActivateTacticalSlow,
   onIssueCommand,
   onStopShip,
   onToggleAutopilot
@@ -275,6 +281,14 @@ export function GameHud({
   const [targetCollapsed, setTargetCollapsed] = useState(false);
   const [overviewCollapsed, setOverviewCollapsed] = useState(false);
   const [missionCollapsed, setMissionCollapsed] = useState(false);
+  const tacticalSlow = world.player.tacticalSlow;
+  const tacticalActive = tacticalSlow.activeRemaining > 0;
+  const tacticalReady = !tacticalActive && tacticalSlow.cooldownRemaining <= 0;
+  const tacticalStatus = tacticalActive
+    ? `Active ${tacticalSlow.activeRemaining.toFixed(1)}s`
+    : tacticalSlow.cooldownRemaining > 0
+      ? `Cooldown ${Math.ceil(tacticalSlow.cooldownRemaining)}s`
+      : "Ready";
 
   const filteredOverview = useMemo(() => {
     return overview.filter((entry) => {
@@ -426,6 +440,7 @@ export function GameHud({
       </div>
 
       <div className="hud-top">
+        {tacticalActive && <div className="tactical-slow-overlay active" aria-hidden="true" />}
         <div className={`hud-window hud-window-left hud-window-pilot${pilotCollapsed ? " collapsed" : ""}`}>
           <button type="button" className="hud-edge-toggle" onClick={() => setPilotCollapsed((current) => !current)}>
             {pilotCollapsed ? "+" : "−"}
@@ -461,6 +476,20 @@ export function GameHud({
                   <button type="button" className="ghost-button mini" onClick={onStopShip}>
                     Stop
                   </button>
+                  <button
+                    type="button"
+                    className={`ghost-button mini tactical-button${tacticalActive ? " active" : ""}`}
+                    onClick={onActivateTacticalSlow}
+                    disabled={!tacticalReady || Boolean(world.dockedStationId) || world.player.buildSwap.active}
+                    title="Briefly slow combat to read the field"
+                  >
+                    Slow Time
+                  </button>
+                </div>
+                <div className="tactical-status-row">
+                  <span className={`status-chip${tacticalActive ? " active" : ""}`}>{tacticalStatus}</span>
+                  {tacticalSlow.capPenaltyRemaining > 0 && <span className="status-chip">Cap -20%</span>}
+                  {tacticalSlow.speedPenaltyRemaining > 0 && <span className="status-chip">Speed -15%</span>}
                 </div>
                 <div className="build-strip">
                   {world.player.savedBuilds.map((build) => {
@@ -627,13 +656,20 @@ export function GameHud({
                             onOpenContextForOverview(entry.ref, event);
                           }}
                         >
-                          <span className="overview-name">
-                            <strong>{getOverviewTypeSymbol(entry.type)} {entry.name}</strong>
-                            {entry.subtitle && <small>{entry.subtitle}</small>}
-                            {entry.combatProfileLabel && <small>{entry.combatProfileLabel}</small>}
-                            {isObjective && <small>objective</small>}
-                            {isNextGate && <small>next gate</small>}
-                          </span>
+                            <span className="overview-name">
+                              <strong>{getOverviewTypeSymbol(entry.type)} {entry.name}</strong>
+                              {entry.subtitle && <small>{entry.subtitle}</small>}
+                              {entry.combatProfileLabel && <small>{entry.combatProfileLabel}</small>}
+                              {tacticalActive && entry.type === "enemy" && (
+                                <small>
+                                  {entry.threatLabel ?? "Threat"}
+                                  {entry.preferredRange ? ` • Pref ${Math.round(entry.preferredRange)}m` : ""}
+                                  {entry.weaknessLabel ? ` • ${entry.weaknessLabel}` : ""}
+                                </small>
+                              )}
+                              {isObjective && <small>objective</small>}
+                              {isNextGate && <small>next gate</small>}
+                            </span>
                           <span>{Math.round(entry.distance)} m</span>
                         </button>
                       );

@@ -12,6 +12,7 @@ interface WeaponDetailsCardProps {
   module: ModuleDefinition;
   compareTo?: ModuleDefinition | null;
   contextLabel?: string;
+  compactMode?: "default" | "minimal";
 }
 
 function DeltaGlyph({ direction }: { direction: "up" | "down" | "flat" }) {
@@ -31,16 +32,23 @@ function getMetricDelta(metric: CompactModuleMetric, compareTo: ModuleDefinition
   return delta > 0 ? "up" : "down";
 }
 
-export function WeaponDetailsCard({ module, compareTo = null, contextLabel }: WeaponDetailsCardProps) {
+export function WeaponDetailsCard({
+  module,
+  compareTo = null,
+  contextLabel,
+  compactMode = "default"
+}: WeaponDetailsCardProps) {
   const metrics = getCompactModuleMetrics(module);
   const roleTag = getModuleRoleTag(module);
   const weaponLike = module.slot === "weapon" && Boolean(module.damage && module.damageProfile);
   const weaponStats = weaponLike ? getWeaponSummaryStats(module) : null;
   const comparisonHighlights = weaponLike ? getWeaponComparisonHighlights(module, compareTo) : [];
   const profileEntries = weaponLike ? getDamageProfileEntries(module.damageProfile) : [];
+  const visibleMetrics = compactMode === "minimal" ? metrics.slice(0, 2) : metrics;
+  const overflowMetrics = compactMode === "minimal" ? metrics.slice(2) : [];
 
   return (
-    <section className="weapon-details-card weapon-details-card-compact">
+    <section className={`weapon-details-card weapon-details-card-compact${compactMode === "minimal" ? " minimal" : ""}`}>
       <div className="weapon-details-head">
         <div className="weapon-title-block">
           <div className="weapon-details-title-row">
@@ -54,7 +62,7 @@ export function WeaponDetailsCard({ module, compareTo = null, contextLabel }: We
         </div>
       </div>
 
-      {comparisonHighlights.length > 0 && (
+      {comparisonHighlights.length > 0 && compactMode !== "minimal" && (
         <div className="weapon-compare-row">
           {comparisonHighlights.map((entry) => (
             <span key={entry.label} className={`weapon-compare-chip ${entry.direction === "up" ? "up" : "down"}`}>
@@ -64,8 +72,8 @@ export function WeaponDetailsCard({ module, compareTo = null, contextLabel }: We
         </div>
       )}
 
-      <div className="weapon-stat-grid compact">
-        {metrics.map((metric) => {
+      <div className={`weapon-stat-grid compact${compactMode === "minimal" ? " weapon-stat-grid-minimal" : ""}`}>
+        {visibleMetrics.map((metric) => {
           const delta = getMetricDelta(metric, compareTo);
           return (
             <div key={metric.id} className="weapon-stat-row compact">
@@ -85,7 +93,28 @@ export function WeaponDetailsCard({ module, compareTo = null, contextLabel }: We
       </div>
 
       <details className="weapon-details-expander">
-        <summary>More Info</summary>
+        <summary>{compactMode === "minimal" ? "Details" : "More Info"}</summary>
+        {overflowMetrics.length > 0 && (
+          <div className="weapon-stat-grid compact weapon-stat-grid-overflow">
+            {overflowMetrics.map((metric) => {
+              const delta = getMetricDelta(metric, compareTo);
+              return (
+                <div key={metric.id} className="weapon-stat-row compact">
+                  <div className="weapon-stat-topline compact">
+                    <span>{metric.label}</span>
+                    <div className="weapon-stat-value-wrap">
+                      <strong>{metric.displayValue}</strong>
+                      <DeltaGlyph direction={delta} />
+                    </div>
+                  </div>
+                  <div className="weapon-stat-bar compact">
+                    <div className={`weapon-stat-bar-fill tone-${metric.tone}`} style={{ width: `${metric.normalized * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div className="weapon-meta-grid compact">
           {weaponLike ? (
             <>

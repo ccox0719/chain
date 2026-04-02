@@ -88,6 +88,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Break four hostile hulls around Slag Yard so the refinery route can hold its schedule.",
     rewardCredits: 1680,
     requiredMissionId: "crystal-sweep",
+    minPowerTier: 2,
     targetCount: 4,
     enemyVariantIds: ["dust-raider", "cinder-pike"],
     targetSystemId: "slag-arc",
@@ -110,6 +111,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Push to the Frontier Signal Beacon in Outer Verge and report on pirate movement along the chokepoint.",
     rewardCredits: 1600,
     requiredMissionId: "crystal-sweep",
+    minPowerTier: 2,
     targetSystemId: "outer-verge",
     targetDestinationId: "verge-beacon",
     unlockSystemId: "outer-verge"
@@ -121,6 +123,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Break four raider hulls in Blackwake to make the shortcut survivable for convoy captains.",
     rewardCredits: 2200,
     requiredMissionId: "border-watch",
+    minPowerTier: 2,
     targetCount: 4,
     enemyVariantIds: ["veil-stalker", "reaver-gunship"],
     targetSystemId: "blackwake",
@@ -133,6 +136,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Push into Ashen Deep and record the pull signature around the Ashen Breach for frontier patrol planners.",
     rewardCredits: 2480,
     requiredMissionId: "wake-hunt",
+    minPowerTier: 3,
     targetSystemId: "ashen-deep",
     targetDestinationId: "ashen-breach"
   },
@@ -143,6 +147,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Obtain the charter by reaching the Ghostlight vault marker. That unlocks the pocket gate.",
     rewardCredits: 2600,
     requiredMissionId: "wake-hunt",
+    minPowerTier: 3,
     targetSystemId: "ghostlight-pocket",
     targetDestinationId: "ghostlight-vault",
     unlockSystemId: "ghostlight-pocket"
@@ -154,6 +159,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Reach the Chart Beacon in Hush Atlas and bring its route overlays back into frontier circulation.",
     rewardCredits: 2940,
     requiredMissionId: "ghostlight-charter",
+    minPowerTier: 3,
     targetSystemId: "hush-atlas",
     targetDestinationId: "hush-chart"
   },
@@ -164,6 +170,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Bring back 8 ghost alloy from the Ghostlight pocket to prove you can hold the frontier line.",
     rewardCredits: 3200,
     requiredMissionId: "ghostlight-charter",
+    minPowerTier: 3,
     targetCount: 8,
     targetResource: "ghost-alloy",
     targetSystemId: "ghostlight-pocket",
@@ -176,6 +183,7 @@ export const missionCatalog: MissionDefinition[] = [
     briefing: "Crack five hostile hulls around Revenant Rift so salvage crews can work the crossing again.",
     rewardCredits: 3680,
     requiredMissionId: "vault-salvage",
+    minPowerTier: 4,
     targetCount: 5,
     enemyVariantIds: ["veil-stalker", "reaver-gunship"],
     targetSystemId: "revenant-crossing",
