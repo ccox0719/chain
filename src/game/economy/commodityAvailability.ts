@@ -1,6 +1,7 @@
 import { CommodityDefinition, SecurityBand, SystemDestination } from "../../types/game";
 import { commodityCatalog } from "./data/commodities";
 import { stationMarketProfileById } from "./data/stationMarketProfiles";
+import { getCommodityStockBias } from "../procgen/runtime";
 
 function hashStringToUnitInterval(input: string) {
   let hash = 2166136261;
@@ -20,7 +21,13 @@ function stationTagSet(station: SystemDestination | null) {
   return new Set([...(station?.tags ?? []), ...(profile?.supplyTags ?? []), ...(profile?.demandTags ?? [])]);
 }
 
-function commodityMarketScore(commodity: CommodityDefinition, security: SecurityBand, station: SystemDestination | null) {
+function commodityMarketScore(
+  commodity: CommodityDefinition,
+  security: SecurityBand,
+  station: SystemDestination | null,
+  systemId?: string,
+  procgenWorld?: Parameters<typeof getCommodityStockBias>[0]
+) {
   if (!station) return 0;
   const tags = stationTagSet(station);
   const profile = stationMarketProfileById[station.id];
@@ -54,6 +61,9 @@ function commodityMarketScore(commodity: CommodityDefinition, security: Security
 
   const jitter = hashStringToUnitInterval(`${station.id}:${commodity.id}:stock`) - 0.5;
   score += jitter * 0.16;
+  if (procgenWorld && systemId) {
+    score += getCommodityStockBias(procgenWorld, systemId, commodity.tags);
+  }
 
   return clamp(score, 0.04, 0.98);
 }
@@ -72,7 +82,9 @@ export function isCommodityAvailableAtStation(
 export function getStationCommodityStock(
   commodities: CommodityDefinition[],
   security: SecurityBand,
-  station: SystemDestination | null
+  station: SystemDestination | null,
+  systemId?: string,
+  procgenWorld?: Parameters<typeof getCommodityStockBias>[0]
 ) {
   if (!station) return [];
   const profile = stationMarketProfileById[station.id];
@@ -85,7 +97,7 @@ export function getStationCommodityStock(
   return commodities
     .map((commodity) => ({
       commodity,
-      score: commodityMarketScore(commodity, security, station)
+      score: commodityMarketScore(commodity, security, station, systemId, procgenWorld)
     }))
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;

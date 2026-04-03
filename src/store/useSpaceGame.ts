@@ -490,7 +490,21 @@ function loadWorld() {
         ...fallback.transportMissions,
         ...(parsed.transportMissions ?? {})
       },
-      routePlan: parsed.routePlan ?? null
+      routePlan: parsed.routePlan ?? null,
+      procgen: {
+        ...fallback.procgen,
+        ...(parsed.procgen ?? {}),
+        regionalEvents: {
+          ...fallback.procgen.regionalEvents,
+          ...(parsed.procgen?.regionalEvents ?? {})
+        },
+        siteHotspots: {
+          ...fallback.procgen.siteHotspots,
+          ...(parsed.procgen?.siteHotspots ?? {})
+        },
+        activeContract: parsed.procgen?.activeContract ?? fallback.procgen.activeContract,
+        activeContractState: parsed.procgen?.activeContractState ?? fallback.procgen.activeContractState
+      }
     };
   } catch {
     return fallback;

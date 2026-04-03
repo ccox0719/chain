@@ -51,6 +51,7 @@ export type RoleTag =
 
 export type MissionType = "bounty" | "mining" | "deliver" | "travel";
 export type TransportRisk = "low" | "medium" | "high" | "extreme";
+export type ProceduralContractType = "transport" | "mining" | "bounty";
 
 export type SecurityBand = "high" | "medium" | "low" | "frontier";
 
@@ -725,6 +726,82 @@ export interface TransportMissionState {
   rewardEstimate: number;
 }
 
+export interface RegionalEventState {
+  id: string;
+  regionId: string;
+  cycle: number;
+  name: string;
+  description: string;
+  affectedTags: string[];
+  serviceOffer?: string;
+  hostileActivityMultiplier?: number;
+  rewardMultiplier?: number;
+  missionTypeWeights?: Partial<Record<ProceduralContractType, number>>;
+  stockBiasTags?: string[];
+  priceAdjustments?: Array<{
+    tag: string;
+    buyMultiplier: number;
+    sellMultiplier: number;
+  }>;
+}
+
+export interface ProceduralContractDefinition {
+  id: string;
+  templateId: string;
+  type: ProceduralContractType;
+  title: string;
+  briefing: string;
+  issuerStationId: string;
+  issuerSystemId: string;
+  issuerRegionId: string;
+  riskLevel: TransportRisk;
+  rewardCredits: number;
+  bonusReward?: number;
+  bonusTimeLimitSec?: number;
+  routePreference?: RoutePreference;
+  targetSystemId: string;
+  targetDestinationId?: string;
+  targetStationId?: string;
+  targetCount?: number;
+  targetResource?: ResourceId;
+  enemyVariantIds?: string[];
+  cargoType?: string;
+  cargoVolume?: number;
+  cargoUnitValue?: number;
+}
+
+export interface ProceduralContractState {
+  contractId: string;
+  status: "active" | "readyToTurnIn" | "completed";
+  progress: number;
+  acceptedAt: number;
+  dueAt: number | null;
+  rewardClaimed: boolean;
+  pickedUp?: boolean;
+  delivered?: boolean;
+}
+
+export interface ProcgenState {
+  seed: number;
+  eventCycle: number;
+  regionalEvents: Record<string, RegionalEventState>;
+  siteHotspots: Record<string, ProceduralSiteHotspotState>;
+  activeContract: ProceduralContractDefinition | null;
+  activeContractState: ProceduralContractState | null;
+}
+
+export interface ProceduralSiteHotspotState {
+  id: string;
+  systemId: string;
+  destinationId: string;
+  cycle: number;
+  title: string;
+  description: string;
+  encounterWeight: number;
+  rewardMultiplier: number;
+  tags: string[];
+}
+
 export interface SectorRuntime {
   enemies: EnemyState[];
   asteroids: AsteroidState[];
@@ -819,6 +896,7 @@ export interface GameWorld {
   storyLog: string[];
   routePlan: RoutePlan | null;
   elapsedTime: number;
+  procgen: ProcgenState;
 }
 
 export interface TransportTracker {
@@ -875,5 +953,9 @@ export interface GameSnapshot {
   nextRouteStep: RouteStep | null;
   buildMatchId: BuildSlotId | null;
   activeTransportMission: TransportTracker | null;
+  activeProceduralContract: ProceduralContractDefinition | null;
+  availableProceduralContracts: ProceduralContractDefinition[];
+  regionalEvent: RegionalEventState | null;
+  currentHotspot: ProceduralSiteHotspotState | null;
   economy: EconomySnapshot;
 }

@@ -1,0 +1,63 @@
+export interface EncounterPackTemplate {
+  id: string;
+  context: "belt" | "gate";
+  minDanger: number;
+  maxDanger: number;
+  security?: Array<"high" | "medium" | "low" | "frontier">;
+  weight: number;
+  roles: Array<"tackle" | "sniper" | "brawler" | "support" | "skirmisher" | "anchor" | "escort">;
+}
+
+export interface LootBonusTemplate {
+  id: string;
+  weight: number;
+  factions?: string[];
+  combatStyles?: Array<"shield" | "armor" | "speed">;
+  commodities: Array<{
+    commodityId: "salvage-scrap" | "weapons-components" | "coolant-gel" | "drone-parts" | "reactor-coils";
+    amountRange: [number, number];
+    chance: number;
+  }>;
+}
+
+export const encounterPackTemplates: EncounterPackTemplate[] = [
+  { id: "belt-light-pair", context: "belt", minDanger: 1, maxDanger: 2, weight: 4, roles: ["tackle", "sniper"] },
+  { id: "belt-mining-harass", context: "belt", minDanger: 2, maxDanger: 4, weight: 3, roles: ["brawler", "support"] },
+  { id: "belt-frontier-wave", context: "belt", minDanger: 4, maxDanger: 6, security: ["frontier", "low"], weight: 4, roles: ["anchor", "escort"] },
+  { id: "belt-skirmish-net", context: "belt", minDanger: 3, maxDanger: 6, weight: 2, roles: ["skirmisher", "skirmisher", "support"] },
+  { id: "gate-check", context: "gate", minDanger: 1, maxDanger: 2, weight: 4, roles: ["tackle", "sniper"] },
+  { id: "gate-patrol", context: "gate", minDanger: 2, maxDanger: 4, weight: 3, roles: ["brawler", "support"] },
+  { id: "gate-frontier-wall", context: "gate", minDanger: 4, maxDanger: 6, security: ["frontier", "low"], weight: 4, roles: ["anchor", "escort"] },
+  { id: "gate-pincer", context: "gate", minDanger: 3, maxDanger: 6, weight: 2, roles: ["skirmisher", "skirmisher", "support"] }
+];
+
+export const lootBonusTemplates: LootBonusTemplate[] = [
+  {
+    id: "pirate-scrap",
+    weight: 4,
+    factions: ["veilborn"],
+    commodities: [
+      { commodityId: "salvage-scrap", amountRange: [1, 3], chance: 1 },
+      { commodityId: "weapons-components", amountRange: [0, 1], chance: 0.3 }
+    ]
+  },
+  {
+    id: "union-cache",
+    weight: 3,
+    factions: ["cinder-union"],
+    combatStyles: ["armor"],
+    commodities: [
+      { commodityId: "coolant-gel", amountRange: [1, 2], chance: 0.45 },
+      { commodityId: "reactor-coils", amountRange: [1, 1], chance: 0.22 }
+    ]
+  },
+  {
+    id: "speed-kit",
+    weight: 2,
+    combatStyles: ["speed"],
+    commodities: [
+      { commodityId: "drone-parts", amountRange: [1, 2], chance: 0.35 },
+      { commodityId: "salvage-scrap", amountRange: [1, 2], chance: 0.8 }
+    ]
+  }
+];

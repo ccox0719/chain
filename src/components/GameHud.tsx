@@ -6,6 +6,7 @@ import { playerShipById } from "../game/data/ships";
 import { planRoute } from "../game/universe/routePlanning";
 import { getCargoUsed } from "../game/utils/stats";
 import { CommandAction, GameSnapshot, ModuleSlot, ObjectInfo, SelectableRef } from "../types/game";
+import { contractProgressFraction } from "../game/procgen/runtime";
 
 const MISSION_TYPE_LABELS: Record<string, string> = {
   bounty: "Bounty",
@@ -245,8 +246,10 @@ export function GameHud({
     lockedTargetInfos,
     overview,
     activeTransportMission,
+    activeProceduralContract,
     sector,
-    currentRegion
+    currentRegion,
+    currentHotspot
   } = snapshot;
   const ship = playerShipById[world.player.hullId];
   const roundedCargoCapacity = Math.round(derived.cargoCapacity);
@@ -405,16 +408,29 @@ export function GameHud({
     return parts.join(" • ");
   }
 
-  const hasMission = Boolean(activeTransportMission || activeMission);
-  const missionGuideTitle = activeTransportMission?.title ?? activeMission?.title ?? null;
-  const missionGuideLabel = activeTransportMission ? "Haul" : activeMissionLabel;
+  const proceduralProgress = activeProceduralContract && world.procgen.activeContractState
+    ? Math.round(contractProgressFraction(activeProceduralContract, world.procgen.activeContractState) * 100)
+    : 0;
+  const hasMission = Boolean(activeTransportMission || activeMission || activeProceduralContract);
+  const missionGuideTitle = activeTransportMission?.title ?? activeProceduralContract?.title ?? activeMission?.title ?? null;
+  const missionGuideLabel = activeTransportMission ? "Haul" : activeProceduralContract ? MISSION_TYPE_LABELS[activeProceduralContract.type] ?? activeProceduralContract.type : activeMissionLabel;
   const missionGuideTarget =
     activeTransportMission
       ? activeTransportMission.objectiveText
+      : activeProceduralContract
+        ? activeProceduralContract.type === "transport"
+          ? `Deliver to ${getSystemDestination(activeProceduralContract.targetSystemId, activeProceduralContract.targetStationId ?? "")?.name ?? activeProceduralContract.targetSystemId}`
+          : activeProceduralContract.type === "mining"
+            ? `Mine ${activeProceduralContract.targetCount} ${activeProceduralContract.targetResource}`
+            : `Destroy ${activeProceduralContract.targetCount} hostiles in ${sectorById[activeProceduralContract.targetSystemId]?.name ?? activeProceduralContract.targetSystemId}`
       : activeMissionRoute?.targetDestination?.name ?? activeMissionRoute?.targetSystem?.name ?? activeMission?.targetSystemId ?? null;
   const missionGuideRoute =
     activeTransportMission
       ? `${activeTransportMission.objective === "pickup" ? "Pickup" : "Delivery"} route · ${activeTransportMission.jumpsRemaining} jumps · ${activeTransportMission.routeRisk} risk${activeTransportMission.nextGateName ? ` · next ${activeTransportMission.nextGateName}` : ""}`
+      : activeProceduralContract
+        ? `${activeProceduralContract.riskLevel} risk · ${proceduralProgress}% progress${
+            currentHotspot && currentHotspot.systemId === activeProceduralContract.targetSystemId ? ` · hotspot live` : ""
+          }`
       : activeMission?.targetSystemId === world.currentSectorId
         ? "Objective is in-system"
         : activeMissionRoute?.route
@@ -700,9 +716,12 @@ export function GameHud({
                     {missionGuideLabel && <span className="status-chip">{missionGuideLabel}</span>}
                     {activeTransportMission ? (
                       <span className="status-chip">{activeTransportMission.routeRisk} risk</span>
+                    ) : activeProceduralContract ? (
+                      <span className="status-chip">{activeProceduralContract.riskLevel} risk</span>
                     ) : (
                       activeMissionRoute?.route && <span className="status-chip">{activeMissionRoute.route.steps.length} jumps</span>
                     )}
+                    {activeProceduralContract && <span className="status-chip">{proceduralProgress}%</span>}
                   </div>
                   <p className="mission-guide-copy">
                     Target: {missionGuideTarget ?? "Unknown"}
@@ -724,6 +743,10 @@ export function GameHud({
                           Warp to Objective
                         </button>
                       )
+                    ) : activeProceduralContract ? (
+                      <button type="button" className="ghost-button mini" onClick={() => setOverlay("missions")}>
+                        Open Board
+                      </button>
                     ) : (
                       missionObjectiveRef && (
                         <button

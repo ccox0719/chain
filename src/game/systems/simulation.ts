@@ -52,6 +52,20 @@ import {
   getShipBuyPrice
 } from "../economy/pricing";
 import {
+  contractProgressFraction,
+  createContractState,
+  ensureProcgenState,
+  generateContractsForStation,
+  getBoardContractById,
+  getCommodityPriceModifier,
+  getContractPayout,
+  getEncounterTemplateOptions,
+  getHostileActivityMultiplier,
+  getRegionalEventForSystem,
+  getSiteHotspotForSystem,
+  rollProceduralLoot
+} from "../procgen/runtime";
+import {
   add,
   angleTo,
   clamp,
@@ -897,6 +911,14 @@ function getActiveMission(world: GameWorld): MissionDefinition | null {
   return active ?? null;
 }
 
+function getActiveProceduralContract(world: GameWorld) {
+  return world.procgen.activeContract;
+}
+
+function getActiveProceduralState(world: GameWorld) {
+  return world.procgen.activeContractState;
+}
+
 function getActiveTransportMissionDefinition(world: GameWorld): TransportMissionDefinition | null {
   const missionState = Object.values(world.transportMissions).find((entry) => entry.status === "active");
   if (!missionState) return null;
@@ -923,6 +945,13 @@ function getTransportMissionPayout(world: GameWorld, mission: TransportMissionDe
   return mission.baseReward + bonusPaid + getTransportCargoReimbursement(mission);
 }
 
+function getProceduralContractPayout(world: GameWorld) {
+  const contract = getActiveProceduralContract(world);
+  const state = getActiveProceduralState(world);
+  if (!contract || !state) return 0;
+  return getContractPayout(world, contract, state);
+}
+
 function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
   const station = world.dockedStationId ? getCurrentStation(world) : getCurrentStation(world);
   const system = getCurrentSectorDef(world);
@@ -932,13 +961,19 @@ function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
   const commodityBuyPrices = Object.fromEntries(
     commodityCatalog.map((commodity) => [
       commodity.id,
-      scalePrice(getCommodityBuyPrice(commodity, security, station, system), derived.commodityBuyMultiplier)
+      scalePrice(
+        getCommodityBuyPrice(commodity, security, station, system) * getCommodityPriceModifier(world, system.id, commodity.id).buy,
+        derived.commodityBuyMultiplier
+      )
     ])
   ) as Record<CommodityId, number>;
   const commoditySellPrices = Object.fromEntries(
     commodityCatalog.map((commodity) => [
       commodity.id,
-      scalePrice(getCommoditySellPrice(commodity, security, station, system), derived.commoditySellMultiplier)
+      scalePrice(
+        getCommoditySellPrice(commodity, security, station, system) * getCommodityPriceModifier(world, system.id, commodity.id).sell,
+        derived.commoditySellMultiplier
+      )
     ])
   ) as Record<CommodityId, number>;
   const moduleBuyPrices = Object.fromEntries(
@@ -1018,6 +1053,32 @@ function normalizeTransportMissionStates(world: GameWorld) {
   });
 }
 
+function normalizeProceduralContractState(world: GameWorld) {
+  const contract = getActiveProceduralContract(world);
+  const state = getActiveProceduralState(world);
+  if (!contract || !state || state.status === "completed") return;
+
+  if (contract.type === "mining" && contract.targetResource && contract.targetCount) {
+    state.progress = Math.min(state.progress, contract.targetCount);
+    if (state.progress >= contract.targetCount) {
+      state.status = "readyToTurnIn";
+    }
+    return;
+  }
+
+  if (contract.type === "bounty" && contract.targetCount) {
+    state.progress = Math.min(state.progress, contract.targetCount);
+    if (state.progress >= contract.targetCount) {
+      state.status = "readyToTurnIn";
+    }
+    return;
+  }
+
+  if (contract.type === "transport" && state.delivered) {
+    state.status = "readyToTurnIn";
+  }
+}
+
 function normalizeDeliveryMissionStates(world: GameWorld) {
   const station = world.dockedStationId ? getCurrentStation(world) : null;
   missionCatalog.forEach((mission) => {
@@ -1041,6 +1102,19 @@ function resolveTransportMissionDeliveries(world: GameWorld) {
     if (!state || state.status !== "active" || !state.pickedUp) return;
     completeTransportMission(world, mission);
   });
+}
+
+function resolveProceduralContractDeliveries(world: GameWorld) {
+  const contract = getActiveProceduralContract(world);
+  const state = getActiveProceduralState(world);
+  const station = world.dockedStationId ? getCurrentStation(world) : null;
+  if (!contract || !state || !station || state.status === "completed") return;
+  if (contract.type !== "transport" || !state.pickedUp || state.delivered) return;
+  if (station.id !== contract.targetStationId) return;
+  world.player.missionCargo = world.player.missionCargo.filter((entry) => entry.missionId !== contract.id);
+  state.delivered = true;
+  state.status = "readyToTurnIn";
+  pushStory(world, `${contract.title} cargo delivered. Return to ${getSystemDestination(contract.issuerSystemId, contract.issuerStationId)?.name ?? contract.issuerStationId} for payment.`);
 }
 
 function evaluateTransportRisk(steps: Array<{ security: TransportRisk | "high" | "medium" | "low" | "frontier" }>): TransportRisk {
@@ -1117,6 +1191,26 @@ function completeTravelMission(world: GameWorld, missionId: string) {
 }
 
 function claimMissionRewards(world: GameWorld, missionId: string) {
+  const activeProcedural = getActiveProceduralContract(world);
+  const activeProceduralState = getActiveProceduralState(world);
+  if (activeProcedural?.id === missionId && activeProceduralState?.status === "readyToTurnIn") {
+    const station = world.dockedStationId ? getCurrentStation(world) : null;
+    if (!station || station.id !== activeProcedural.issuerStationId) return false;
+    const payout = getProceduralContractPayout(world);
+    if (activeProcedural.type === "mining" && activeProcedural.targetResource && activeProcedural.targetCount) {
+      if (world.player.cargo[activeProcedural.targetResource] < activeProcedural.targetCount) return false;
+      world.player.cargo[activeProcedural.targetResource] -= activeProcedural.targetCount;
+    }
+    world.player.credits += payout;
+    awardPilotLicenseProgress(world, payout / 10);
+    activeProceduralState.status = "completed";
+    activeProceduralState.rewardClaimed = true;
+    world.procgen.activeContract = null;
+    world.procgen.activeContractState = null;
+    pushStory(world, `Contract complete: ${activeProcedural.title} (+${payout} credits)`);
+    return true;
+  }
+
   const mission = missionById[missionId];
   const state = world.missions[missionId];
   if (!mission || !state || state.status !== "readyToTurnIn") return false;
@@ -1141,6 +1235,37 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
 }
 
 export function acceptMission(world: GameWorld, missionId: string) {
+  if (missionId.startsWith("proc:")) {
+    const contract = getBoardContractById(world, missionId);
+    if (!contract) return false;
+    const hasActiveClassic = missionCatalog.some((entry) => world.missions[entry.id]?.status === "active");
+    const hasActiveTransport = Object.values(world.transportMissions).some((entry) => entry.status === "active");
+    if (hasActiveClassic || hasActiveTransport || world.procgen.activeContractState?.status === "active") {
+      return false;
+    }
+    if (contract.type === "transport") {
+      const cargoCapacity = computeDerivedStats(world.player).cargoCapacity;
+      if ((contract.cargoVolume ?? 0) > cargoCapacity) {
+        pushStory(world, `${contract.title} needs a larger cargo hold.`);
+        return false;
+      }
+      world.player.missionCargo = world.player.missionCargo.filter((entry) => entry.missionId !== contract.id);
+      world.player.missionCargo.push({
+        missionId: contract.id,
+        cargoType: contract.cargoType ?? "contract-cargo",
+        volume: contract.cargoVolume ?? 0
+      });
+    }
+    world.procgen.activeContract = contract;
+    world.procgen.activeContractState = createContractState(world, contract);
+    pushStory(world, `Contract accepted: ${contract.title}`);
+    if (contract.type === "transport" && contract.targetSystemId !== world.currentSectorId) {
+      const route = planRoute(world, world.currentSectorId, contract.targetSystemId, contract.routePreference ?? "safer", false);
+      if (route) world.routePlan = route;
+    }
+    return true;
+  }
+
   const mission = missionById[missionId];
   const state = world.missions[missionId];
   if (mission && state) {
@@ -2316,49 +2441,17 @@ function pickEnemyVariantForHostileRole(
 }
 
 function chooseHostilePackTemplate(context: TriggerContext, sectorId: string, playerPowerTier: number) {
-  const danger = sectorById[sectorId]?.danger ?? 1;
-  const templates: HostilePackTemplate[] =
-    context === "belt"
-      ? danger >= 5
-        ? [
-            { roles: ["anchor", "escort"] as HostilePackRole[], weight: 4 },
-            { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 3 },
-            { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 2 }
-          ]
-        : danger >= 3
-          ? [
-              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
-              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
-              { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
-            ]
-          : [
-              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
-              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 }
-            ]
-      : danger >= 5
-        ? [
-            { roles: ["anchor", "escort"] as HostilePackRole[], weight: 4 },
-            { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
-            { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
-          ]
-        : danger >= 3
-          ? [
-              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
-              { roles: ["brawler", "support"] as HostilePackRole[], weight: 3 },
-              { roles: ["skirmisher", "skirmisher", "support"] as HostilePackRole[], weight: 2 }
-            ]
-          : [
-              { roles: ["tackle", "sniper"] as HostilePackRole[], weight: 4 },
-              { roles: ["brawler", "support"] as HostilePackRole[], weight: 2 }
-            ];
-
+  const templates = getEncounterTemplateOptions(context, sectorId).map((template) => ({
+    roles: template.roles as HostilePackRole[],
+    weight: template.weight + Math.max(0, playerPowerTier - 2) * 0.25
+  }));
   const totalWeight = templates.reduce((sum, template) => sum + template.weight, 0);
-  let roll = Math.random() * totalWeight;
+  let roll = Math.random() * Math.max(totalWeight, 1);
   for (const template of templates) {
     roll -= template.weight;
     if (roll <= 0) return template;
   }
-  return templates[0];
+  return templates[0] ?? { roles: ["tackle", "sniper"], weight: 1 };
 }
 
 function buildTriggeredHostilePack(
@@ -2515,7 +2608,7 @@ function maybeTriggerMiningSpawn(
   const profile = getHostileTriggerProfile(world.currentSectorId);
   const playerPowerTier = getPlayerPowerTier(world);
   const frontierBoost = getCurrentSectorDef(world).security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.02 : 0;
-  const triggerChance = Math.min(0.5, profile.chance + 0.05 + frontierBoost);
+  const triggerChance = Math.min(0.5, (profile.chance + 0.05 + frontierBoost) * getHostileActivityMultiplier(world, world.currentSectorId));
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
@@ -2536,7 +2629,7 @@ function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, 
   const destinationDef = sectorById[destinationSectorId];
   const playerPowerTier = getPlayerPowerTier(world);
   const frontierBoost = destinationDef?.security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.025 : 0;
-  const triggerChance = Math.min(0.65, profile.chance + 0.08 + frontierBoost);
+  const triggerChance = Math.min(0.65, (profile.chance + 0.08 + frontierBoost) * getHostileActivityMultiplier(world, destinationSectorId));
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
@@ -2988,6 +3081,20 @@ function runPlayerModules(world: GameWorld, dt: number) {
             missionCatalog
               .filter((mission) => mission.type === "mining" && mission.targetResource === entry.resource)
               .forEach((mission) => advanceMission(world, mission.id, mined));
+            const activeProcedural = getActiveProceduralContract(world);
+            const activeProceduralState = getActiveProceduralState(world);
+            if (
+              activeProcedural?.type === "mining" &&
+              activeProceduralState?.status === "active" &&
+              activeProcedural.targetResource === entry.resource &&
+              activeProcedural.targetSystemId === world.currentSectorId
+            ) {
+              activeProceduralState.progress += mined;
+              if ((activeProcedural.targetCount ?? 0) > 0 && activeProceduralState.progress >= (activeProcedural.targetCount ?? 0)) {
+                activeProceduralState.status = "readyToTurnIn";
+                pushStory(world, `${activeProcedural.title} is ready to turn in.`);
+              }
+            }
           });
           if (totalMined === 0) return;
           maybeTriggerMiningSpawn(
@@ -3503,7 +3610,8 @@ function cleanupWorld(world: GameWorld) {
       resources: { ...variant.lootTable },
       commodities: {
         "salvage-scrap": 1 + Math.floor(Math.random() * 3),
-        "weapons-components": Math.random() > 0.72 ? 1 : 0
+        "weapons-components": Math.random() > 0.72 ? 1 : 0,
+        ...rollProceduralLoot(world, variant.id)
       },
       sourceName: variant.name,
       modules: []
@@ -3516,6 +3624,20 @@ function cleanupWorld(world: GameWorld) {
           (!mission.targetSystemId || mission.targetSystemId === world.currentSectorId)
       )
       .forEach((mission) => advanceMission(world, mission.id, 1));
+    const activeProcedural = getActiveProceduralContract(world);
+    const activeProceduralState = getActiveProceduralState(world);
+    if (
+      activeProcedural?.type === "bounty" &&
+      activeProceduralState?.status === "active" &&
+      activeProcedural.targetSystemId === world.currentSectorId &&
+      (!activeProcedural.enemyVariantIds?.length || activeProcedural.enemyVariantIds.includes(variant.id))
+    ) {
+      activeProceduralState.progress += 1;
+      if ((activeProcedural.targetCount ?? 0) > 0 && activeProceduralState.progress >= (activeProcedural.targetCount ?? 0)) {
+        activeProceduralState.status = "readyToTurnIn";
+        pushStory(world, `${activeProcedural.title} is ready to turn in.`);
+      }
+    }
     unlockTarget(world, { id: enemy.id, type: "enemy" });
   });
   sector.enemies = survivors;
@@ -3740,7 +3862,14 @@ function buildTransportTracker(world: GameWorld): TransportTracker | null {
 
 function getPrompt(world: GameWorld) {
   const transport = buildTransportTracker(world);
+  const procedural = getActiveProceduralContract(world);
+  const proceduralState = getActiveProceduralState(world);
   if (world.dockedStationId) {
+    if (procedural && proceduralState && proceduralState.status !== "completed") {
+      return proceduralState.status === "readyToTurnIn"
+        ? `${procedural.title} • Ready for turn-in`
+        : `${procedural.title} • Active contract`;
+    }
     if (transport) {
       return `${transport.objectiveText} • Jumps ${transport.jumpsRemaining}${transport.nextGateName ? ` • Next ${transport.nextGateName}` : ""}`;
     }
@@ -3757,6 +3886,15 @@ function getPrompt(world: GameWorld) {
   }
   if (transport) {
     return `${transport.objectiveText}${transport.nextGateName ? ` • Next gate ${transport.nextGateName}` : ""}`;
+  }
+  if (procedural && proceduralState && proceduralState.status !== "completed") {
+    if (procedural.type === "transport") {
+      return `${procedural.title} • Deliver cargo to ${getSystemDestination(procedural.targetSystemId, procedural.targetStationId ?? "")?.name ?? procedural.targetSystemId}`;
+    }
+    if (procedural.type === "mining") {
+      return `${procedural.title} • Mine ${procedural.targetCount} ${procedural.targetResource}`;
+    }
+    return `${procedural.title} • Hunt hostiles in ${sectorById[procedural.targetSystemId]?.name ?? procedural.targetSystemId}`;
   }
   const selected = getObjectInfo(world, world.selectedObject);
   if (!selected) {
@@ -3794,14 +3932,17 @@ function getNavLabel(world: GameWorld) {
 
 export function updateWorld(world: GameWorld, dt: number) {
   world.elapsedTime += dt;
+  ensureProcgenState(world);
   const timeScale = getWorldTimeScale(world);
   const simDt = dt * timeScale;
   updateTacticalSlowTimers(world, dt);
   updateBeltSpawnCooldowns(world, simDt);
   ensureMissionUnlocks(world);
   normalizeTransportMissionStates(world);
+  normalizeProceduralContractState(world);
   normalizeDeliveryMissionStates(world);
   resolveTransportMissionDeliveries(world);
+  resolveProceduralContractDeliveries(world);
   updateTransportRoute(world);
   if (world.dockedStationId) {
     return;
@@ -3827,12 +3968,21 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
   const activeMission = getActiveMission(world);
   const activeTransportMission = buildTransportTracker(world);
   const economy = getLocalEconomySnapshot(world);
+  const currentStation = world.dockedStationId ? getCurrentStation(world) : null;
+  const boardContracts = generateContractsForStation(world, currentStation, world.currentSectorId);
+  const availableProceduralContracts =
+    currentStation &&
+    world.procgen.activeContract &&
+    world.procgen.activeContract.issuerStationId === currentStation.id &&
+    !boardContracts.some((entry) => entry.id === world.procgen.activeContract?.id)
+      ? [world.procgen.activeContract, ...boardContracts]
+      : boardContracts;
   return {
     world,
     derived: computeDerivedStats(world.player),
     sector: getCurrentSectorDef(world),
     currentRegion: regionById[getCurrentSectorDef(world).regionId],
-    currentStation: world.dockedStationId ? getCurrentStation(world) : null,
+    currentStation,
     activeMission,
     selectedInfo: getObjectInfo(world, world.selectedObject),
     activeTargetInfo: getObjectInfo(world, world.activeTarget),
@@ -3845,6 +3995,10 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
     nextRouteStep: getNextRouteStep(world),
     buildMatchId: findMatchingBuild(world),
     activeTransportMission,
+    activeProceduralContract: world.procgen.activeContract,
+    availableProceduralContracts,
+    regionalEvent: getRegionalEventForSystem(world, world.currentSectorId),
+    currentHotspot: getSiteHotspotForSystem(world, world.currentSectorId),
     economy
   };
 }

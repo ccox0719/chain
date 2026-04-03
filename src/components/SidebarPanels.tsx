@@ -285,6 +285,14 @@ export function SidebarPanels({
                         </li>
                       );
                     })}
+                    {snapshot.activeProceduralContract && snapshot.world.procgen.activeContractState && (
+                      <li key={snapshot.activeProceduralContract.id}>
+                        <strong>{snapshot.activeProceduralContract.title}</strong>
+                        <span className="status-chip">{missionTypeLabel(snapshot.activeProceduralContract.type === "transport" ? "haul" : snapshot.activeProceduralContract.type)}</span>
+                        <span className="status-chip">{snapshot.world.procgen.activeContractState.status}</span>
+                        <p>{snapshot.activeProceduralContract.briefing}</p>
+                      </li>
+                    )}
                   </ul>
                 </CollapsibleSection>
               </section>

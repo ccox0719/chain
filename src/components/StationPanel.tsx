@@ -18,6 +18,7 @@ import {
   hasPilotLicenseForModule
 } from "../game/utils/pilotLicense";
 import { transportMissionCatalog } from "../game/missions/data/transportMissions";
+import { contractProgressFraction } from "../game/procgen/runtime";
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
 import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
@@ -278,8 +279,8 @@ export function StationPanel({
     pilotLicense.level >= 3 ? "Maxed" : `${pilotLicense.progress - pilotLicenseRange.start} / ${pilotLicenseRange.end - pilotLicenseRange.start}`;
 
   const stockedCommodities = useMemo(
-    () => getStationCommodityStock(commodityCatalog, security, currentStation),
-    [currentStation?.id, security]
+    () => getStationCommodityStock(commodityCatalog, security, currentStation, snapshot.sector.id, world),
+    [currentStation?.id, security, snapshot.sector.id, world]
   );
 
   // Max buy price for bar normalization
@@ -579,6 +580,27 @@ export function StationPanel({
           <button type="button" className="primary-button" onClick={onUndock}>Undock</button>
         </div>
       </div>
+      {snapshot.regionalEvent && (
+        <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
+          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+            <strong>{snapshot.regionalEvent.name}</strong>
+            <span className="status-chip">{snapshot.currentRegion.name}</span>
+          </div>
+          <p style={{ margin: 0 }}>{snapshot.regionalEvent.description}</p>
+          {snapshot.regionalEvent.serviceOffer && (
+            <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.78rem" }}>{snapshot.regionalEvent.serviceOffer}</p>
+          )}
+        </div>
+      )}
+      {snapshot.currentHotspot && (
+        <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
+          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+            <strong>{snapshot.currentHotspot.title}</strong>
+            <span className="status-chip">Hotspot</span>
+          </div>
+          <p style={{ margin: 0 }}>{snapshot.currentHotspot.description}</p>
+        </div>
+      )}
 
       {/* Tab navigation */}
       <div className="station-tabs">
@@ -1388,6 +1410,69 @@ export function StationPanel({
                             <span className="status-chip">
                               {state.pickedUp ? "Delivering cargo" : "Travel to pickup"}
                             </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleSection>
+            </article>
+
+            <article className="panel-lite">
+              <CollapsibleSection title="Operations Board" subtitle={`${snapshot.availableProceduralContracts.length} rotating contracts`} defaultOpen>
+                <div className="stack-list">
+                  {snapshot.availableProceduralContracts.map((contract) => {
+                    const isActive = snapshot.activeProceduralContract?.id === contract.id;
+                    const isOtherActive =
+                      snapshot.activeProceduralContract !== null && snapshot.activeProceduralContract.id !== contract.id;
+                    const progress = isActive
+                      ? Math.round((contractProgressFraction(snapshot.activeProceduralContract!, world.procgen.activeContractState) || 0) * 100)
+                      : 0;
+                    const cargoTooLarge =
+                      contract.type === "transport" && freeCargo < (contract.cargoVolume ?? 0);
+                    return (
+                      <div key={contract.id} className={`market-item${isActive ? " mission-active-card" : ""}`}>
+                        <div className="mission-card-header">
+                          <strong>{contract.title}</strong>
+                          <div className="mission-card-badges">
+                            <span className="status-chip">{missionTypeLabel(contract.type === "transport" ? "haul" : contract.type)}</span>
+                            <RiskPips risk={contract.riskLevel} />
+                            <span className="reward-badge">
+                              {contract.rewardCredits + ((contract.cargoVolume ?? 0) * (contract.cargoUnitValue ?? 0)) + (contract.bonusReward ?? 0)} cr
+                            </span>
+                            {isActive && <span className="status-chip">{world.procgen.activeContractState?.status}</span>}
+                          </div>
+                        </div>
+                        <p style={{ fontSize: "0.78rem", color: "var(--text-dim)", margin: "0 0 0.5rem" }}>{contract.briefing}</p>
+                        <div className="mission-details">
+                          <span className="status-chip">{sectorById[contract.targetSystemId]?.name ?? contract.targetSystemId}</span>
+                          {contract.targetCount && contract.targetResource && (
+                            <span className="status-chip">{contract.targetCount} {contract.targetResource}</span>
+                          )}
+                          {contract.targetCount && contract.type === "bounty" && (
+                            <span className="status-chip">{contract.targetCount} kills</span>
+                          )}
+                          {contract.cargoVolume && contract.cargoType && (
+                            <span className="status-chip">{contract.cargoVolume}u {contract.cargoType}</span>
+                          )}
+                          {contract.bonusReward && <span className="status-chip">bonus {contract.bonusReward} cr</span>}
+                          {isActive && <span className="status-chip">{progress}% progress</span>}
+                          {!isActive && cargoTooLarge && <span className="status-chip mkt-risk-chip">Needs more cargo room</span>}
+                        </div>
+                        <div className="market-actions">
+                          {!isActive && (
+                            <button type="button" onClick={() => onAcceptMission(contract.id)} disabled={isOtherActive || cargoTooLarge}>
+                              Accept Contract
+                            </button>
+                          )}
+                          {isActive && world.procgen.activeContractState?.status === "readyToTurnIn" && (
+                            <button type="button" className="primary-button" onClick={() => onTurnInMission(contract.id)}>
+                              Claim Payout
+                            </button>
+                          )}
+                          {isActive && world.procgen.activeContractState?.status === "active" && (
+                            <span className="status-chip">In progress</span>
                           )}
                         </div>
                       </div>

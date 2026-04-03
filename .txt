@@ -4,3 +4,5 @@ git commit -m "your commit message"
 git push origin main
 
 netlify deploy
+
+git pull origin main

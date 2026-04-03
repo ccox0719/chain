@@ -20,6 +20,7 @@ import { moduleById } from "../data/modules";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { defaultStarterShipConfigId, starterShipConfigById } from "../data/starterShips";
 import { getSystemStation, sectorCatalog, sectorById } from "../data/sectors";
+import { createInitialProcgenState, ensureProcgenState } from "../procgen/runtime";
 import { normalizePilotLicense } from "../utils/pilotLicense";
 
 let nextId = 0;
@@ -320,7 +321,7 @@ export function createInitialWorld(
     ])
   );
 
-  return {
+  const world: GameWorld = {
     player: createPlayer(starterConfigId),
     difficulty,
     currentSectorId: "lumen-rest",
@@ -334,12 +335,15 @@ export function createInitialWorld(
     activeTarget: null,
     routePlan: null,
     elapsedTime: 0,
+    procgen: createInitialProcgenState(),
     storyLog: [
       "You inherited a damaged courier and a stack of unpaid station fees.",
       "Lumen Station cleared you for local contracts if you can keep the hull flying.",
       "Out here, route choice matters as much as gunnery."
     ]
   };
+  ensureProcgenState(world);
+  return world;
 }
 
 export function createProjectile(
