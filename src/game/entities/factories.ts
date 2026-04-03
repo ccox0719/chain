@@ -78,6 +78,19 @@ function tacticalSlowState() {
   };
 }
 
+function createBoundaryState() {
+  return {
+    warningLevel: 0,
+    correctionLevel: 0,
+    active: false,
+    title: null,
+    detail: null,
+    tone: "sensor" as const,
+    forcedFacing: null,
+    forcedTurnRate: 0
+  };
+}
+
 function emptyDeathSummary(): DeathSummary | null {
   return null;
 }
@@ -335,6 +348,7 @@ export function createInitialWorld(
     activeTarget: null,
     routePlan: null,
     elapsedTime: 0,
+    boundary: createBoundaryState(),
     procgen: createInitialProcgenState(),
     storyLog: [
       "You inherited a damaged courier and a stack of unpaid station fees.",

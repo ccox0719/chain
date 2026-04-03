@@ -143,7 +143,8 @@ export const regionCatalog: RegionDefinition[] = [
     dominantFaction: "aurelian-league",
     resourceProfile: ["ferrite"],
     gameplayRole: "Starter hauling, repairs, basic combat, and safe route planning.",
-    color: "#7fc0ff"
+    color: "#7fc0ff",
+    threatSummary: "EM/Thermal shield patrols, precision security, and disciplined trade defense."
   },
   {
     id: "industrial-fringe",
@@ -153,7 +154,8 @@ export const regionCatalog: RegionDefinition[] = [
     dominantFaction: "cinder-union",
     resourceProfile: ["ferrite", "ember-crystal"],
     gameplayRole: "Mining, hauling, upgraded fitting markets, and mixed-risk travel.",
-    color: "#ffb36e"
+    color: "#ffb36e",
+    threatSummary: "Kinetic/Thermal armor fleets, rail pressure, and convoy warfare."
   },
   {
     id: "frontier-march",
@@ -163,7 +165,8 @@ export const regionCatalog: RegionDefinition[] = [
     dominantFaction: "veilborn",
     resourceProfile: ["ember-crystal", "ghost-alloy"],
     gameplayRole: "Hard combat, rare resources, lucrative dead ends, and campaign tension.",
-    color: "#c89bff"
+    color: "#c89bff",
+    threatSummary: "Mixed pirate doctrine, control warfare, and fast skirmish raids."
   }
 ];
 
@@ -479,6 +482,9 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
     description: "Border chokepoint where safer industrial traffic meets frontier raider hunts.",
     flavorText: "Everyone passes through the Verge eventually, and almost everyone leaves something behind.",
     controllingFaction: "veilborn",
+    factionInfluence: 60,
+    contestedFactionIds: ["blackwake-clans", "ironbound-syndicate"],
+    threatSummary: "Frontier border space with pirate spillover and industrial mercenary pressure.",
     visualTheme: "Cold purple haze and fractured horizon arcs.",
     economyTags: ["frontier", "combat", "logistics"],
     missionTags: ["border", "combat", "travel"],
@@ -531,7 +537,9 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
     danger: 5,
     description: "Dangerous shortcut system where aggressive raiders cut between fringe and frontier.",
     flavorText: "Blackwake is the route pilots take when they think time is worth more than armor.",
-    controllingFaction: "veilborn",
+    controllingFaction: "blackwake-clans",
+    factionInfluence: 92,
+    threatSummary: "Pirate mixed doctrine, explosive burst, and disruption-heavy raiding.",
     visualTheme: "Dark violet wakes and harsh weapons flashes.",
     economyTags: ["frontier", "pirate-infested", "combat"],
     missionTags: ["combat", "risk", "shortcut"],
@@ -559,8 +567,9 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
     ],
     asteroidFields: [],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 5, center: { x: 1760, y: 1420 }, radius: 260 },
-      { variantId: "reaver-gunship", count: 3, center: { x: 1440, y: 1120 }, radius: 220 }
+      { variantId: "veil-stalker", count: 4, center: { x: 1760, y: 1420 }, radius: 260 },
+      { variantId: "reaver-gunship", count: 3, center: { x: 1440, y: 1120 }, radius: 220 },
+      { variantId: "blackwake-reaver", count: 3, center: { x: 2140, y: 1580 }, radius: 240 }
     ]
   },
   {
@@ -677,7 +686,9 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     danger: 2,
     description: "A polished trade harbor where refinement yards meet quieter prospecting contracts.",
     flavorText: "Freighters idle here longer than usual because every dockmaster thinks the prices turn tomorrow.",
-    controllingFaction: "aurelian-league",
+    controllingFaction: "helion-cabal",
+    factionInfluence: 84,
+    threatSummary: "EM/Thermal shield doctrine, precision lasers, and hard sensor discipline.",
     visualTheme: "Cold blue docks, mirrored solar sheets, and disciplined civilian traffic.",
     economyTags: ["trade", "research", "mining"],
     missionTags: ["delivery", "survey", "acquisition"],
@@ -697,7 +708,10 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
       outpost("glass-shed", "Harbor Tool Shed", 2100, 1840, "A quiet service outpost handling mining fit swaps.")
     ],
     asteroidFields: [{ beltId: "glass-belt-alpha", center: { x: 1760, y: 1120 }, count: 8, resource: "ferrite", spread: 220, richness: 12 }],
-    enemySpawns: [{ variantId: "scrap-drone", count: 2, center: { x: 2140, y: 1320 }, radius: 180 }]
+    enemySpawns: [
+      { variantId: "scrap-drone", count: 2, center: { x: 2140, y: 1320 }, radius: 180 },
+      { variantId: "helion-warden", count: 2, center: { x: 1880, y: 1580 }, radius: 180 }
+    ]
   },
   {
     id: "crown-exchange",
@@ -708,6 +722,9 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     description: "A premium brokerage system built around route arbitrage, finance traffic, and high-value cargo tenders.",
     flavorText: "Everyone sounds calm in Crown Exchange, which is how you know the margins are vicious.",
     controllingFaction: "aurelian-league",
+    factionInfluence: 62,
+    contestedFactionIds: ["helion-cabal"],
+    threatSummary: "League commerce security with Cabal influence in premium convoy lanes.",
     visualTheme: "Gold-white relay towers and tidy orbital commerce lanes.",
     economyTags: ["trade", "logistics", "market"],
     missionTags: ["delivery", "escort", "route-choice"],
@@ -736,7 +753,9 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     danger: 3,
     description: "A furnace route where half-processed ore, coolant runs, and raider ambushes overlap.",
     flavorText: "Nobody stays in Slag Arc unless they are getting paid twice or hiding from someone expensive.",
-    controllingFaction: "cinder-union",
+    controllingFaction: "ironbound-syndicate",
+    factionInfluence: 80,
+    threatSummary: "Kinetic/Explosive armor brawlers, hard hulls, and forge-line intimidation.",
     visualTheme: "Orange refinery haze and debris-lit convoy arcs.",
     economyTags: ["industry", "mining", "trade"],
     missionTags: ["hauling", "combat", "escort"],
@@ -782,6 +801,9 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     description: "A guarded freight strait that rewards slower routes with steadier contracts and fewer surprises.",
     flavorText: "Every captain in Brass Strait claims to prefer safety right up until the margins get thin.",
     controllingFaction: "cinder-union",
+    factionInfluence: 58,
+    contestedFactionIds: ["ironbound-syndicate"],
+    threatSummary: "Union freight security under pressure from Ironbound armor raiders.",
     visualTheme: "Amber convoy rails crossing muted industrial void.",
     economyTags: ["logistics", "trade", "industry"],
     missionTags: ["delivery", "hauling", "border"],
@@ -811,6 +833,9 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     description: "A dim frontier trough where raiders cut across border routes under minimal sensor cover.",
     flavorText: "Pilots enter Ashen Deep talking about courage and leave talking about reaction time.",
     controllingFaction: "veilborn",
+    factionInfluence: 60,
+    contestedFactionIds: ["blackwake-clans", "ironbound-syndicate"],
+    threatSummary: "Frontier border space with pirate spillover and industrial mercenary pressure.",
     visualTheme: "Ash-violet fog, broken horizon arcs, and violent sensor bloom.",
     economyTags: ["frontier", "combat", "salvage"],
     missionTags: ["combat", "travel", "risk"],

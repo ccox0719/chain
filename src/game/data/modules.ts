@@ -1,6 +1,32 @@
-import { ModuleDefinition } from "../../types/game";
+import { DamageProfile, ModuleDefinition, WeaponDefinition } from "../../types/game";
 
-const CAPACITOR_NEED_MULTIPLIER = 0.4;
+const CAPACITOR_PROFILE = {
+  defaultUse: 0.54,
+  defaultDrain: 0.58,
+  byKind: {
+    laser: { use: 0.68 },
+    railgun: { use: 0.62 },
+    missile: { use: 0.52 },
+    mining_laser: { use: 0.66 },
+    afterburner: { drain: 0.8 },
+    webifier: { drain: 0.76 },
+    warp_disruptor: { drain: 0.82 },
+    target_painter: { drain: 0.72 },
+    tracking_disruptor: { drain: 0.78 },
+    sensor_dampener: { drain: 0.74 },
+    energy_neutralizer: { use: 0.86 },
+    salvager: { use: 0.5 },
+    shield_booster: { use: 0.94 },
+    armor_repairer: { use: 0.9 },
+    hardener: { drain: 0.88 },
+    passive: { use: 1, drain: 1 }
+  }
+} as const;
+
+type CapacitorNeedProfile = {
+  use?: number;
+  drain?: number;
+};
 
 function scaleModifierValue(value: number, factor: number) {
   if (value === 0) return value;
@@ -18,8 +44,46 @@ function scaleModifiers(
   ) as ModuleDefinition["modifiers"];
 }
 
-function scaleCapacitorNeed(value?: number) {
-  return value === undefined ? value : Number((value * CAPACITOR_NEED_MULTIPLIER).toFixed(1));
+function getCapacitorNeedScale(base: ModuleDefinition, type: "use" | "drain") {
+  const profile = CAPACITOR_PROFILE.byKind[base.kind] as CapacitorNeedProfile | undefined;
+  if (type === "use") return profile?.use ?? CAPACITOR_PROFILE.defaultUse;
+  return profile?.drain ?? CAPACITOR_PROFILE.defaultDrain;
+}
+
+function scaleCapacitorNeed(base: ModuleDefinition, value: number | undefined, type: "use" | "drain") {
+  return value === undefined ? value : Number((value * getCapacitorNeedScale(base, type)).toFixed(1));
+}
+
+function normalizeDamageProfile(profile: DamageProfile): DamageProfile {
+  const total = profile.em + profile.thermal + profile.kinetic + profile.explosive;
+  if (total <= 0) return profile;
+  return {
+    em: Number((profile.em / total).toFixed(4)),
+    thermal: Number((profile.thermal / total).toFixed(4)),
+    kinetic: Number((profile.kinetic / total).toFixed(4)),
+    explosive: Number((profile.explosive / total).toFixed(4))
+  };
+}
+
+function scaleResistProfile(profile: Partial<ModuleDefinition["resistProfile"]> | undefined, factor: number) {
+  if (!profile) return profile;
+  return Object.fromEntries(
+    Object.entries(profile).map(([key, value]) => [key, typeof value === "number" ? Number((value * factor).toFixed(3)) : value])
+  ) as Partial<ModuleDefinition["resistProfile"]>;
+}
+
+function finalizeModule(module: ModuleDefinition): ModuleDefinition {
+  if (module.slot !== "weapon") return module;
+  if (module.damage === undefined) {
+    throw new Error(`Weapon module ${module.id} is missing damage.`);
+  }
+  if (!module.damageProfile) {
+    throw new Error(`Weapon module ${module.id} is missing damageProfile.`);
+  }
+  return {
+    ...module,
+    damageProfile: normalizeDamageProfile(module.damageProfile)
+  } as WeaponDefinition;
 }
 
 function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefinition {
@@ -50,6 +114,7 @@ function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefini
     optimal: base.optimal ? Math.round(base.optimal * (1 + (powerScale - 1) * 0.5)) : base.optimal,
     falloff: base.falloff ? Math.round(base.falloff * (1 + (powerScale - 1) * 0.52)) : base.falloff,
     tracking: base.tracking ? Number((base.tracking * (1 + (powerScale - 1) * 0.55)).toFixed(3)) : base.tracking,
+    resistProfile: scaleResistProfile(base.resistProfile, powerScale),
     modifiers: scaleModifiers(base.modifiers, powerScale),
     activeModifiers: base.activeModifiers ? scaleModifiers(base.activeModifiers, powerScale) : undefined
   };
@@ -77,6 +142,7 @@ function makeCivilianVariant(base: ModuleDefinition): ModuleDefinition {
     optimal: base.optimal ? Math.round(base.optimal * 0.86) : base.optimal,
     falloff: base.falloff ? Math.round(base.falloff * 0.85) : base.falloff,
     tracking: base.tracking ? Number((base.tracking * 0.86).toFixed(3)) : base.tracking,
+    resistProfile: scaleResistProfile(base.resistProfile, 0.72),
     modifiers: scaleModifiers(base.modifiers, 0.72),
     activeModifiers: base.activeModifiers ? scaleModifiers(base.activeModifiers, 0.72) : undefined
   };
@@ -576,7 +642,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     tags: ["utility", "capacitor", "common"],
     roleTags: ["Support"],
     activation: "passive",
-    modifiers: { capacitorCapacity: 28, capacitorRegen: 2 }
+    modifiers: { capacitorCapacity: 46, capacitorRegen: 0.9 }
   },
   {
     id: "capacitor-battery",
@@ -589,7 +655,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     tags: ["utility", "capacitor", "high-tech"],
     roleTags: ["Support"],
     activation: "passive",
-    modifiers: { capacitorCapacity: 52, capacitorRegen: 3.2 }
+    modifiers: { capacitorCapacity: 84, capacitorRegen: 1.4 }
   },
   {
     id: "tracking-uplink",
@@ -750,7 +816,10 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     tags: ["defense", "shield", "high-tech"],
     roleTags: ["Shield", "Support"],
     activation: "passive",
-    modifiers: { shieldResistBonus: 0.06 }
+    resistLayer: "shield",
+    resistMode: "adaptive",
+    resistProfile: { em: 0.08, thermal: 0.07, kinetic: 0.05, explosive: 0.03 },
+    modifiers: {}
   },
   {
     id: "armor-repairer",
@@ -792,7 +861,10 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     tags: ["defense", "armor", "high-tech"],
     roleTags: ["Armor", "Support"],
     activation: "passive",
-    modifiers: { armorResistBonus: 0.06 }
+    resistLayer: "armor",
+    resistMode: "adaptive",
+    resistProfile: { em: 0.04, thermal: 0.06, kinetic: 0.08, explosive: 0.07 },
+    modifiers: {}
   },
   {
     id: "adaptive-hardener",
@@ -806,7 +878,9 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     roleTags: ["Shield", "Armor"],
     activation: "toggle",
     capacitorDrain: 7.5,
-    resistBonus: 0.18,
+    resistLayer: "shield",
+    resistMode: "adaptive",
+    resistProfile: { em: 0.1, thermal: 0.1, kinetic: 0.08, explosive: 0.06 },
     modifiers: {}
   },
   {
@@ -821,7 +895,9 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     roleTags: ["Shield", "Armor"],
     activation: "toggle",
     capacitorDrain: 10.5,
-    resistBonus: 0.24,
+    resistLayer: "shield",
+    resistMode: "reactive",
+    resistProfile: { em: 0.12, thermal: 0.12, kinetic: 0.1, explosive: 0.08 },
     modifiers: {}
   },
   {
@@ -1030,18 +1106,22 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     roleTags: ["Armor", "Brawler"],
     activation: "toggle",
     capacitorDrain: 5.2,
-    resistBonus: 0.16,
+    resistLayer: "armor",
+    resistMode: "reactive",
+    resistProfile: { em: 0.06, thermal: 0.08, kinetic: 0.1, explosive: 0.08 },
     modifiers: {}
   }
 ];
 
-const baseModuleCatalog: ModuleDefinition[] = baseModuleCatalogRaw.map((module) => ({
-  ...module,
-  capacitorUse: scaleCapacitorNeed(module.capacitorUse),
-  capacitorDrain: scaleCapacitorNeed(module.capacitorDrain),
-  techLevel: 1,
-  classTier: "tech"
-}));
+const baseModuleCatalog: ModuleDefinition[] = baseModuleCatalogRaw.map((module) =>
+  finalizeModule({
+    ...module,
+    capacitorUse: scaleCapacitorNeed(module, module.capacitorUse, "use"),
+    capacitorDrain: scaleCapacitorNeed(module, module.capacitorDrain, "drain"),
+    techLevel: 1,
+    classTier: "tech"
+  })
+);
 
 const civilianBaseIds = [
   "pulse-laser",

@@ -18,15 +18,13 @@ interface ContextMenuProps {
       | { type: "mine"; target: SelectableRef }
       | { type: "salvage"; target: SelectableRef }
       | { type: "stop" }
-      | { type: "show_info"; target: SelectableRef }
   ) => void;
 }
 
 export function ContextMenu({ x, y, target, onCommand }: ContextMenuProps) {
   const common = [
     { label: "Approach", command: { type: "approach", target } as const },
-    { label: "Stop Ship", command: { type: "stop" } as const },
-    { label: "Show Info", command: { type: "show_info", target } as const }
+    { label: "Stop Ship", command: { type: "stop" } as const }
   ];
 
   const items =
@@ -98,7 +96,6 @@ export function ContextMenu({ x, y, target, onCommand }: ContextMenuProps) {
       | { type: "mine"; target: SelectableRef }
       | { type: "salvage"; target: SelectableRef }
       | { type: "stop" }
-      | { type: "show_info"; target: SelectableRef }
   ) {
     const targetPart = "target" in command ? `${command.target.type}-${command.target.id}` : "ship";
     const rangePart = "range" in command && command.range !== undefined ? `-${command.range}` : "";

@@ -1,4 +1,10 @@
-export type FactionId = "aurelian-league" | "cinder-union" | "veilborn";
+export type FactionId =
+  | "aurelian-league"
+  | "cinder-union"
+  | "veilborn"
+  | "helion-cabal"
+  | "ironbound-syndicate"
+  | "blackwake-clans";
 
 export type ResourceId = "ferrite" | "ember-crystal" | "ghost-alloy";
 export type CommodityId =
@@ -117,6 +123,7 @@ export type StarterShipConfigId =
 
 export type CommandAction =
   | { type: "approach"; target: SelectableRef; range?: number }
+  | { type: "travel"; destination: Vec2 }
   | { type: "keep_range"; target: SelectableRef; range: number }
   | { type: "orbit"; target: SelectableRef; range: number }
   | { type: "attack"; target: SelectableRef }
@@ -142,6 +149,12 @@ export interface DamageProfile {
   explosive: number;
 }
 
+export type WeaponDefinition = ModuleDefinition & {
+  slot: "weapon";
+  damage: number;
+  damageProfile: DamageProfile;
+};
+
 export interface ResistProfile {
   em: number;
   thermal: number;
@@ -163,6 +176,7 @@ export interface RegionDefinition {
   resourceProfile: ResourceId[];
   gameplayRole: string;
   color: string;
+  threatSummary?: string;
 }
 
 export interface SystemDestination {
@@ -232,6 +246,12 @@ export interface ShipModuleBonusProfile {
   turretTrackingMultiplier?: number;
   turretOptimalMultiplier?: number;
   turretFalloffMultiplier?: number;
+  shieldResistBonus?: number;
+  armorResistBonus?: number;
+  hullResistBonus?: number;
+  shieldResistProfile?: Partial<ResistProfile>;
+  armorResistProfile?: Partial<ResistProfile>;
+  hullResistProfile?: Partial<ResistProfile>;
 }
 
 export interface ShipBonusProfile {
@@ -245,6 +265,27 @@ export interface ShipBonusProfile {
   moduleSellMultiplier?: number;
   shipBuyMultiplier?: number;
   moduleKinds?: Partial<Record<ModuleKind, ShipModuleBonusProfile>>;
+}
+
+export interface FactionThreatProfile {
+  damage: DamageProfile;
+  resist: ResistProfile;
+  tankStyle: "shield" | "armor" | "mixed";
+  doctrine: string[];
+}
+
+export interface FactionDefinition {
+  id: FactionId;
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+  preferredDamageProfile: DamageProfile;
+  preferredResistanceProfile: ResistProfile;
+  tankStyle: "shield" | "armor" | "mixed";
+  doctrineTags: string[];
+  regions: string[];
+  threatSummary: string;
 }
 
 export interface ModuleDefinition {
@@ -276,6 +317,9 @@ export interface ModuleDefinition {
   minesAllInRange?: boolean;
   speedBonus?: number;
   resistBonus?: number;
+  resistLayer?: "shield" | "armor" | "hull";
+  resistProfile?: Partial<ResistProfile>;
+  resistMode?: "specific" | "adaptive" | "reactive";
   speedPenalty?: number;
   warpDisruptStrength?: number;
   signatureBonus?: number;
@@ -310,6 +354,9 @@ export interface ModuleDefinition {
     shieldResistBonus?: number;
     armorResistBonus?: number;
     hullResistBonus?: number;
+    shieldResistProfile?: Partial<ResistProfile>;
+    armorResistProfile?: Partial<ResistProfile>;
+    hullResistProfile?: Partial<ResistProfile>;
     miningYieldMultiplier?: number;
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
@@ -343,6 +390,9 @@ export interface ModuleDefinition {
     shieldResistBonus?: number;
     armorResistBonus?: number;
     hullResistBonus?: number;
+    shieldResistProfile?: Partial<ResistProfile>;
+    armorResistProfile?: Partial<ResistProfile>;
+    hullResistProfile?: Partial<ResistProfile>;
     miningYieldMultiplier?: number;
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
@@ -367,6 +417,17 @@ export interface TacticalSlowState {
   capPenaltyRemaining: number;
   speedPenaltyRemaining: number;
 }
+
+export interface BoundaryState {
+  warningLevel: number;
+  correctionLevel: number;
+  active: boolean;
+  title: string | null;
+  detail: string | null;
+  tone: "belt" | "anomaly" | "engagement" | "sensor";
+  forcedFacing: number | null;
+  forcedTurnRate: number;
+  }
 
 export interface DeathSummary {
   id: string;
@@ -438,6 +499,9 @@ export interface SolarSystemDefinition {
   description: string;
   flavorText: string;
   controllingFaction: FactionId;
+  factionInfluence?: number;
+  contestedFactionIds?: FactionId[];
+  threatSummary?: string;
   visualTheme: string;
   economyTags: string[];
   missionTags: string[];
@@ -896,6 +960,7 @@ export interface GameWorld {
   storyLog: string[];
   routePlan: RoutePlan | null;
   elapsedTime: number;
+  boundary: BoundaryState;
   procgen: ProcgenState;
 }
 

@@ -14,12 +14,6 @@ const DAMAGE_LABELS: Record<DamageType, string> = {
   explosive: "Explosive"
 };
 
-const COMBAT_PROFILE_LABELS: Record<EnemyVariant["combatStyle"], string> = {
-  shield: "Shield strong",
-  armor: "Armor strong",
-  speed: "Speed strong"
-};
-
 function getCombatProfileTone(variant: EnemyVariant) {
   return variant.combatStyle;
 }
@@ -110,10 +104,10 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         velocity: Math.hypot(enemy.velocity.x, enemy.velocity.y),
         angularVelocity,
         signatureRadius: variant.signatureRadius,
-        subtitle: `${system.name} hostile`,
+        subtitle: `${system.name} hostile · ${factionData[variant.faction].name}`,
         factionLabel: factionData[variant.faction].name,
         threatLabel: `Threat ${Math.ceil((variant.hull + variant.armor + variant.shield) / 90)}`,
-        combatProfileLabel: COMBAT_PROFILE_LABELS[variant.combatStyle],
+        combatProfileLabel: factionData[variant.faction].threatSummary,
         combatProfileTone: getCombatProfileTone(variant),
         weaknessLabel: getWeightedDamageWeakness(variant, enemy.shield, enemy.armor, enemy.hull) ?? undefined,
         preferredRange: variant.preferredRange,

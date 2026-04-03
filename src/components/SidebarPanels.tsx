@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { factionData, factionDamageLabel, factionResistLabel } from "../game/data/factions";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { WeaponDetailsCard } from "./WeaponDetailsCard";
@@ -65,6 +66,9 @@ export function SidebarPanels({
   const { world, sector, currentRegion, nextRouteStep, activeTransportMission, activeMission } = snapshot;
   const deathSummary = world.player.deathSummary;
   const selectedSystem = sectorById[selectedSystemId] ?? sector;
+  const selectedRegion = regionById[selectedSystem.regionId];
+  const selectedFaction = factionData[selectedSystem.controllingFaction];
+  const regionFaction = factionData[selectedRegion.dominantFaction];
   const localDestinations = getSystemDestinations(world.currentSectorId);
   const objectiveInCurrentSystem =
     activeTransportMission && activeTransportMission.objectiveSystemId === world.currentSectorId
@@ -121,6 +125,8 @@ export function SidebarPanels({
   function missionTypeLabel(type: string) {
     return MISSION_TYPE_LABELS[type] ?? type;
   }
+
+  const factionLegend = Object.values(factionData);
 
   const connectionLines = useMemo(() => {
     const seen = new Set<string>();
@@ -359,6 +365,18 @@ export function SidebarPanels({
                     </div>
                   </div>
                 )}
+                <div className="faction-legend-row">
+                  {factionLegend.map((faction) => (
+                    <span
+                      key={faction.id}
+                      className="status-chip faction-legend-chip"
+                      style={{ borderColor: faction.color, color: faction.color }}
+                    >
+                      <span className="faction-legend-dot" style={{ background: faction.color }} />
+                      {faction.icon} {faction.name}
+                    </span>
+                  ))}
+                </div>
                 <svg viewBox={`0 0 ${mapWidth} ${mapHeight}`} className="universe-map">
                   {connectionLines.map(([from, to]) => (
                     <line
@@ -382,40 +400,56 @@ export function SidebarPanels({
                       x={Math.min(...sectorCatalog.filter((s) => s.regionId === region.id).map((s) => s.mapPosition.x))}
                       y={Math.min(...sectorCatalog.filter((s) => s.regionId === region.id).map((s) => s.mapPosition.y)) - 22}
                       className="map-region-label"
+                      style={{ fill: factionData[region.dominantFaction].color }}
                     >
                       {region.name}
                     </text>
                   ))}
-                  {sectorCatalog.map((system) => (
-                    <g
-                      key={system.id}
-                      transform={`translate(${system.mapPosition.x} ${system.mapPosition.y})`}
-                      className="map-node-group"
-                      onClick={() => setSelectedSystemId(system.id)}
-                    >
-                      <circle
-                        r={system.id === world.currentSectorId ? 16 : 12}
-                        className={`map-node security-${system.security}${
-                          selectedSystemId === system.id ? " selected" : ""
-                        }${activeTransportMission?.pickupSystemId === system.id ? " map-pickup" : ""}${
-                          activeTransportMission?.destinationSystemId === system.id ? " map-destination" : ""
-                        }${activeTransportMission?.routeSystemIds.includes(system.id) ? " map-route-node" : ""}${
-                          activeMissionRoute.systemIds.has(system.id) ? " mission-route-node" : ""
-                        }`}
-                      />
-                      <text x={20} y={5} className="map-node-label">
-                        {system.name}
-                      </text>
-                      {deathSummary?.wreckSystemId === system.id && (
-                        <>
-                          <circle r={20} className="map-node last-death-node" />
-                          <text x={20} y={18} className="map-node-label last-death-label">
-                            Last death
-                          </text>
-                        </>
-                      )}
-                    </g>
-                  ))}
+                  {sectorCatalog.map((system) => {
+                    const faction = factionData[system.controllingFaction];
+                    const influence = system.factionInfluence ?? 68;
+                    const ringOpacity = Math.min(0.9, Math.max(0.4, influence / 110));
+                    return (
+                      <g
+                        key={system.id}
+                        transform={`translate(${system.mapPosition.x} ${system.mapPosition.y})`}
+                        className="map-node-group"
+                        onClick={() => setSelectedSystemId(system.id)}
+                      >
+                        <circle
+                          r={system.id === world.currentSectorId ? 24 : 18}
+                          className={`map-node faction-ring${selectedSystemId === system.id ? " selected" : ""}`}
+                          style={{
+                            stroke: faction.color,
+                            fill: `rgba(0, 0, 0, ${system.id === world.currentSectorId ? 0.18 : 0.12})`,
+                            opacity: ringOpacity
+                          }}
+                        />
+                        <circle
+                          r={system.id === world.currentSectorId ? 16 : 12}
+                          className={`map-node security-${system.security}${
+                            selectedSystemId === system.id ? " selected" : ""
+                          }${activeTransportMission?.pickupSystemId === system.id ? " map-pickup" : ""}${
+                            activeTransportMission?.destinationSystemId === system.id ? " map-destination" : ""
+                          }${activeTransportMission?.routeSystemIds.includes(system.id) ? " map-route-node" : ""}${
+                            activeMissionRoute.systemIds.has(system.id) ? " mission-route-node" : ""
+                          }`}
+                          style={{ fill: `${faction.color}22` }}
+                        />
+                        <text x={20} y={5} className="map-node-label">
+                          {system.name}
+                        </text>
+                        {deathSummary?.wreckSystemId === system.id && (
+                          <>
+                            <circle r={20} className="map-node last-death-node" />
+                            <text x={20} y={18} className="map-node-label last-death-label">
+                              Last death
+                            </text>
+                          </>
+                        )}
+                      </g>
+                    );
+                  })}
                 </svg>
               </section>
 
@@ -430,6 +464,38 @@ export function SidebarPanels({
                   {deathSummary?.wreckSystemId === selectedSystem.id && (
                     <span className="status-chip status-chip-danger">Last death here</span>
                   )}
+                </div>
+                <div className="faction-intel-card" style={{ borderColor: selectedFaction.color }}>
+                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                    <strong>Faction Intel</strong>
+                    <span className="status-chip faction-name-chip" style={{ borderColor: selectedFaction.color, color: selectedFaction.color }}>
+                      {selectedFaction.icon} {selectedFaction.name}
+                    </span>
+                  </div>
+                  <p style={{ margin: "0 0 0.45rem" }}>{selectedFaction.description}</p>
+                  <div className="map-meta-grid">
+                    <span className="status-chip">Damage {factionDamageLabel(selectedFaction.id)}</span>
+                    <span className="status-chip">Defense {selectedFaction.tankStyle}</span>
+                    <span className="status-chip">Resists {factionResistLabel(selectedFaction.id)}</span>
+                    {selectedSystem.factionInfluence !== undefined && (
+                      <span className="status-chip">Influence {selectedSystem.factionInfluence}%</span>
+                    )}
+                  </div>
+                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)" }}>
+                    {selectedSystem.threatSummary ?? selectedFaction.threatSummary}
+                  </p>
+                  {selectedSystem.contestedFactionIds?.length ? (
+                    <div className="tag-row" style={{ marginTop: "0.45rem" }}>
+                      {selectedSystem.contestedFactionIds.map((factionId) => (
+                        <span key={factionId} className="status-chip" style={{ borderColor: factionData[factionId].color, color: factionData[factionId].color }}>
+                          {factionData[factionId].icon} {factionData[factionId].name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
+                    Region power: {regionFaction.icon} {regionFaction.name} · {selectedRegion.threatSummary ?? regionFaction.threatSummary}
+                  </p>
                 </div>
                 <div className="tag-row">
                   {selectedSystem.economyTags.map((tag) => (

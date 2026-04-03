@@ -3,12 +3,13 @@ import { RefObject, useRef } from "react";
 interface GameCanvasProps {
   canvasRef: RefObject<HTMLCanvasElement>;
   onLeftClick: (clientX: number, clientY: number) => void;
+  onDoubleClick: (clientX: number, clientY: number) => void;
   onRightClick: (clientX: number, clientY: number) => void;
   onWheelZoom: (deltaY: number) => void;
   onPanBy: (deltaX: number, deltaY: number) => void;
 }
 
-export function GameCanvas({ canvasRef, onLeftClick, onRightClick, onWheelZoom, onPanBy }: GameCanvasProps) {
+export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick, onWheelZoom, onPanBy }: GameCanvasProps) {
   const touchTimerRef = useRef<number | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchLastRef = useRef<{ x: number; y: number } | null>(null);
@@ -78,6 +79,10 @@ export function GameCanvas({ canvasRef, onLeftClick, onRightClick, onWheelZoom, 
         onContextMenu={(event) => {
           event.preventDefault();
           onRightClick(event.clientX, event.clientY);
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          onDoubleClick(event.clientX, event.clientY);
         }}
         onTouchStart={(event) => {
           if (event.touches.length === 2) {

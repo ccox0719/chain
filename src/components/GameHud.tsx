@@ -126,6 +126,19 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
   return "Low demand; flexible fit.";
 }
 
+function formatCapTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "<1s";
+  if (seconds < 10) return `${seconds.toFixed(1)}s`;
+  return `${Math.round(seconds)}s`;
+}
+
+function getSystemRiskLabel(danger: number) {
+  if (danger <= 1) return "Low Risk";
+  if (danger <= 2) return "Medium Risk";
+  if (danger <= 3) return "High Risk";
+  return "Extreme Risk";
+}
+
 function makeTravelButtons(targetInfo: ObjectInfo | null): RailButton[] {
   if (!targetInfo) return [];
   const { ref, distance } = targetInfo;
@@ -252,6 +265,7 @@ export function GameHud({
     currentHotspot
   } = snapshot;
   const ship = playerShipById[world.player.hullId];
+  const boundary = world.boundary;
   const roundedCargoCapacity = Math.round(derived.cargoCapacity);
   const objectiveRef =
     activeTransportMission && activeTransportMission.objectiveSystemId === world.currentSectorId
@@ -294,6 +308,7 @@ export function GameHud({
     : tacticalSlow.cooldownRemaining > 0
       ? `Cooldown ${Math.ceil(tacticalSlow.cooldownRemaining)}s`
       : "Ready";
+  const systemRiskLabel = getSystemRiskLabel(sector.danger);
 
   const filteredOverview = useMemo(() => {
     return overview.filter((entry) => {
@@ -308,6 +323,31 @@ export function GameHud({
       return true;
     });
   }, [overview, overviewFilter]);
+
+  const capacitorStatus = useMemo(() => {
+    const activeLoad = (["weapon", "utility", "defense"] as ModuleSlot[]).reduce((total, slotType) => {
+      return total + world.player.modules[slotType].reduce((slotTotal, runtime) => {
+        if (!runtime.active || !runtime.moduleId) return slotTotal;
+        const module = moduleById[runtime.moduleId];
+        return module ? slotTotal + moduleCapUsePerSecond(module) : slotTotal;
+      }, 0);
+    }, 0);
+    const net = derived.capacitorRegen - activeLoad;
+    const pressure = activeLoad <= 0.2
+      ? "idle"
+      : net >= -0.4
+        ? "stable"
+        : net >= -3
+          ? "strained"
+          : "draining";
+    const collapseTime = net < -0.05 ? world.player.capacitor / Math.abs(net) : null;
+    return {
+      activeLoad,
+      net,
+      pressure,
+      collapseTime
+    };
+  }, [derived.capacitorRegen, world.player.capacitor, world.player.modules]);
 
   function getModulePresentation(slotType: ModuleSlot, slotIndex: number) {
     const runtime = world.player.modules[slotType][slotIndex];
@@ -452,10 +492,29 @@ export function GameHud({
   const selectedButtons = [...travelButtons, ...actionButtons];
 
   return (
-    <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
+      <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
       <div className="system-badge">
-        {sector.name} · {currentRegion.name}
+        {sector.name} · {systemRiskLabel} · {currentRegion.name}
       </div>
+      {boundary.warningLevel > 0.04 && boundary.title && (
+        <div
+          className="system-badge"
+          style={{
+            top: "3.5rem",
+            borderColor:
+              boundary.tone === "anomaly"
+                ? "rgba(200, 155, 255, 0.45)"
+                : boundary.tone === "belt"
+                  ? "rgba(127, 220, 255, 0.45)"
+                  : boundary.tone === "engagement"
+                    ? "rgba(255, 166, 120, 0.45)"
+                    : "rgba(127, 220, 255, 0.45)"
+          }}
+        >
+          {boundary.title}
+          {boundary.active ? " · gravity rebound" : ""}
+        </div>
+      )}
 
       <div className="hud-top">
         {tacticalActive && <div className="tactical-slow-overlay active" aria-hidden="true" />}
@@ -479,10 +538,27 @@ export function GameHud({
                   <span title="Credits">✦ {world.player.credits}</span>
                   {snapshot.nextRouteStep && <span title="Next gate">⊟ {snapshot.nextRouteStep.gateName}</span>}
                 </div>
+                <div className="tactical-status-row">
+                  <span className={`status-chip${capacitorStatus.pressure === "stable" ? " active" : ""}`}>
+                    Cap {derived.capacitorRegen.toFixed(1)}/s regen · {capacitorStatus.activeLoad.toFixed(1)}/s load
+                  </span>
+                  <span className={`status-chip${capacitorStatus.pressure === "draining" ? " active" : ""}`}>
+                    {capacitorStatus.pressure === "idle"
+                      ? "Cap idle"
+                      : capacitorStatus.net >= 0
+                        ? "Cap stable"
+                        : `Cap ${formatCapTime(capacitorStatus.collapseTime ?? 0)} to dry`}
+                  </span>
+                </div>
                 <div className="nav-readout">
                   <strong>{snapshot.navLabel}</strong>
                   <span>{snapshot.nearbyPrompt}</span>
                 </div>
+                {boundary.warningLevel > 0.04 && boundary.detail && (
+                  <div className="tactical-status-row">
+                    <span className={`status-chip${boundary.active ? " active" : ""}`}>{boundary.detail}</span>
+                  </div>
+                )}
                 <div className="hud-actions">
                   <button
                     type="button"

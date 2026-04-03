@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ShipFittingDiagram } from "./ShipFittingDiagram";
 import { ShipGeoIcon } from "./ShipGeoIcon";
 import { WeaponDetailsCard } from "./WeaponDetailsCard";
+import { factionData, factionDamageLabel, factionResistLabel } from "../game/data/factions";
 import { CommandAction } from "../types/game";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -223,12 +224,16 @@ export function StationPanel({
     direction: "asc"
   });
   const [moduleSort, setModuleSort] = useState<{ key: "name" | "dps" | "range" | "price" | "size"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
+  const [moduleSlotView, setModuleSlotView] = useState<ModuleSlot>("weapon");
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const stationTags = currentStation?.tags ?? [];
   const security = snapshot.sector.security;
+  const systemFaction = factionData[snapshot.sector.controllingFaction];
+  const regionFaction = factionData[snapshot.currentRegion.dominantFaction];
 
   function inventoryAllows(tags: string[]) {
     if (tags.includes("common")) return true;
@@ -579,9 +584,34 @@ export function StationPanel({
           <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
           <button type="button" className="primary-button" onClick={onUndock}>Undock</button>
         </div>
-      </div>
-      {snapshot.regionalEvent && (
-        <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
+        </div>
+        <div className="panel-lite faction-intel-banner" style={{ margin: "0 1.25rem 1rem", borderColor: systemFaction.color }}>
+          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+            <strong>Faction Intel</strong>
+            <span className="status-chip" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
+              {systemFaction.icon} {systemFaction.name}
+            </span>
+            <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
+              Region · {regionFaction.icon} {regionFaction.name}
+            </span>
+          </div>
+          <div className="map-meta-grid">
+            <span className="status-chip">Damage {factionDamageLabel(systemFaction.id)}</span>
+            <span className="status-chip">Defense {systemFaction.tankStyle}</span>
+            <span className="status-chip">Resists {factionResistLabel(systemFaction.id)}</span>
+            <span className="status-chip">Threat {snapshot.sector.threatSummary ?? systemFaction.threatSummary}</span>
+          </div>
+          <p style={{ margin: "0.5rem 0 0", color: "var(--text-dim)" }}>
+            {systemFaction.description}
+          </p>
+          {snapshot.currentRegion.threatSummary && (
+            <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
+              Region prep: {snapshot.currentRegion.threatSummary}
+            </p>
+          )}
+        </div>
+        {snapshot.regionalEvent && (
+          <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
           <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
             <strong>{snapshot.regionalEvent.name}</strong>
             <span className="status-chip">{snapshot.currentRegion.name}</span>
@@ -1059,7 +1089,8 @@ export function StationPanel({
         {/* ── MODULES TAB ── */}
         {tab === "modules" && (
           <div className="mod-container">
-            <article className="panel-lite license-panel">
+            <div className="mod-topbar">
+            <article className="panel-lite license-panel mod-top-card">
               <h3>Pilot License</h3>
               <div className="license-summary">
                 <div className="license-summary-head">
@@ -1074,6 +1105,14 @@ export function StationPanel({
                 </div>
               </div>
             </article>
+            <article className="panel-lite mod-top-card mod-sort-panel">
+              <div className="mod-sort-panel-head">
+                <div>
+                  <h3>Module Exchange</h3>
+                  <p>Scan station stock by output, reach, price, or footprint without forcing the market into one wide strip.</p>
+                </div>
+                <span className="status-chip">{availableModules.length} stocked</span>
+              </div>
             <div className="mod-sort-bar">
               {(["name", "dps", "range", "price", "size"] as const).map((key) => (
                 <button
@@ -1092,7 +1131,26 @@ export function StationPanel({
                 </button>
               ))}
             </div>
+            </article>
+            </div>
+            <div className="mod-slot-toggle" role="tablist" aria-label="Module slot types">
+              {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType) => (
+                <button
+                  key={slotType}
+                  type="button"
+                  role="tab"
+                  aria-selected={moduleSlotView === slotType}
+                  className={`mod-slot-toggle-btn${moduleSlotView === slotType ? " active" : ""}`}
+                  onClick={() => setModuleSlotView(slotType)}
+                >
+                  {slotType === "weapon" ? "Weapons" : slotType === "utility" ? "Utility" : "Defense"}
+                  <span>{modulesBySlot[slotType].length}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mod-market-grid">
             {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType, index) => {
+              if (slotType !== moduleSlotView) return null;
               const rawModules = modulesBySlot[slotType];
               if (rawModules.length === 0) return null;
               const slotModules = [...rawModules].sort((a, b) => {
@@ -1114,14 +1172,9 @@ export function StationPanel({
                 }
               });
               return (
-                <CollapsibleSection
-                  key={slotType}
-                  title={`${slotType} modules`}
-                  subtitle={`${slotModules.length} listings`}
-                  defaultOpen={index === 0}
-                  className="mod-slot-section"
-                >
-                  {slotModules.length > 0 ? (
+                <section key={slotType} className={`mod-slot-section mod-slot-section-${slotType}`}>
+                  <div className="mod-slot-grid">
+                    {slotModules.length > 0 ? (
                     slotModules.map((module) => {
                       const owned = world.player.inventory.modules[module.id] ?? 0;
                       const buyPrice = snapshot.economy.moduleBuyPrices[module.id] ?? module.price;
@@ -1131,7 +1184,7 @@ export function StationPanel({
                       const requiredLicenseLevel = getRequiredPilotLicenseLevel(module);
                       const compareTo = findComparableEquippedWeapon(module, equippedWeaponIds);
                       return (
-                        <div key={module.id} className={`mod-row kind-${module.kind}${licenseLocked ? " mod-row-locked" : ""}`}>
+                        <article key={module.id} className={`mod-tile kind-${module.kind}${licenseLocked ? " mod-tile-locked" : ""}`}>
                           <span className="mod-kind-icon" title={module.kind}>{MODULE_KIND_ICONS[module.kind] ?? "·"}</span>
                           <div className="mod-row-info">
                             {owned > 0 && <span className="status-chip mod-owned-chip">{owned} owned</span>}
@@ -1160,15 +1213,17 @@ export function StationPanel({
                               <span className="mod-trade-price">{sellPrice} cr</span>
                             </button>
                           </div>
-                        </div>
+                        </article>
                       );
                     })
-                  ) : (
-                    <div className="fit-empty-copy">No {slotType} modules stocked here.</div>
-                  )}
-                </CollapsibleSection>
+                    ) : (
+                      <div className="fit-empty-copy">No {slotType} modules stocked here.</div>
+                    )}
+                  </div>
+                </section>
               );
             })}
+            </div>
           </div>
         )}
 
@@ -1324,31 +1379,64 @@ export function StationPanel({
         )}
 
         {/* ── MISSIONS TAB ── */}
-        {tab === "missions" && (
-          <div className="station-grid">
+        {tab === "missions" && (() => {
+          const STATUS_ORDER: Record<string, number> = { available: 0, readyToTurnIn: 1, active: 2, completed: 3, locked: 4 };
+          const sortedStoryMissions = [...missionCatalog].sort((a, b) => {
+            const aOrd = STATUS_ORDER[world.missions[a.id]?.status ?? "locked"] ?? 9;
+            const bOrd = STATUS_ORDER[world.missions[b.id]?.status ?? "locked"] ?? 9;
+            return aOrd - bOrd;
+          });
+          const visibleStoryMissions = showAvailableOnly
+            ? sortedStoryMissions.filter(m => {
+                const s = world.missions[m.id]?.status;
+                return s === "available" || s === "active" || s === "readyToTurnIn";
+              })
+            : sortedStoryMissions;
+          const visibleTransport = showAvailableOnly
+            ? transportMissionCatalog.filter(m => world.transportMissions[m.id]?.status !== "completed")
+            : transportMissionCatalog;
+          return (
+          <>
+          <div className="missions-filter-bar">
+            <button
+              type="button"
+              className={`filter-toggle-btn${showAvailableOnly ? " active" : ""}`}
+              onClick={() => setShowAvailableOnly(v => !v)}
+            >
+              Available only
+            </button>
+          </div>
+          <div className="missions-grid">
             <article className="panel-lite">
-              <CollapsibleSection title="Story Mission Board" subtitle={`${missionCatalog.length} missions`} defaultOpen>
+              <CollapsibleSection title="Story Mission Board" subtitle={`${visibleStoryMissions.length} missions`} defaultOpen>
                 <div className="stack-list">
-                  {missionCatalog.map((mission) => {
+                  {visibleStoryMissions.map((mission) => {
                     const state = world.missions[mission.id];
+                    const isLocked = state.status === "locked";
+                    const isCompleted = state.status === "completed";
+                    const cardClass = `market-item${isLocked || isCompleted ? " mission-card-dim" : ""} mission-status-${state.status}`;
                     return (
-                      <div key={mission.id} className="market-item">
+                      <div key={mission.id} className={cardClass}>
                         <div className="mission-card-header">
-                          <strong>{mission.title}</strong>
-                          <span className="status-chip">{missionTypeLabel(mission.type)}</span>
-                          <span className="status-chip">{state.status}</span>
+                          <strong className={isLocked || isCompleted ? "mission-title-dim" : ""}>{mission.title}</strong>
+                          <div className="mission-card-badges">
+                            <span className={`status-chip mission-type-${mission.type}`}>{missionTypeLabel(mission.type)}</span>
+                            <span className={`status-chip mission-status-chip-${state.status}`}>{state.status}</span>
+                          </div>
                         </div>
-                        <p>{mission.briefing}</p>
-                        <div className="market-actions">
-                          {state.status === "available" && (
-                            <button type="button" onClick={() => onAcceptMission(mission.id)}>Accept</button>
-                          )}
-                          {state.status === "readyToTurnIn" && (
-                            <button type="button" className="primary-button" onClick={() => onTurnInMission(mission.id)}>
-                              Claim {mission.rewardCredits} cr
-                            </button>
-                          )}
-                        </div>
+                        {!isLocked && <p>{mission.briefing}</p>}
+                        {(state.status === "available" || state.status === "readyToTurnIn") && (
+                          <div className="market-actions">
+                            {state.status === "available" && (
+                              <button type="button" onClick={() => onAcceptMission(mission.id)}>Accept</button>
+                            )}
+                            {state.status === "readyToTurnIn" && (
+                              <button type="button" className="primary-button" onClick={() => onTurnInMission(mission.id)}>
+                                Claim {mission.rewardCredits} cr
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1357,19 +1445,19 @@ export function StationPanel({
             </article>
 
             <article className="panel-lite">
-              <CollapsibleSection title="Transport Contracts" subtitle={`${transportMissionCatalog.length} jobs`} defaultOpen>
+              <CollapsibleSection title="Transport Contracts" subtitle={`${visibleTransport.length} jobs`} defaultOpen>
                 <div className="stack-list">
-                  {transportMissionCatalog.map((mission) => {
+                  {visibleTransport.map((mission) => {
                     const state = world.transportMissions[mission.id];
                     if (!state) return null;
                     const route = transportRouteMetrics(mission);
                     return (
-                      <div key={mission.id} className={`market-item${state.status === "active" ? " mission-active-card" : ""}`}>
+                      <div key={mission.id} className={`market-item mission-status-${state.status}${state.status === "active" ? " mission-active-card" : ""}${state.status === "completed" ? " mission-card-dim" : ""}`}>
                         <div className="mission-card-header">
-                          <strong>{mission.title}</strong>
+                          <strong className={state.status === "completed" ? "mission-title-dim" : ""}>{mission.title}</strong>
                           <div className="mission-card-badges">
-                            <span className="status-chip">{missionTypeLabel("haul")}</span>
-                            <span className="status-chip">{transportStatusLabel(state)}</span>
+                            <span className="status-chip mission-type-haul">{missionTypeLabel("haul")}</span>
+                            <span className={`status-chip mission-status-chip-${state.status}`}>{transportStatusLabel(state)}</span>
                             <RiskPips risk={route.risk} />
                             <span className="jump-badge">{route.deliveryJumps}J</span>
                             <span className="reward-badge">
@@ -1397,8 +1485,6 @@ export function StationPanel({
                             <span className="status-chip mkt-risk-chip">Needs more cargo room</span>
                           )}
                         </div>
-
-                        <p style={{ fontSize: "0.76rem", color: "var(--text-dim)", margin: 0 }}>{mission.description}</p>
 
                         <div className="market-actions">
                           {state.status === "available" && (
@@ -1436,15 +1522,14 @@ export function StationPanel({
                         <div className="mission-card-header">
                           <strong>{contract.title}</strong>
                           <div className="mission-card-badges">
-                            <span className="status-chip">{missionTypeLabel(contract.type === "transport" ? "haul" : contract.type)}</span>
+                            <span className={`status-chip mission-type-${contract.type === "transport" ? "haul" : contract.type}`}>{missionTypeLabel(contract.type === "transport" ? "haul" : contract.type)}</span>
                             <RiskPips risk={contract.riskLevel} />
                             <span className="reward-badge">
-                              {contract.rewardCredits + ((contract.cargoVolume ?? 0) * (contract.cargoUnitValue ?? 0)) + (contract.bonusReward ?? 0)} cr
+                              {Math.round(contract.rewardCredits + ((contract.cargoVolume ?? 0) * (contract.cargoUnitValue ?? 0)) + (contract.bonusReward ?? 0))} cr
                             </span>
-                            {isActive && <span className="status-chip">{world.procgen.activeContractState?.status}</span>}
+                            {isActive && <span className={`status-chip mission-status-chip-${world.procgen.activeContractState?.status ?? "active"}`}>{world.procgen.activeContractState?.status}</span>}
                           </div>
                         </div>
-                        <p style={{ fontSize: "0.78rem", color: "var(--text-dim)", margin: "0 0 0.5rem" }}>{contract.briefing}</p>
                         <div className="mission-details">
                           <span className="status-chip">{sectorById[contract.targetSystemId]?.name ?? contract.targetSystemId}</span>
                           {contract.targetCount && contract.targetResource && (
@@ -1482,7 +1567,9 @@ export function StationPanel({
               </CollapsibleSection>
             </article>
           </div>
-        )}
+          </>
+          );
+        })()}
 
       </div>
     </div>

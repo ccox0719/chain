@@ -365,6 +365,248 @@ function getCurrentStation(world: GameWorld) {
   return getSystemStation(world.currentSectorId);
 }
 
+const BOUNDARY_WARNING_DISTANCE = 260;
+const BOUNDARY_GRAVITY_START_DISTANCE = 90;
+const BOUNDARY_OVERSHOOT_ALLOWANCE = 140;
+const BOUNDARY_RETURN_ACCEL = 520;
+const BOUNDARY_SLINGSHOT_DAMPING = 0.08;
+const BOUNDARY_CLUSTER_PULL_RADIUS = 520;
+const BOUNDARY_VISIBLE_MARGIN = 120;
+const BOUNDARY_REBOUND_DISTANCE = 260;
+const BOUNDARY_RUBBER_BAND_MIN_SPEED = 180;
+
+function getBoundaryContext(world: GameWorld) {
+  const player = world.player;
+  const destinations = getSystemDestinations(world.currentSectorId);
+  const nearest = destinations
+    .filter((entry) => entry.kind === "anomaly" || entry.kind === "belt" || entry.kind === "wreck")
+    .map((entry) => ({ entry, distance: distance(player.position, entry.position) }))
+    .sort((left, right) => left.distance - right.distance)[0];
+
+  if (nearest?.entry.kind === "anomaly" && nearest.distance <= 520) {
+    return {
+      tone: "anomaly" as const,
+      title: "Deadspace instability detected",
+      detail: "The pocket lets you drift wide, then the field snaps you back inward."
+    };
+  }
+  if (nearest?.entry.kind === "belt" && nearest.distance <= 460) {
+    return {
+      tone: "belt" as const,
+      title: "Leaving belt perimeter",
+      detail: "Dust gravity and lane wash will sling the ship back toward the extraction zone."
+    };
+  }
+  const activeProcedural = getActiveProceduralContract(world);
+  const activeMission = getActiveMission(world);
+  const activeTransport = getActiveTransportMissionDefinition(world);
+  if (
+    (activeProcedural && activeProcedural.targetSystemId === world.currentSectorId) ||
+    (activeMission && activeMission.targetSystemId === world.currentSectorId) ||
+    (activeTransport && getTransportObjectiveTargetSystem(world, activeTransport) === world.currentSectorId)
+  ) {
+    return {
+      tone: "engagement" as const,
+      title: "Leaving engagement zone",
+      detail: "You can drift beyond the pocket edge briefly before the local well throws you back."
+    };
+  }
+  return {
+    tone: "sensor" as const,
+    title: "Navigation boundary reached",
+    detail: "The local grid weakens near the edge, then pulls your ship back like a gravity sling."
+  };
+}
+
+function getBoundaryReboundPoint(world: GameWorld, inward: Vec2): Vec2 {
+  const sectorDef = getCurrentSectorDef(world);
+  return {
+    x: clamp(
+      world.player.position.x + inward.x * BOUNDARY_REBOUND_DISTANCE,
+      BOUNDARY_VISIBLE_MARGIN,
+      sectorDef.width - BOUNDARY_VISIBLE_MARGIN
+    ),
+    y: clamp(
+      world.player.position.y + inward.y * BOUNDARY_REBOUND_DISTANCE,
+      BOUNDARY_VISIBLE_MARGIN,
+      sectorDef.height - BOUNDARY_VISIBLE_MARGIN
+    )
+  };
+}
+
+function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: number) {
+  const sectorDef = getCurrentSectorDef(world);
+  const { player } = world;
+  const nav = player.navigation;
+  const distanceLeft = player.position.x;
+  const distanceRight = sectorDef.width - player.position.x;
+  const distanceTop = player.position.y;
+  const distanceBottom = sectorDef.height - player.position.y;
+  const minDistanceToEdge = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
+  const warningDepth = Math.max(0, BOUNDARY_WARNING_DISTANCE - minDistanceToEdge);
+  const gravityDepth = Math.max(0, BOUNDARY_GRAVITY_START_DISTANCE - minDistanceToEdge);
+  const warningLevel = clamp(warningDepth / BOUNDARY_WARNING_DISTANCE, 0, 1);
+  const correctionLevel = clamp(gravityDepth / BOUNDARY_GRAVITY_START_DISTANCE, 0, 1);
+
+  const boundary = world.boundary;
+  const context = getBoundaryContext(world);
+  boundary.warningLevel = warningLevel;
+  boundary.correctionLevel = correctionLevel;
+  boundary.tone = context.tone;
+  boundary.title = warningLevel > 0.04 ? context.title : null;
+  boundary.detail = warningLevel > 0.04 ? context.detail : null;
+  boundary.forcedFacing = null;
+  boundary.forcedTurnRate = 0;
+
+  const center = { x: sectorDef.width / 2, y: sectorDef.height / 2 };
+  const inward = normalize(subtract(center, player.position));
+  const wasActive = boundary.active;
+  boundary.active = correctionLevel > 0.02;
+
+  if (boundary.active && !wasActive) {
+    pushStory(world, context.title);
+  }
+
+  const overshootLeft = Math.max(0, -distanceLeft);
+  const overshootRight = Math.max(0, -distanceRight);
+  const overshootTop = Math.max(0, -distanceTop);
+  const overshootBottom = Math.max(0, -distanceBottom);
+  const overshoot = Math.max(overshootLeft, overshootRight, overshootTop, overshootBottom);
+  const slingshotLevel = clamp(overshoot / BOUNDARY_OVERSHOOT_ALLOWANCE, 0, 1);
+
+  if (warningLevel > 0.04) {
+    boundary.forcedFacing = Math.atan2(inward.y, inward.x);
+    boundary.forcedTurnRate = 3.8 + warningLevel * 3.6 + correctionLevel * 3.2 + slingshotLevel * 6.4;
+  }
+
+  if (correctionLevel > 0 || slingshotLevel > 0) {
+    if (
+      nav.target === null &&
+      nav.destination &&
+      nav.mode !== "jumping" &&
+      nav.mode !== "warping" &&
+      nav.mode !== "docking"
+    ) {
+      const destinationDirection = normalize(subtract(nav.destination, player.position));
+      const destinationPush = destinationDirection.x * inward.x + destinationDirection.y * inward.y;
+      const shouldReverseCourse =
+        slingshotLevel > 0.04 ||
+        correctionLevel > 0.38 ||
+        (correctionLevel > 0.08 && destinationPush < -0.1);
+      if (shouldReverseCourse) {
+        nav.mode = "approach";
+        nav.destination = getBoundaryReboundPoint(world, inward);
+        nav.desiredRange = 0;
+        nav.warpFrom = null;
+        nav.warpProgress = 0;
+      }
+    }
+
+    const edgePull = correctionLevel * 0.55 + Math.pow(slingshotLevel, 1.35) * 1.9;
+    const inwardVelocity = player.velocity.x * inward.x + player.velocity.y * inward.y;
+    if (inwardVelocity < 0) {
+      const reversalStrength = 2.1 + slingshotLevel * 2.4;
+      player.velocity = add(player.velocity, scale(inward, -inwardVelocity * reversalStrength));
+    }
+    player.velocity = add(player.velocity, scale(inward, BOUNDARY_RETURN_ACCEL * (1 + edgePull * 1.45) * dt));
+    const minimumInwardSpeed =
+      BOUNDARY_RUBBER_BAND_MIN_SPEED * (correctionLevel * 0.45 + slingshotLevel * 1.1);
+    if (minimumInwardSpeed > 0) {
+      const correctedInwardVelocity = player.velocity.x * inward.x + player.velocity.y * inward.y;
+      if (correctedInwardVelocity < minimumInwardSpeed) {
+        player.velocity = add(player.velocity, scale(inward, minimumInwardSpeed - correctedInwardVelocity));
+      }
+    }
+    boundary.forcedFacing = Math.atan2(inward.y, inward.x);
+    boundary.forcedTurnRate = Math.max(
+      boundary.forcedTurnRate,
+      5.4 + warningLevel * 3.2 + correctionLevel * 4.5 + slingshotLevel * 7.2
+    );
+    player.velocity = scale(player.velocity, 1 - Math.min(0.32, dt * (BOUNDARY_SLINGSHOT_DAMPING + slingshotLevel * 0.55)));
+  }
+
+  if (slingshotLevel > 0) {
+    const shift = { x: 0, y: 0 };
+    if (player.position.x < BOUNDARY_VISIBLE_MARGIN) {
+      shift.x = BOUNDARY_VISIBLE_MARGIN - player.position.x;
+    } else if (player.position.x > sectorDef.width - BOUNDARY_VISIBLE_MARGIN) {
+      shift.x = (sectorDef.width - BOUNDARY_VISIBLE_MARGIN) - player.position.x;
+    }
+    if (player.position.y < BOUNDARY_VISIBLE_MARGIN) {
+      shift.y = BOUNDARY_VISIBLE_MARGIN - player.position.y;
+    } else if (player.position.y > sectorDef.height - BOUNDARY_VISIBLE_MARGIN) {
+      shift.y = (sectorDef.height - BOUNDARY_VISIBLE_MARGIN) - player.position.y;
+    }
+
+    if (shift.x !== 0 || shift.y !== 0) {
+      const sector = getCurrentSector(world);
+      const moveBody = (position: Vec2) => {
+        position.x += shift.x;
+        position.y += shift.y;
+      };
+      const isOutOfBounds = (position: Vec2) =>
+        position.x < BOUNDARY_VISIBLE_MARGIN ||
+        position.x > sectorDef.width - BOUNDARY_VISIBLE_MARGIN ||
+        position.y < BOUNDARY_VISIBLE_MARGIN ||
+        position.y > sectorDef.height - BOUNDARY_VISIBLE_MARGIN;
+
+      moveBody(player.position);
+
+      sector.enemies.forEach((enemy) => {
+        if (distance(enemy.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS) {
+          moveBody(enemy.position);
+          moveBody(enemy.patrolAnchor);
+          if (enemy.patrolTarget) moveBody(enemy.patrolTarget);
+        }
+      });
+
+      sector.loot.forEach((drop) => {
+        if (distance(drop.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS || isOutOfBounds(drop.position)) {
+          moveBody(drop.position);
+        }
+      });
+
+      sector.wrecks.forEach((wreck) => {
+        if (distance(wreck.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS || isOutOfBounds(wreck.position)) {
+          moveBody(wreck.position);
+        }
+      });
+
+      sector.floatingText.forEach((entry) => {
+        if (distance(entry.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS) {
+          moveBody(entry.position);
+        }
+      });
+
+      if (shift.x !== 0) {
+        player.velocity.x *= 0.82;
+      }
+      if (shift.y !== 0) {
+        player.velocity.y *= 0.82;
+      }
+    }
+  }
+
+  const minX = -BOUNDARY_OVERSHOOT_ALLOWANCE;
+  const maxX = sectorDef.width + BOUNDARY_OVERSHOOT_ALLOWANCE;
+  const minY = -BOUNDARY_OVERSHOOT_ALLOWANCE;
+  const maxY = sectorDef.height + BOUNDARY_OVERSHOOT_ALLOWANCE;
+  if (player.position.x < minX) {
+    player.position.x = minX;
+    player.velocity.x = Math.abs(player.velocity.x) + maxSpeed * 0.28;
+  } else if (player.position.x > maxX) {
+    player.position.x = maxX;
+    player.velocity.x = -Math.abs(player.velocity.x) - maxSpeed * 0.28;
+  }
+  if (player.position.y < minY) {
+    player.position.y = minY;
+    player.velocity.y = Math.abs(player.velocity.y) + maxSpeed * 0.28;
+  } else if (player.position.y > maxY) {
+    player.position.y = maxY;
+    player.velocity.y = -Math.abs(player.velocity.y) - maxSpeed * 0.28;
+  }
+}
+
 function getDifficultyModifiers(world: GameWorld) {
   if (world.difficulty === "easy") {
     return {
@@ -1390,6 +1632,7 @@ export function dock(world: GameWorld) {
   world.dockedStationId = station.id;
   world.player.velocity = { x: 0, y: 0 };
   world.player.shield = derived.maxShield;
+  world.player.capacitor = derived.capacitorCapacity;
   setIdle(world.player.navigation);
   pushStory(world, `Docked at ${station.name}.`);
   normalizeTransportMissionStates(world);
@@ -1825,6 +2068,15 @@ function issueNav(world: GameWorld, mode: NavigationState["mode"], target: Selec
   world.player.navigation.warpProgress = 0;
 }
 
+function issuePointNav(world: GameWorld, destination: Vec2) {
+  world.player.navigation.mode = "approach";
+  world.player.navigation.target = null;
+  world.player.navigation.desiredRange = 0;
+  world.player.navigation.destination = { ...destination };
+  world.player.navigation.warpFrom = null;
+  world.player.navigation.warpProgress = 0;
+}
+
 function activateAllWeapons(world: GameWorld) {
   world.player.modules.weapon.forEach((runtime) => {
     if (!runtime.moduleId) return;
@@ -1993,6 +2245,12 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
   if (command.type === "approach") {
     disableAutopilot(world);
     issueNav(world, "approach", command.target, command.range ?? 0);
+    return true;
+  }
+  if (command.type === "travel") {
+    disableAutopilot(world);
+    issuePointNav(world, command.destination);
+    world.selectedObject = null;
     return true;
   }
   if (command.type === "keep_range") {
@@ -2909,12 +3167,16 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     player.velocity = desiredVelocityControl(player.velocity, { x: 0, y: 0 }, derived.acceleration * 0.75, dt);
   }
 
+  if (world.boundary.forcedFacing !== null) {
+    const forcedAngleStep = Math.min(1, dt * world.boundary.forcedTurnRate);
+    player.rotation = lerpAngle(player.rotation, world.boundary.forcedFacing, forcedAngleStep);
+  }
+
   const navDamping = nav.mode === "orbit" ? 0.18 : nav.mode === "keep_range" ? 0.22 : 0.28;
   player.velocity = scale(player.velocity, 1 - Math.min(0.45, dt * navDamping));
   player.velocity = clampMagnitude(player.velocity, nav.mode === "align" ? maxSpeed * 0.9 : maxSpeed);
   player.position = add(player.position, scale(player.velocity, dt));
-  player.position.x = clamp(player.position.x, 30, sectorDef.width - 30);
-  player.position.y = clamp(player.position.y, 30, sectorDef.height - 30);
+  applyPlayerBoundaryBehavior(world, dt, maxSpeed);
 
   if (nav.mode === "idle") {
     player.velocity = scale(player.velocity, 1 - Math.min(0.65, dt * 1.25));
@@ -2970,7 +3232,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
       const targetDistance = targetPosition ? distance(player.position, targetPosition) : 0;
       const inRange = !module.range || (targetPosition && targetDistance <= module.range);
 
-      if ((module.kind === "mining_laser" || module.kind === "salvager") && (!target || !inRange)) {
+      if (module.kind === "mining_laser" && (!target || !inRange)) {
+        runtime.active = false;
+        runtime.cycleRemaining = 0;
+        return;
+      }
+      if (module.kind === "salvager" && (!target || !inRange)) {
         return;
       }
       if ((module.kind === "laser" || module.kind === "railgun" || module.kind === "missile") && (!target || !inRange)) {
@@ -3933,6 +4200,13 @@ function getNavLabel(world: GameWorld) {
 export function updateWorld(world: GameWorld, dt: number) {
   world.elapsedTime += dt;
   ensureProcgenState(world);
+  if (world.dockedStationId) {
+    world.boundary.warningLevel = 0;
+    world.boundary.correctionLevel = 0;
+    world.boundary.active = false;
+    world.boundary.title = null;
+    world.boundary.detail = null;
+  }
   const timeScale = getWorldTimeScale(world);
   const simDt = dt * timeScale;
   updateTacticalSlowTimers(world, dt);

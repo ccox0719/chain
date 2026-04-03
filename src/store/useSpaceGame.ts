@@ -330,6 +330,15 @@ export function useSpaceGame() {
         setContextMenu(null);
         refresh();
       },
+      handleCanvasDoubleClick: (clientX: number, clientY: number) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const frameData = getCameraFrame(worldRef.current, canvas, zoomCurrentRef.current, cameraOffsetRef.current);
+        const point = worldPointFromClient(canvas, zoomCurrentRef.current, frameData.cameraX, frameData.cameraY, clientX, clientY);
+        issueCommand(worldRef.current, { type: "travel", destination: point });
+        setContextMenu(null);
+        refresh();
+      },
       handleCanvasRightClick: (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -489,6 +498,10 @@ function loadWorld() {
       transportMissions: {
         ...fallback.transportMissions,
         ...(parsed.transportMissions ?? {})
+      },
+      boundary: {
+        ...fallback.boundary,
+        ...(parsed.boundary ?? {})
       },
       routePlan: parsed.routePlan ?? null,
       procgen: {

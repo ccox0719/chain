@@ -24,6 +24,7 @@ export function GamePage() {
         <GameCanvas
           canvasRef={canvasRef}
           onLeftClick={actions.handleCanvasLeftClick}
+          onDoubleClick={actions.handleCanvasDoubleClick}
           onRightClick={actions.handleCanvasRightClick}
           onWheelZoom={actions.adjustZoom}
           onPanBy={actions.panCamera}

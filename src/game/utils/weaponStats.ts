@@ -1,5 +1,5 @@
 import { moduleCatalog } from "../data/modules";
-import { DamageType, DamageProfile, ModuleDefinition, SizeClass } from "../../types/game";
+import { DamageType, DamageProfile, ModuleDefinition, SizeClass, WeaponDefinition } from "../../types/game";
 
 export interface WeaponStatMetric {
   id:
@@ -99,7 +99,7 @@ function sumDamageWeight(profile: DamageProfile | undefined, weights: Record<Dam
   );
 }
 
-export function isWeaponModule(module: ModuleDefinition | null | undefined): module is ModuleDefinition {
+export function isWeaponModule(module: ModuleDefinition | null | undefined): module is WeaponDefinition {
   return Boolean(module?.slot === "weapon" && module.damage && module.damageProfile);
 }
 
@@ -445,6 +445,15 @@ function getModuleResistanceBonus(module: ModuleDefinition) {
 }
 
 export function getModuleResistanceProfile(module: ModuleDefinition) {
+  const profile = module.resistProfile ?? module.modifiers.shieldResistProfile ?? module.modifiers.armorResistProfile ?? module.modifiers.hullResistProfile;
+  if (profile) {
+    return (["em", "thermal", "kinetic", "explosive"] as DamageType[]).map((type) => ({
+      type,
+      label: type === "em" ? "EM" : type === "thermal" ? "Thermal" : type === "kinetic" ? "Kinetic" : "Explosive",
+      value: profile[type] ?? 0
+    })) as ResistanceProfileEntry[];
+  }
+
   const bonus = getModuleResistanceBonus(module);
   if (bonus <= 0) return [];
 
@@ -456,6 +465,9 @@ export function getModuleResistanceProfile(module: ModuleDefinition) {
 }
 
 export function getModuleResistanceLabel(module: ModuleDefinition) {
+  if (module.resistMode === "reactive") return "Reactive Resistance";
+  if (module.resistMode === "adaptive") return "Adaptive Resistance";
+  if (module.resistProfile) return module.resistLayer === "shield" ? "Shield Resistance" : module.resistLayer === "armor" ? "Armor Resistance" : "Hull Resistance";
   if (module.kind === "hardener") return "Adaptive Resistance";
   if (module.modifiers.shieldResistBonus || module.activeModifiers?.shieldResistBonus) return "Shield Resistance";
   if (module.modifiers.armorResistBonus || module.activeModifiers?.armorResistBonus) return "Armor Resistance";

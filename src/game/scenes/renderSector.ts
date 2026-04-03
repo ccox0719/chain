@@ -718,6 +718,41 @@ export function renderSector(
 
   ctx.restore();
 
+  if (world.boundary.warningLevel > 0.02) {
+    const toneColor =
+      world.boundary.tone === "anomaly"
+        ? "181, 126, 255"
+        : world.boundary.tone === "belt"
+          ? "110, 224, 255"
+          : world.boundary.tone === "engagement"
+            ? "255, 150, 110"
+            : "140, 220, 255";
+    const edgeAlpha = 0.08 + world.boundary.warningLevel * 0.22;
+    const gradientSize = Math.max(120, Math.min(viewportWidth, viewportHeight) * 0.22);
+    const top = ctx.createLinearGradient(0, 0, 0, gradientSize);
+    top.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
+    top.addColorStop(1, `rgba(${toneColor}, 0)`);
+    const bottom = ctx.createLinearGradient(0, viewportHeight, 0, viewportHeight - gradientSize);
+    bottom.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
+    bottom.addColorStop(1, `rgba(${toneColor}, 0)`);
+    const left = ctx.createLinearGradient(0, 0, gradientSize, 0);
+    left.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
+    left.addColorStop(1, `rgba(${toneColor}, 0)`);
+    const right = ctx.createLinearGradient(viewportWidth, 0, viewportWidth - gradientSize, 0);
+    right.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
+    right.addColorStop(1, `rgba(${toneColor}, 0)`);
+    ctx.save();
+    ctx.fillStyle = top;
+    ctx.fillRect(0, 0, viewportWidth, gradientSize);
+    ctx.fillStyle = bottom;
+    ctx.fillRect(0, viewportHeight - gradientSize, viewportWidth, gradientSize);
+    ctx.fillStyle = left;
+    ctx.fillRect(0, 0, gradientSize, viewportHeight);
+    ctx.fillStyle = right;
+    ctx.fillRect(viewportWidth - gradientSize, 0, gradientSize, viewportHeight);
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.fillStyle = "rgba(4, 8, 18, 0.40)";
   ctx.fillRect(16, viewportHeight - 92, 250, 60);

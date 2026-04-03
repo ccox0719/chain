@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 interface CollapsibleSectionProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   defaultOpen?: boolean;
   className?: string;
@@ -21,7 +21,7 @@ export function CollapsibleSection({
     <details className={`collapsible-section${className ? ` ${className}` : ""}`} open={defaultOpen}>
       <summary className="collapsible-summary">
         <div className="collapsible-summary-copy">
-          <strong>{title}</strong>
+          {title && <strong>{title}</strong>}
           {subtitle && <span>{subtitle}</span>}
         </div>
         {right && <div className="collapsible-summary-right">{right}</div>}

@@ -3,6 +3,18 @@ import { moduleById } from "../data/modules";
 import { playerShipById } from "../data/ships";
 import { commodityById } from "../economy/data/commodities";
 
+const PLAYER_CAPACITOR_REGEN_MULTIPLIER = 0.45;
+
+function applyResistProfile(
+  target: { em: number; thermal: number; kinetic: number; explosive: number },
+  profile: Partial<{ em: number; thermal: number; kinetic: number; explosive: number }>
+) {
+  target.em += profile.em ?? 0;
+  target.thermal += profile.thermal ?? 0;
+  target.kinetic += profile.kinetic ?? 0;
+  target.explosive += profile.explosive ?? 0;
+}
+
 export function getShipBonuses(player: PlayerState): ShipBonusProfile {
   return playerShipById[player.hullId]?.bonuses ?? {};
 }
@@ -45,6 +57,9 @@ function applyModuleModifiers(
   derived.hullResists.thermal += modifiers.hullResistBonus ?? 0;
   derived.hullResists.kinetic += modifiers.hullResistBonus ?? 0;
   derived.hullResists.explosive += modifiers.hullResistBonus ?? 0;
+  if (modifiers.shieldResistProfile) applyResistProfile(derived.shieldResists, modifiers.shieldResistProfile);
+  if (modifiers.armorResistProfile) applyResistProfile(derived.armorResists, modifiers.armorResistProfile);
+  if (modifiers.hullResistProfile) applyResistProfile(derived.hullResists, modifiers.hullResistProfile);
   derived.miningYieldMultiplier *= modifiers.miningYieldMultiplier ?? 1;
   derived.laserDamageMultiplier *= modifiers.laserDamageMultiplier ?? 1;
   derived.railgunDamageMultiplier *= modifiers.railgunDamageMultiplier ?? 1;
@@ -121,7 +136,7 @@ export function computeDerivedStats(player: PlayerState) {
   derived.moduleBuyMultiplier *= shipBonuses.moduleBuyMultiplier ?? 1;
   derived.moduleSellMultiplier *= shipBonuses.moduleSellMultiplier ?? 1;
   derived.shipBuyMultiplier *= shipBonuses.shipBuyMultiplier ?? 1;
-  derived.capacitorRegen *= 0.6;
+  derived.capacitorRegen *= PLAYER_CAPACITOR_REGEN_MULTIPLIER;
 
   (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
     player.equipped[slotType]
@@ -132,6 +147,12 @@ export function computeDerivedStats(player: PlayerState) {
         fittedKinds.add(module.kind);
         applyModuleModifiers(derived, module.modifiers);
         const runtime = player.modules[slotType][index];
+        const isActive = module.activation === "passive" || runtime?.active;
+        if (isActive && module.resistLayer && module.resistProfile) {
+          if (module.resistLayer === "shield") applyResistProfile(derived.shieldResists, module.resistProfile);
+          if (module.resistLayer === "armor") applyResistProfile(derived.armorResists, module.resistProfile);
+          if (module.resistLayer === "hull") applyResistProfile(derived.hullResists, module.resistProfile);
+        }
         if (runtime?.active) {
           applyModuleModifiers(derived, module.activeModifiers);
         }

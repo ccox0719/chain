@@ -1,3 +1,4 @@
+import { factionData } from "./factions";
 import { EnemyVariant, ResistProfile, ShipHullDefinition } from "../../types/game";
 
 const shieldSkew: ResistProfile = { em: 0.12, thermal: 0.22, kinetic: 0.32, explosive: 0.42 };
@@ -99,6 +100,44 @@ function applyShipResistVariance(ship: ShipHullDefinition) {
   ship.hullResists = clampResists(hull);
 }
 
+const SHIP_CAPACITY_BY_CLASS: Record<ShipHullDefinition["shipClass"], number> = {
+  frigate: 1.28,
+  destroyer: 1.34,
+  cruiser: 1.4,
+  industrial: 1.38
+};
+
+const SHIP_REGEN_BY_CLASS: Record<ShipHullDefinition["shipClass"], number> = {
+  frigate: 0.84,
+  destroyer: 0.8,
+  cruiser: 0.76,
+  industrial: 0.78
+};
+
+const SHIP_CAPACITY_BY_ARCHETYPE: Partial<Record<ShipHullDefinition["archetype"], number>> = {
+  brawler: 1.04,
+  support: 1.08,
+  miner: 1.08,
+  hauler: 1.06,
+  sniper: 1.02
+};
+
+const SHIP_REGEN_BY_ARCHETYPE: Partial<Record<ShipHullDefinition["archetype"], number>> = {
+  support: 1.06,
+  brawler: 1.02,
+  kiter: 0.98,
+  sniper: 0.96
+};
+
+function applyShipCapProfile(ship: ShipHullDefinition) {
+  const capacityScale =
+    SHIP_CAPACITY_BY_CLASS[ship.shipClass] * (SHIP_CAPACITY_BY_ARCHETYPE[ship.archetype] ?? 1);
+  const regenScale =
+    SHIP_REGEN_BY_CLASS[ship.shipClass] * (SHIP_REGEN_BY_ARCHETYPE[ship.archetype] ?? 1);
+  ship.baseCapacitor = Math.round(ship.baseCapacitor * capacityScale);
+  ship.capacitorRegen = Number((ship.capacitorRegen * regenScale).toFixed(1));
+}
+
 function applyEnemyResistVariance(variant: EnemyVariant) {
   let shield =
     variant.combatStyle === "shield"
@@ -119,17 +158,35 @@ function applyEnemyResistVariance(variant: EnemyVariant) {
         ? makeResists(0.1, 0.1, 0.1, 0.1)
         : makeResists(0.05, 0.05, 0.05, 0.05);
 
-  if (variant.faction === "aurelian-league") {
-    shield = offsetResists(shield, { em: 0.04, thermal: 0.02, explosive: -0.02 });
-    armor = offsetResists(armor, { em: 0.04, thermal: 0.02 });
-  } else if (variant.faction === "cinder-union") {
-    shield = offsetResists(shield, { kinetic: 0.03, explosive: 0.03, em: -0.02 });
-    armor = offsetResists(armor, { kinetic: 0.03, explosive: 0.02, thermal: -0.01 });
-    hull = offsetResists(hull, { em: 0.01, thermal: 0.01, kinetic: 0.01, explosive: 0.01 });
+  const faction = factionData[variant.faction];
+  const preferred = faction.preferredResistanceProfile;
+  const signatureBias = {
+    em: (preferred.em - 0.2) * 0.45,
+    thermal: (preferred.thermal - 0.2) * 0.45,
+    kinetic: (preferred.kinetic - 0.2) * 0.45,
+    explosive: (preferred.explosive - 0.2) * 0.45
+  };
+
+  if (faction.tankStyle === "shield") {
+    shield = offsetResists(shield, { em: 0.04, thermal: 0.03, explosive: -0.02 });
+    armor = offsetResists(armor, { em: 0.02, thermal: 0.02 });
+  } else if (faction.tankStyle === "armor") {
+    shield = offsetResists(shield, { kinetic: 0.02, explosive: 0.02, em: -0.01 });
+    armor = offsetResists(armor, { kinetic: 0.04, explosive: 0.03, thermal: 0.01 });
+    hull = offsetResists(hull, { kinetic: 0.01, explosive: 0.01 });
   } else {
-    shield = offsetResists(shield, { kinetic: 0.04, explosive: 0.04 });
-    armor = offsetResists(armor, { thermal: 0.02, kinetic: 0.01 });
+    shield = offsetResists(shield, { kinetic: 0.02, explosive: 0.02 });
+    armor = offsetResists(armor, { thermal: 0.01, kinetic: 0.01 });
   }
+
+  shield = offsetResists(shield, signatureBias);
+  armor = offsetResists(armor, signatureBias);
+  hull = offsetResists(hull, {
+    em: signatureBias.em * 0.5,
+    thermal: signatureBias.thermal * 0.5,
+    kinetic: signatureBias.kinetic * 0.5,
+    explosive: signatureBias.explosive * 0.5
+  });
 
   variant.shieldResists = clampResists(shield);
   variant.armorResists = clampResists(armor);
@@ -1348,10 +1405,85 @@ export const enemyVariants: EnemyVariant[] = [
     shieldResists: { em: 0.14, thermal: 0.2, kinetic: 0.28, explosive: 0.34 },
     armorResists: { em: 0.24, thermal: 0.2, kinetic: 0.2, explosive: 0.16 },
     hullResists: { em: 0.1, thermal: 0.1, kinetic: 0.1, explosive: 0.1 }
+  },
+  {
+    id: "helion-warden",
+    name: "Helion Warden",
+    faction: "helion-cabal",
+    color: "#8fd3ff",
+    silhouette: "dart",
+    combatStyle: "shield",
+    shield: 118,
+    armor: 90,
+    hull: 84,
+    capacitor: 132,
+    capacitorRegen: 12,
+    speed: 112,
+    turnSpeed: 2.2,
+    lockRange: 660,
+    preferredRange: 420,
+    lootCredits: 260,
+    lootTable: { "ember-crystal": 2, ferrite: 2 },
+    fittedModules: ["pulse-laser", "shield-booster", "target-painter"],
+    signatureRadius: 28,
+    shieldResists: { em: 0.16, thermal: 0.24, kinetic: 0.28, explosive: 0.34 },
+    armorResists: { em: 0.34, thermal: 0.28, kinetic: 0.12, explosive: 0.08 },
+    hullResists: { em: 0.06, thermal: 0.06, kinetic: 0.06, explosive: 0.06 }
+  },
+  {
+    id: "ironbound-breaker",
+    name: "Ironbound Breaker",
+    faction: "ironbound-syndicate",
+    color: "#d2a06a",
+    silhouette: "heavy",
+    combatStyle: "armor",
+    shield: 94,
+    armor: 150,
+    hull: 130,
+    capacitor: 126,
+    capacitorRegen: 10.2,
+    speed: 92,
+    turnSpeed: 1.62,
+    lockRange: 560,
+    preferredRange: 260,
+    lootCredits: 320,
+    lootTable: { ferrite: 3, "ember-crystal": 3 },
+    fittedModules: ["railgun-array", "armor-repairer", "adaptive-hardener"],
+    signatureRadius: 52,
+    shieldResists: { em: 0.1, thermal: 0.16, kinetic: 0.24, explosive: 0.32 },
+    armorResists: { em: 0.26, thermal: 0.22, kinetic: 0.2, explosive: 0.16 },
+    hullResists: { em: 0.08, thermal: 0.08, kinetic: 0.08, explosive: 0.08 }
+  },
+  {
+    id: "blackwake-reaver",
+    name: "Blackwake Reaver",
+    faction: "blackwake-clans",
+    color: "#ff7e8c",
+    silhouette: "kite",
+    combatStyle: "speed",
+    shield: 82,
+    armor: 88,
+    hull: 92,
+    capacitor: 116,
+    capacitorRegen: 10.4,
+    speed: 126,
+    turnSpeed: 2.4,
+    lockRange: 600,
+    preferredRange: 300,
+    lootCredits: 240,
+    lootTable: { "ghost-alloy": 2, "ember-crystal": 2 },
+    fittedModules: ["micro-missile-rack", "warp-disruptor", "stasis-webifier"],
+    signatureRadius: 32,
+    shieldResists: { em: 0.08, thermal: 0.14, kinetic: 0.24, explosive: 0.34 },
+    armorResists: { em: 0.22, thermal: 0.18, kinetic: 0.14, explosive: 0.12 },
+    hullResists: { em: 0.05, thermal: 0.05, kinetic: 0.05, explosive: 0.05 }
   }
 ];
 
-playerShips.forEach(applyShipResistVariance);
+playerShips.forEach((ship) => {
+  applyShipResistVariance(ship);
+  applyShipCapProfile(ship);
+});
 enemyVariants.forEach(applyEnemyResistVariance);
 
 export const playerShipById = Object.fromEntries(playerShips.map((ship) => [ship.id, ship]));

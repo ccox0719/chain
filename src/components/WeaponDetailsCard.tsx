@@ -1,6 +1,7 @@
 import { ModuleDefinition } from "../types/game";
 import {
   CompactModuleMetric,
+  isWeaponModule,
   getCompactModuleMetrics,
   getDamageProfileEntries,
   getModuleRoleTag,
@@ -42,7 +43,7 @@ export function WeaponDetailsCard({
 }: WeaponDetailsCardProps) {
   const metrics = getCompactModuleMetrics(module);
   const roleTag = getModuleRoleTag(module);
-  const weaponLike = module.slot === "weapon" && Boolean(module.damage && module.damageProfile);
+  const weaponLike = isWeaponModule(module);
   const utilityLike = module.slot === "utility";
   const weaponStats = weaponLike ? getWeaponSummaryStats(module) : null;
   const comparisonHighlights = weaponLike ? getWeaponComparisonHighlights(module, compareTo) : [];
