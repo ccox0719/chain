@@ -7,7 +7,7 @@ import {
   SolarSystemDefinition,
   SystemDestination
 } from "../../types/game";
-import { sectorById } from "../data/sectors";
+import { regionById, sectorById } from "../data/sectors";
 import { commodityById } from "../economy/data/commodities";
 import { enemyVariantById, enemyVariants } from "../data/ships";
 import { estimateRouteRisk, planRoute } from "../universe/routePlanning";
@@ -43,6 +43,133 @@ function riskScore(risk: "low" | "medium" | "high" | "extreme") {
   if (risk === "medium") return 2;
   if (risk === "high") return 3;
   return 4;
+}
+
+type EncounterRole = (typeof encounterPackTemplates)[number]["roles"][number];
+
+const regionRoleBias: Record<string, Partial<Record<EncounterRole, number>>> = {
+  "aurelian-core": {
+    sniper: 1.12,
+    support: 1.12,
+    artillery: 0.9,
+    swarm: 0.82,
+    tackle: 0.88,
+    hunter: 0.9
+  },
+  "industrial-fringe": {
+    brawler: 1.08,
+    artillery: 1.14,
+    anchor: 1.04,
+    escort: 1.04,
+    skirmisher: 1.02,
+    swarm: 0.92,
+    tackle: 0.98
+  },
+  "frontier-march": {
+    swarm: 1.14,
+    tackle: 1.1,
+    hunter: 1.1,
+    artillery: 1.04,
+    sniper: 1.06,
+    support: 1.03
+  }
+};
+
+const factionRoleBias: Record<string, Partial<Record<EncounterRole, number>>> = {
+  "aurelian-league": {
+    sniper: 1.08,
+    support: 1.08,
+    anchor: 1.02,
+    swarm: 0.84,
+    tackle: 0.88
+  },
+  "helion-cabal": {
+    sniper: 1.18,
+    support: 1.12,
+    artillery: 1.06,
+    swarm: 0.82,
+    tackle: 0.9
+  },
+  "cinder-union": {
+    brawler: 1.08,
+    artillery: 1.1,
+    skirmisher: 1.04,
+    hunter: 0.98,
+    swarm: 0.94
+  },
+  "ironbound-syndicate": {
+    brawler: 1.1,
+    artillery: 1.08,
+    anchor: 1.06,
+    escort: 1.04,
+    swarm: 0.92
+  },
+  "veilborn": {
+    swarm: 1.1,
+    hunter: 1.06,
+    tackle: 1.06,
+    support: 1.04,
+    skirmisher: 1.04
+  },
+  "blackwake-clans": {
+    swarm: 1.16,
+    tackle: 1.1,
+    hunter: 1.08,
+    skirmisher: 1.04,
+    support: 1.02,
+    anchor: 0.95
+  }
+};
+
+const securityRoleBias: Record<SolarSystemDefinition["security"], Partial<Record<EncounterRole, number>>> = {
+  high: {
+    swarm: 0.8,
+    tackle: 0.86,
+    sniper: 1.08,
+    support: 1.06
+  },
+  medium: {
+    swarm: 1,
+    tackle: 1,
+    sniper: 1,
+    support: 1,
+    brawler: 1
+  },
+  low: {
+    swarm: 1.03,
+    tackle: 1.03,
+    hunter: 1.05,
+    artillery: 1.04,
+    support: 0.99
+  },
+  frontier: {
+    swarm: 1.08,
+    tackle: 1.08,
+    hunter: 1.08,
+    artillery: 1.06,
+    sniper: 1.04,
+    support: 1.01
+  }
+};
+
+function getEncounterRoleWeight(role: EncounterRole, sector: SolarSystemDefinition) {
+  const region = regionById[sector.regionId];
+  const regionBias = regionRoleBias[region?.id ?? sector.regionId]?.[role] ?? 1;
+  const factionBias = factionRoleBias[sector.controllingFaction]?.[role] ?? 1;
+  const securityBias = securityRoleBias[sector.security]?.[role] ?? 1;
+  return regionBias * factionBias * securityBias;
+}
+
+function getEncounterTemplateWeight(template: (typeof encounterPackTemplates)[number], sector: SolarSystemDefinition) {
+  const roleBias =
+    template.roles.reduce((sum, role) => sum + getEncounterRoleWeight(role, sector), 0) / Math.max(1, template.roles.length);
+  let weight = template.weight * roleBias;
+  if (sector.danger >= 4 && template.roles.some((role) => role === "sniper" || role === "artillery")) weight *= 1.04;
+  if (sector.security === "high" && template.roles.some((role) => role === "swarm" || role === "tackle")) weight *= 0.82;
+  if (sector.security === "frontier" && template.roles.some((role) => role === "swarm" || role === "tackle" || role === "hunter")) {
+    weight *= 1.05;
+  }
+  return weight;
 }
 
 export function getProcgenCycle(world: GameWorld) {
@@ -394,7 +521,10 @@ export function getEncounterTemplateOptions(context: "belt" | "gate", systemId: 
     if (sector.danger < template.minDanger || sector.danger > template.maxDanger) return false;
     if (template.security && !template.security.includes(sector.security)) return false;
     return true;
-  });
+  }).map((template) => ({
+    ...template,
+    weight: getEncounterTemplateWeight(template, sector)
+  }));
 }
 
 export function getHostileActivityMultiplier(world: GameWorld, systemId: string) {

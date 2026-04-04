@@ -284,6 +284,7 @@ export function WeaponDetailsCard({
           <div className="weapon-damage-profile compact">
             {profileEntries.map((entry) => (
               <div key={entry.type} className="weapon-profile-row">
+                <span className={`weapon-profile-swatch type-${entry.type}`} aria-hidden="true" />
                 <span>{entry.label}</span>
                 <div className="weapon-profile-bar">
                   <div className={`weapon-profile-fill type-${entry.type}`} style={{ width: `${entry.value * 100}%` }} />
@@ -300,6 +301,7 @@ export function WeaponDetailsCard({
             </div>
             {resistanceEntries.map((entry) => (
               <div key={entry.type} className="weapon-profile-row">
+                <span className={`weapon-profile-swatch resist-${entry.type}`} aria-hidden="true" />
                 <span>{entry.label}</span>
                 <div className="weapon-profile-bar">
                   <div

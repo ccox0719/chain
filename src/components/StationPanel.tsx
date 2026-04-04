@@ -143,28 +143,22 @@ function ResistBlock({
     { key: "explosive", short: "EX", className: "explosive" }
   ];
   return (
-    <div className="resist-block">
-      <span className="resist-block-label">{label}</span>
-      <div className="resist-bar-stack">
+    <div className="resist-chip-row">
+      <span className="resist-layer-label">{label}</span>
+      <div className="resist-chips">
         {entries.map((entry) => {
           const currentValue = current[entry.key];
           const previewValue = preview[entry.key];
           const delta = previewValue - currentValue;
           return (
-            <div
+            <span
               key={entry.key}
-              className={`resist-bar-row resist-${entry.className}${delta > 0.004 ? " good" : delta < -0.004 ? " bad" : ""}`}
+              className={`resist-chip resist-${entry.className}${delta > 0.004 ? " good" : delta < -0.004 ? " bad" : ""}`}
               title={`${label} ${entry.short} ${Math.round(previewValue * 100)}%`}
             >
-              <span className="resist-bar-label">{entry.short}</span>
-              <div className="meter resist-meter">
-                <span
-                  className={`ship-stat-fill resist-fill resist-${entry.className}`}
-                  style={{ width: `${Math.min(100, Math.max(0, previewValue * 100))}%` }}
-                />
-              </div>
-              <span className="resist-bar-value">{Math.round(previewValue * 100)}%</span>
-            </div>
+              <span className="resist-chip-type">{entry.short}</span>
+              <span className="resist-chip-val">{Math.round(previewValue * 100)}%</span>
+            </span>
           );
         })}
       </div>
@@ -691,7 +685,7 @@ export function StationPanel({
               </div>
               <div className="svc-cargo-summary">
                 <div className="svc-cargo-labels">
-                  <span>Cargo Hold</span>
+                  <span>⬒ Cargo Hold</span>
                   <span>{cargoUsed} / {roundedCargoCapacity}u · {roundedFreeCargo} free</span>
                 </div>
                 <div className="svc-cargo-bar">
@@ -700,7 +694,7 @@ export function StationPanel({
               </div>
               <div className="license-summary">
                 <div className="license-summary-head">
-                  <span>Pilot License</span>
+                  <span>◈ Pilot License</span>
                   <span>L{pilotLicense.level} {pilotLicense.level >= 3 ? "· Max" : `· ${pilotLicenseNextTarget}`}</span>
                 </div>
                 <div className="license-progress-bar">
@@ -708,7 +702,7 @@ export function StationPanel({
                 </div>
               </div>
               <div className="ship-resist-section">
-                <h4>Current Ship Details</h4>
+                <h4>Hull Specs &amp; Resistances</h4>
                 {currentBonuses && (
                   <p className="ship-bonus-summary">
                     {[
@@ -727,42 +721,36 @@ export function StationPanel({
                     ].filter(Boolean).join(" · ")}
                   </p>
                 )}
-                <div className="ship-stat-list svc-ship-stat-list">
-                  <div className="ship-stat-item">
-                    <span>Speed</span>
-                    <StatBar value={currentHull.maxSpeed} max={MAX_SHIP_SPEED} fillClass="speed-fill" />
-                    <strong>{currentHull.maxSpeed}</strong>
-                    <span className="stat-delta">Live</span>
+                <div className="stat-chip-grid">
+                  <div className="stat-chip speed-chip">
+                    <span className="stat-chip-icon">➤</span>
+                    <span className="stat-chip-label">Speed</span>
+                    <span className="stat-chip-value">{currentHull.maxSpeed}</span>
                   </div>
-                  <div className="ship-stat-item">
-                    <span>Cargo</span>
-                    <StatBar value={currentHull.cargoCapacity} max={MAX_SHIP_CARGO} fillClass="cargo-fill-stat" />
-                    <strong>{currentHull.cargoCapacity}</strong>
-                    <span className="stat-delta">Live</span>
+                  <div className="stat-chip cargo-chip">
+                    <span className="stat-chip-icon">⬒</span>
+                    <span className="stat-chip-label">Cargo</span>
+                    <span className="stat-chip-value">{currentHull.cargoCapacity}</span>
                   </div>
-                  <div className="ship-stat-item">
-                    <span>Shield</span>
-                    <StatBar value={currentHull.baseShield} max={MAX_SHIP_TANK / 3} fillClass="shield-fill" />
-                    <strong>{currentHull.baseShield}</strong>
-                    <span className="stat-delta">Live</span>
+                  <div className="stat-chip shield-chip">
+                    <span className="stat-chip-icon">⬡</span>
+                    <span className="stat-chip-label">Shield</span>
+                    <span className="stat-chip-value">{currentHull.baseShield}</span>
                   </div>
-                  <div className="ship-stat-item">
-                    <span>Armor</span>
-                    <StatBar value={currentHull.baseArmor} max={MAX_SHIP_TANK / 3} fillClass="armor-fill" />
-                    <strong>{currentHull.baseArmor}</strong>
-                    <span className="stat-delta">Live</span>
+                  <div className="stat-chip armor-chip">
+                    <span className="stat-chip-icon">◼</span>
+                    <span className="stat-chip-label">Armor</span>
+                    <span className="stat-chip-value">{currentHull.baseArmor}</span>
                   </div>
-                  <div className="ship-stat-item">
-                    <span>Hull</span>
-                    <StatBar value={currentHull.baseHull} max={MAX_SHIP_TANK / 3} fillClass="hull-fill" />
-                    <strong>{currentHull.baseHull}</strong>
-                    <span className="stat-delta">Live</span>
+                  <div className="stat-chip hull-chip">
+                    <span className="stat-chip-icon">▲</span>
+                    <span className="stat-chip-label">Hull</span>
+                    <span className="stat-chip-value">{currentHull.baseHull}</span>
                   </div>
-                  <div className="ship-stat-item">
-                    <span>Capacitor</span>
-                    <StatBar value={currentHull.baseCapacitor} max={MAX_SHIP_CAP} fillClass="cap-fill" />
-                    <strong>{currentHull.baseCapacitor}</strong>
-                    <span className="stat-delta">Live</span>
+                  <div className="stat-chip cap-chip">
+                    <span className="stat-chip-icon">⚡</span>
+                    <span className="stat-chip-label">Cap</span>
+                    <span className="stat-chip-value">{currentHull.baseCapacitor}</span>
                   </div>
                 </div>
                 <div className="ship-slot-row">

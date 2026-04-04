@@ -756,6 +756,7 @@ export function GameHud({
                             <span className="overview-name">
                               <strong>{getOverviewTypeSymbol(entry.type)} {entry.name}</strong>
                               {entry.subtitle && <small>{entry.subtitle}</small>}
+                              {entry.roleLabel && <small>{entry.roleLabel}{entry.bossLabel ? ` · ${entry.bossLabel}` : ""}</small>}
                               {entry.combatProfileLabel && <small>{entry.combatProfileLabel}</small>}
                               {tacticalActive && entry.type === "enemy" && (
                                 <small>

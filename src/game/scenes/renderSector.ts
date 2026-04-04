@@ -493,7 +493,17 @@ export function renderSector(
     .forEach((entry) => {
       if (entry.kind === "anomaly" && entry.anomalyField) {
         const radius = entry.anomalyField.radius;
-        const tint = entry.anomalyField.tint ?? "#ff7b7b";
+        const tint =
+          entry.anomalyField.tint ??
+          (entry.anomalyField.effect === "pull"
+            ? "#c8a6ff"
+            : entry.anomalyField.effect === "push"
+              ? "#ff9a74"
+              : entry.anomalyField.effect === "drag"
+                ? "#8cd6c1"
+                : entry.anomalyField.effect === "ion"
+                  ? "#8fd7ff"
+                  : "#a9ffcf");
         const pulse = 1 + Math.sin(world.elapsedTime * 1.8 + entry.position.x * 0.01) * 0.04;
         ctx.save();
         ctx.translate(entry.position.x, entry.position.y);
@@ -513,14 +523,32 @@ export function renderSector(
         const debrisCount = entry.anomalyField.debrisCount ?? 10;
         for (let index = 0; index < debrisCount; index += 1) {
           const seed = index * 1.73 + entry.position.x * 0.003 + entry.position.y * 0.002;
-          const angle = world.elapsedTime * (entry.anomalyField.effect === "pull" ? -0.45 : 0.52) + seed;
+          const angle =
+            world.elapsedTime *
+              (entry.anomalyField.effect === "pull"
+                ? -0.45
+                : entry.anomalyField.effect === "drag"
+                  ? 0.18
+                  : entry.anomalyField.effect === "ion"
+                    ? 0.9
+                    : 0.52) +
+            seed;
           const orbit = radius * (0.24 + ((index * 17) % 9) * 0.065);
           const x = Math.cos(angle) * orbit;
           const y = Math.sin(angle) * orbit;
           ctx.save();
           ctx.translate(x, y);
           ctx.rotate(angle * 1.8);
-          ctx.fillStyle = entry.anomalyField.effect === "pull" ? "rgba(215, 187, 255, 0.48)" : "rgba(255, 166, 120, 0.46)";
+          ctx.fillStyle =
+            entry.anomalyField.effect === "pull"
+              ? "rgba(215, 187, 255, 0.48)"
+              : entry.anomalyField.effect === "drag"
+                ? "rgba(140, 214, 193, 0.42)"
+                : entry.anomalyField.effect === "ion"
+                  ? "rgba(143, 215, 255, 0.46)"
+                  : entry.anomalyField.effect === "slipstream"
+                    ? "rgba(169, 255, 207, 0.4)"
+                    : "rgba(255, 166, 120, 0.46)";
           ctx.fillRect(-2.5, -1.2, 5, 2.4);
           ctx.restore();
         }
@@ -528,13 +556,30 @@ export function renderSector(
       }
       const stroke =
         entry.kind === "anomaly"
-          ? entry.anomalyField?.tint ?? "#ff7b7b"
+          ? entry.anomalyField?.tint ??
+            (entry.anomalyField?.effect === "pull"
+              ? "#c8a6ff"
+              : entry.anomalyField?.effect === "push"
+                ? "#ff9a74"
+                : entry.anomalyField?.effect === "drag"
+                  ? "#8cd6c1"
+                  : entry.anomalyField?.effect === "ion"
+                    ? "#8fd7ff"
+                    : "#a9ffcf")
           : entry.kind === "wreck"
             ? "#d5c7a1"
             : "#8de6ff";
       const fill =
         entry.kind === "anomaly"
-          ? "rgba(255, 116, 116, 0.26)"
+          ? entry.anomalyField?.effect === "pull"
+            ? "rgba(200, 166, 255, 0.22)"
+            : entry.anomalyField?.effect === "drag"
+              ? "rgba(140, 214, 193, 0.2)"
+              : entry.anomalyField?.effect === "ion"
+                ? "rgba(143, 215, 255, 0.2)"
+                : entry.anomalyField?.effect === "slipstream"
+                  ? "rgba(169, 255, 207, 0.18)"
+                  : "rgba(255, 116, 116, 0.26)"
           : entry.kind === "wreck"
             ? "rgba(218, 200, 149, 0.18)"
             : "rgba(112, 233, 255, 0.20)";

@@ -38,6 +38,27 @@ export type CommodityCategory =
 export type ModuleSlot = "weapon" | "utility" | "defense";
 export type ShipClass = "frigate" | "destroyer" | "cruiser" | "industrial";
 export type ShipArchetype = "skirmisher" | "brawler" | "sniper" | "kiter" | "support" | "hauler" | "miner";
+export type EnemyArchetypeId =
+  | "swarm"
+  | "siege_sniper"
+  | "heavy_bruiser"
+  | "interceptor"
+  | "support_frigate"
+  | "missile_skirmisher"
+  | "artillery"
+  | "hunter";
+export type HostilePackRole =
+  | "swarm"
+  | "tackle"
+  | "sniper"
+  | "brawler"
+  | "support"
+  | "skirmisher"
+  | "anchor"
+  | "escort"
+  | "artillery"
+  | "hunter";
+export type CombatObjective = "standard" | "survive" | "clear" | "intercept" | "defend";
 export type ModuleCategory = "weapon" | "defense" | "propulsion" | "control" | "utility" | "mining" | "passive";
 export type SizeClass = "light" | "medium" | "heavy";
 export type RoleTag =
@@ -194,7 +215,7 @@ export interface SystemDestination {
   unlockMissionId?: string;
   tags?: string[];
   anomalyField?: {
-    effect: "push" | "pull";
+    effect: "push" | "pull" | "drag" | "ion" | "slipstream";
     radius: number;
     strength: number;
     debrisCount?: number;
@@ -450,9 +471,16 @@ export interface EnemyVariant {
   id: string;
   name: string;
   faction: FactionId;
+  archetype: EnemyArchetypeId;
+  roleTags: RoleTag[];
   color: string;
   silhouette: "dart" | "wing" | "heavy" | "needle" | "wedge" | "kite" | "box" | "claw";
   combatStyle: "shield" | "armor" | "speed";
+  threatLevel: number;
+  elite?: boolean;
+  eliteTitle?: string;
+  boss?: boolean;
+  bossTitle?: string;
   shield: number;
   armor: number;
   hull: number;
@@ -535,6 +563,22 @@ export interface MissionDefinition {
   targetDestinationId?: string;
   targetStationId?: string;
   enemyVariantIds?: string[];
+  bossEncounter?: BossEncounterDefinition;
+  combatObjective?: CombatObjective;
+  objectiveDurationSec?: number;
+  reinforcementIntervalSec?: number;
+  reinforcementRoles?: HostilePackRole[];
+  reinforcementVariantIds?: string[];
+}
+
+export interface BossEncounterDefinition {
+  bossVariantId: string;
+  escortVariantIds?: string[];
+  bossTitle: string;
+  missionBriefing?: string;
+  specialMechanicTags?: string[];
+  rewardCreditsBonus?: number;
+  threatSummary?: string;
 }
 
 export interface TransportMissionDefinition {
@@ -690,6 +734,8 @@ export interface PlayerState {
 export interface EnemyState {
   id: string;
   variantId: string;
+  bossMissionId?: string;
+  boss?: boolean;
   position: Vec2;
   velocity: Vec2;
   rotation: number;
@@ -777,6 +823,11 @@ export interface MissionState {
   missionId: string;
   status: "locked" | "available" | "active" | "readyToTurnIn" | "completed";
   progress: number;
+  bossSpawned?: boolean;
+  bossDefeated?: boolean;
+  objectiveTimer?: number;
+  reinforcementTimer?: number;
+  challengePressure?: number;
 }
 
 export interface TransportMissionState {
@@ -875,6 +926,8 @@ export interface SectorRuntime {
   floatingText: FloatingText[];
   particles: ParticleState[];
   beltSpawnCooldowns: Record<string, number>;
+  challengePressure: number;
+  reinforcementTimer: number;
   cameraShake?: number;
   playerHitFlash?: number;
 }
@@ -928,6 +981,8 @@ export interface ObjectInfo {
   signatureRadius?: number;
   subtitle?: string;
   factionLabel?: string;
+  roleLabel?: string;
+  bossLabel?: string;
   threatLabel?: string;
   combatProfileLabel?: string;
   combatProfileTone?: "shield" | "armor" | "speed";

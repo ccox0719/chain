@@ -1,4 +1,5 @@
 import { DamageType, DestinationKind, EnemyVariant, GameWorld, ObjectInfo, OverviewEntry, SelectableRef, SpaceObjectType, Vec2 } from "../../types/game";
+import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { factionData } from "../data/factions";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { getSystemDestination, getSystemDestinations, sectorById } from "../data/sectors";
@@ -87,6 +88,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
       const enemy = sector.enemies.find((item) => item.id === ref.id);
       if (!enemy) return null;
       const variant = enemyVariantById[enemy.variantId];
+      const archetype = getEnemyArchetypeDefinition(variant.archetype);
       const relativeVelocity = {
         x: enemy.velocity.x - playerVelocity.x,
         y: enemy.velocity.y - playerVelocity.y
@@ -104,10 +106,14 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         velocity: Math.hypot(enemy.velocity.x, enemy.velocity.y),
         angularVelocity,
         signatureRadius: variant.signatureRadius,
-        subtitle: `${system.name} hostile · ${factionData[variant.faction].name}`,
+        subtitle: `${system.name} hostile · ${factionData[variant.faction].name} · ${archetype?.roleLabel ?? variant.combatStyle}`,
         factionLabel: factionData[variant.faction].name,
-        threatLabel: `Threat ${Math.ceil((variant.hull + variant.armor + variant.shield) / 90)}`,
-        combatProfileLabel: factionData[variant.faction].threatSummary,
+        roleLabel: archetype?.roleLabel ?? undefined,
+        bossLabel: variant.boss ? variant.bossTitle ?? "Boss" : undefined,
+        threatLabel: variant.boss
+          ? `Boss Threat ${variant.threatLevel}`
+          : `Threat ${variant.threatLevel}`,
+        combatProfileLabel: archetype?.summary ?? factionData[variant.faction].threatSummary,
         combatProfileTone: getCombatProfileTone(variant),
         weaknessLabel: getWeightedDamageWeakness(variant, enemy.shield, enemy.armor, enemy.hull) ?? undefined,
         preferredRange: variant.preferredRange,
@@ -130,7 +136,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         distance: distanceFromPlayer,
         velocity: 0,
         subtitle: asteroid.beltId,
-        threatLabel: "Resource",
+        threatLabel: "Obstacle",
         signatureRadius: asteroid.radius * 2,
         oreRemaining: asteroid.oreRemaining
       };
@@ -217,7 +223,15 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
           destination.kind === "gate" && targetSystemName
             ? `Jump to ${targetSystemName}`
             : destination.kind === "anomaly" && destination.anomalyField
-              ? `${destination.anomalyField.effect === "pull" ? "Pull field" : "Push field"} · ${destination.description}`
+              ? `${destination.anomalyField.effect === "pull"
+                  ? "Vortex field"
+                  : destination.anomalyField.effect === "push"
+                    ? "Repulsion field"
+                    : destination.anomalyField.effect === "drag"
+                      ? "Drag cloud"
+                      : destination.anomalyField.effect === "ion"
+                        ? "Ion storm"
+                        : "Slipstream lane"} · ${destination.description}`
               : destination.description,
         factionLabel:
           destination.kind === "station" || destination.kind === "outpost"
@@ -228,9 +242,15 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
             ? destination.resource
             : destination.kind === "anomaly"
               ? destination.anomalyField?.effect === "pull"
-                ? "Pull Field"
+                ? "Vortex Field"
                 : destination.anomalyField?.effect === "push"
-                  ? "Push Field"
+                  ? "Repulsion Field"
+                  : destination.anomalyField?.effect === "drag"
+                    ? "Drag Cloud"
+                    : destination.anomalyField?.effect === "ion"
+                      ? "Ion Storm"
+                      : destination.anomalyField?.effect === "slipstream"
+                        ? "Slipstream Lane"
                   : "Combat"
               : destination.kind === "station"
                 ? "Safe"

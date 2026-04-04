@@ -327,8 +327,9 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
     ],
     asteroidFields: [{ beltId: "ironway-belt-alpha", center: { x: 1420, y: 1140 }, count: 9, resource: "ferrite", spread: 260, richness: 13 }],
     enemySpawns: [
-      { variantId: "cinder-pike", count: 2, center: { x: 1980, y: 1520 }, radius: 230 },
-      { variantId: "dust-raider", count: 2, center: { x: 1760, y: 1600 }, radius: 190 }
+      { variantId: "ironbound-bruiser", count: 1, center: { x: 1980, y: 1520 }, radius: 230 },
+      { variantId: "ironbound-artillery", count: 1, center: { x: 1760, y: 1600 }, radius: 190 },
+      { variantId: "ironbound-bastion", count: 1, center: { x: 1840, y: 1400 }, radius: 210 }
     ]
   },
   {
@@ -376,13 +377,14 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 16,
         hostileSpawnChance: 0.45,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["cinder-pike", "veil-stalker"]
+        hostileSpawnVariantIds: ["cinder-pike", "blackwake-interceptor", "blackwake-swarm"]
       },
       { beltId: "ember-belt-beta", center: { x: 980, y: 1640 }, count: 6, resource: "ferrite", spread: 210, richness: 11 }
     ],
     enemySpawns: [
-      { variantId: "cinder-pike", count: 3, center: { x: 2000, y: 1240 }, radius: 260 },
-      { variantId: "veil-stalker", count: 2, center: { x: 2280, y: 1360 }, radius: 220 }
+      { variantId: "cinder-pike", count: 2, center: { x: 2000, y: 1240 }, radius: 260 },
+      { variantId: "blackwake-swarm", count: 2, center: { x: 2280, y: 1360 }, radius: 220 },
+      { variantId: "blackwake-interceptor", count: 1, center: { x: 2180, y: 1580 }, radius: 210 }
     ]
   },
   {
@@ -423,10 +425,14 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 14,
         hostileSpawnChance: 0.3,
         hostileSpawnCount: 1,
-        hostileSpawnVariantIds: ["cinder-pike"]
+        hostileSpawnVariantIds: ["ironbound-bruiser", "ironbound-artillery", "cinder-command-artillery", "cinder-pike"]
       }
     ],
-    enemySpawns: [{ variantId: "cinder-pike", count: 3, center: { x: 2180, y: 1560 }, radius: 220 }]
+    enemySpawns: [
+      { variantId: "ironbound-bruiser", count: 1, center: { x: 2180, y: 1560 }, radius: 220 },
+      { variantId: "ironbound-artillery", count: 1, center: { x: 1980, y: 1380 }, radius: 180 },
+      { variantId: "cinder-pike", count: 1, center: { x: 2360, y: 1680 }, radius: 190 }
+    ]
   },
   {
     id: "sable-haul",
@@ -465,12 +471,13 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 15,
         hostileSpawnChance: 0.35,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["dust-raider", "cinder-pike"]
+        hostileSpawnVariantIds: ["ironbound-bruiser", "cinder-pike", "dust-raider"]
       }
     ],
     enemySpawns: [
-      { variantId: "dust-raider", count: 2, center: { x: 1860, y: 1840 }, radius: 180 },
-      { variantId: "cinder-pike", count: 2, center: { x: 2040, y: 1680 }, radius: 200 }
+      { variantId: "ironbound-bruiser", count: 1, center: { x: 1860, y: 1840 }, radius: 180 },
+      { variantId: "cinder-pike", count: 2, center: { x: 2040, y: 1680 }, radius: 200 },
+      { variantId: "dust-raider", count: 1, center: { x: 1720, y: 1620 }, radius: 170 }
     ]
   },
   {
@@ -503,7 +510,7 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
       gate("gate-verge-vanta", "Vanta Gate", 2840, 2440, "vanta-expanse", "gate-vanta-verge", "Eastern gate into deeper frontier space."),
       belt("verge-belt-alpha", "Verge Belt Alpha", 1220, 1180, "ghost-alloy", "Rare alloy band under pirate pressure."),
       anomaly("verge-anomaly", "Silent Cut", 2140, 1380, "Combat anomaly where scouts keep disappearing.", {
-        effect: "pull",
+        effect: "drag",
         radius: 280,
         strength: 210,
         debrisCount: 12,
@@ -521,12 +528,13 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 16,
         hostileSpawnChance: 0.6,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+        hostileSpawnVariantIds: ["veilborn-hunter", "veilborn-support", "blackwake-interceptor"]
       }
     ],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 4, center: { x: 2140, y: 1380 }, radius: 260 },
-      { variantId: "reaver-gunship", count: 2, center: { x: 2280, y: 1640 }, radius: 220 }
+      { variantId: "veilborn-hunter", count: 2, center: { x: 2140, y: 1380 }, radius: 260 },
+      { variantId: "veilborn-support", count: 1, center: { x: 2280, y: 1640 }, radius: 220 },
+      { variantId: "blackwake-interceptor", count: 2, center: { x: 1960, y: 1640 }, radius: 200 }
     ]
   },
   {
@@ -556,7 +564,7 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
       gate("gate-blackwake-verge", "Outer Verge Gate", 2460, 520, "outer-verge", "gate-verge-blackwake", "Border gate back toward Shade Hub."),
       gate("gate-blackwake-ghostlight", "Ghostlight Gate", 2760, 2320, "ghostlight-pocket", "gate-ghostlight-blackwake", "Unstable gate into the lucrative pocket.", "ghostlight-charter"),
       anomaly("blackwake-rift", "Wake Rift", 1780, 1420, "Large pirate anomaly with disciplined raider wings.", {
-        effect: "push",
+        effect: "pull",
         radius: 320,
         strength: 245,
         debrisCount: 14,
@@ -567,9 +575,10 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
     ],
     asteroidFields: [],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 4, center: { x: 1760, y: 1420 }, radius: 260 },
-      { variantId: "reaver-gunship", count: 3, center: { x: 1440, y: 1120 }, radius: 220 },
-      { variantId: "blackwake-reaver", count: 3, center: { x: 2140, y: 1580 }, radius: 240 }
+      { variantId: "blackwake-swarm", count: 5, center: { x: 1760, y: 1420 }, radius: 260 },
+      { variantId: "blackwake-interceptor", count: 3, center: { x: 1440, y: 1120 }, radius: 220 },
+      { variantId: "blackwake-reaver", count: 2, center: { x: 2140, y: 1580 }, radius: 240 },
+      { variantId: "blackwake-reaver-captain", count: 1, center: { x: 1960, y: 1260 }, radius: 200 }
     ]
   },
   {
@@ -597,7 +606,7 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
       gate("gate-vanta-ghostlight", "Ghostlight Gate", 2860, 960, "ghostlight-pocket", "gate-ghostlight-vanta", "Deep gate toward the lucrative pocket."),
       belt("vanta-belt-alpha", "Vanta Belt Alpha", 1820, 1420, "ghost-alloy", "Rare alloy field with poor rescue odds."),
       anomaly("vanta-echo", "Echo Hollow", 2320, 1980, "A quiet anomaly that never stays quiet for long.", {
-        effect: "pull",
+        effect: "ion",
         radius: 300,
         strength: 170,
         debrisCount: 11,
@@ -615,12 +624,12 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 18,
         hostileSpawnChance: 0.7,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+        hostileSpawnVariantIds: ["veilborn-hunter", "veilborn-support", "reaver-gunship"]
       }
     ],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 4, center: { x: 2280, y: 2020 }, radius: 240 },
-      { variantId: "reaver-gunship", count: 2, center: { x: 1960, y: 1540 }, radius: 210 }
+      { variantId: "veilborn-hunter", count: 3, center: { x: 2280, y: 2020 }, radius: 240 },
+      { variantId: "veilborn-support", count: 2, center: { x: 1960, y: 1540 }, radius: 210 }
     ]
   },
   {
@@ -648,7 +657,7 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
       gate("gate-ghostlight-vanta", "Vanta Gate", 2860, 940, "vanta-expanse", "gate-vanta-ghostlight", "Deep loop gate into the Expanse."),
       belt("ghostlight-belt-alpha", "Ghostlight Belt Alpha", 1760, 1380, "ghost-alloy", "Rich ghost-alloy field near a debris halo."),
       anomaly("ghostlight-core", "Ghostlight Core", 2260, 1840, "A lucrative anomaly defended by heavy raider hulls.", {
-        effect: "pull",
+        effect: "slipstream",
         radius: 360,
         strength: 260,
         debrisCount: 16,
@@ -667,12 +676,13 @@ const baseSectorCatalog: SolarSystemDefinition[] = [
         richness: 20,
         hostileSpawnChance: 0.85,
         hostileSpawnCount: 3,
-        hostileSpawnVariantIds: ["reaver-gunship", "veil-stalker"]
+        hostileSpawnVariantIds: ["reaver-gunship", "veilborn-hunter", "veilborn-support"]
       }
     ],
     enemySpawns: [
-      { variantId: "reaver-gunship", count: 4, center: { x: 2280, y: 1840 }, radius: 240 },
-      { variantId: "veil-stalker", count: 4, center: { x: 1400, y: 1180 }, radius: 220 }
+      { variantId: "reaver-gunship", count: 3, center: { x: 2280, y: 1840 }, radius: 240 },
+      { variantId: "veilborn-hunter", count: 3, center: { x: 1400, y: 1180 }, radius: 220 },
+      { variantId: "veilborn-support", count: 2, center: { x: 1720, y: 1520 }, radius: 220 }
     ]
   }
 ];
@@ -709,8 +719,10 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
     ],
     asteroidFields: [{ beltId: "glass-belt-alpha", center: { x: 1760, y: 1120 }, count: 8, resource: "ferrite", spread: 220, richness: 12 }],
     enemySpawns: [
-      { variantId: "scrap-drone", count: 2, center: { x: 2140, y: 1320 }, radius: 180 },
-      { variantId: "helion-warden", count: 2, center: { x: 1880, y: 1580 }, radius: 180 }
+      { variantId: "helion-warden", count: 2, center: { x: 1880, y: 1580 }, radius: 180 },
+      { variantId: "helion-prism-sniper", count: 1, center: { x: 2200, y: 1240 }, radius: 160 },
+      { variantId: "helion-prism-lance", count: 1, center: { x: 2060, y: 1360 }, radius: 180 },
+      { variantId: "scrap-drone", count: 1, center: { x: 2140, y: 1320 }, radius: 180 }
     ]
   },
   {
@@ -743,7 +755,11 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
       beacon("crown-ledger", "Ledger Relay", 2060, 960, "Finance relay used in premium courier work.", ["mission"])
     ],
     asteroidFields: [{ beltId: "crown-belt-alpha", center: { x: 980, y: 960 }, count: 6, resource: "ferrite", spread: 180, richness: 10 }],
-    enemySpawns: [{ variantId: "dust-raider", count: 1, center: { x: 2140, y: 1180 }, radius: 140 }]
+    enemySpawns: [
+      { variantId: "helion-warden", count: 1, center: { x: 2140, y: 1180 }, radius: 140 },
+      { variantId: "helion-prism-sniper", count: 1, center: { x: 1880, y: 1380 }, radius: 150 },
+      { variantId: "helion-prism-lance", count: 1, center: { x: 2020, y: 1260 }, radius: 150 }
+    ]
   },
   {
     id: "slag-arc",
@@ -784,12 +800,14 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
         richness: 15,
         hostileSpawnChance: 0.38,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["cinder-pike", "dust-raider"]
+        hostileSpawnVariantIds: ["ironbound-bruiser", "ironbound-artillery", "cinder-pike"]
       }
     ],
     enemySpawns: [
-      { variantId: "cinder-pike", count: 2, center: { x: 2060, y: 1500 }, radius: 200 },
-      { variantId: "dust-raider", count: 2, center: { x: 2260, y: 1260 }, radius: 180 }
+      { variantId: "ironbound-bruiser", count: 2, center: { x: 2060, y: 1500 }, radius: 200 },
+      { variantId: "ironbound-artillery", count: 1, center: { x: 2260, y: 1260 }, radius: 180 },
+      { variantId: "cinder-command-artillery", count: 1, center: { x: 1980, y: 1320 }, radius: 190 },
+      { variantId: "cinder-pike", count: 1, center: { x: 1880, y: 1680 }, radius: 180 }
     ]
   },
   {
@@ -822,7 +840,10 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
       beacon("brass-ops", "Transit Ops Beacon", 2060, 960, "Operations relay for long-haul convoy routing.", ["navigation"])
     ],
     asteroidFields: [{ beltId: "brass-belt-alpha", center: { x: 1660, y: 1280 }, count: 7, resource: "ferrite", spread: 220, richness: 12 }],
-    enemySpawns: [{ variantId: "cinder-pike", count: 2, center: { x: 2140, y: 1520 }, radius: 180 }]
+    enemySpawns: [
+      { variantId: "ironbound-bruiser", count: 1, center: { x: 2140, y: 1520 }, radius: 180 },
+      { variantId: "ironbound-artillery", count: 1, center: { x: 1880, y: 1380 }, radius: 160 }
+    ]
   },
   {
     id: "ashen-deep",
@@ -870,12 +891,13 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
         richness: 17,
         hostileSpawnChance: 0.68,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+        hostileSpawnVariantIds: ["veilborn-hunter", "veilborn-support", "blackwake-interceptor"]
       }
     ],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 4, center: { x: 2100, y: 1560 }, radius: 250 },
-      { variantId: "reaver-gunship", count: 2, center: { x: 2360, y: 1780 }, radius: 210 }
+      { variantId: "veilborn-hunter", count: 3, center: { x: 2100, y: 1560 }, radius: 250 },
+      { variantId: "veilborn-support", count: 1, center: { x: 2360, y: 1780 }, radius: 210 },
+      { variantId: "blackwake-interceptor", count: 2, center: { x: 2260, y: 1320 }, radius: 220 }
     ]
   },
   {
@@ -915,12 +937,12 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
         richness: 18,
         hostileSpawnChance: 0.62,
         hostileSpawnCount: 2,
-        hostileSpawnVariantIds: ["veil-stalker", "reaver-gunship"]
+        hostileSpawnVariantIds: ["veilborn-hunter", "veilborn-support", "reaver-gunship"]
       }
     ],
     enemySpawns: [
-      { variantId: "veil-stalker", count: 3, center: { x: 2220, y: 1780 }, radius: 230 },
-      { variantId: "reaver-gunship", count: 2, center: { x: 2020, y: 1540 }, radius: 200 }
+      { variantId: "veilborn-hunter", count: 3, center: { x: 2220, y: 1780 }, radius: 230 },
+      { variantId: "veilborn-support", count: 2, center: { x: 2020, y: 1540 }, radius: 200 }
     ]
   },
   {
@@ -966,12 +988,13 @@ const expansionSectorCatalog: SolarSystemDefinition[] = [
         richness: 20,
         hostileSpawnChance: 0.8,
         hostileSpawnCount: 3,
-        hostileSpawnVariantIds: ["reaver-gunship", "veil-stalker"]
+        hostileSpawnVariantIds: ["reaver-gunship", "veilborn-hunter", "veilborn-support"]
       }
     ],
     enemySpawns: [
-      { variantId: "reaver-gunship", count: 4, center: { x: 2320, y: 1820 }, radius: 240 },
-      { variantId: "veil-stalker", count: 4, center: { x: 1500, y: 1320 }, radius: 220 }
+      { variantId: "reaver-gunship", count: 3, center: { x: 2320, y: 1820 }, radius: 240 },
+      { variantId: "veilborn-hunter", count: 3, center: { x: 1500, y: 1320 }, radius: 220 },
+      { variantId: "veilborn-support", count: 2, center: { x: 1820, y: 1520 }, radius: 220 }
     ]
   }
 ];

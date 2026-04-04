@@ -10,20 +10,25 @@ import {
   GameSnapshot,
   GameWorld,
   MissionDefinition,
+  HostilePackRole,
   ModuleSlot,
   NavigationState,
   ObjectInfo,
   ParticleShape,
   ParticleState,
+  CombatObjective,
   ResistProfile,
   ResourceId,
   SelectableRef,
+  SystemDestination,
   SpaceObjectType,
   TransportMissionDefinition,
   TransportTracker,
   TransportRisk,
   Vec2
 } from "../../types/game";
+import { bossByMissionId } from "../data/bosses";
+import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { missionById, missionCatalog } from "../data/missions";
 import { moduleById } from "../data/modules";
 import { enemyVariantById, enemyVariants, playerShipById } from "../data/ships";
@@ -1464,14 +1469,15 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
     world.player.cargo[mission.targetResource] -= mission.targetCount;
   }
 
-  world.player.credits += mission.rewardCredits;
-  awardPilotLicenseProgress(world, mission.rewardCredits / 8);
+  const rewardCredits = mission.rewardCredits + (mission.bossEncounter?.rewardCreditsBonus ?? 0);
+  world.player.credits += rewardCredits;
+  awardPilotLicenseProgress(world, rewardCredits / 8);
   state.status = "completed";
   if (mission.unlockSystemId && !world.unlockedSectorIds.includes(mission.unlockSystemId)) {
     world.unlockedSectorIds.push(mission.unlockSystemId);
     pushStory(world, `Jump access granted: ${sectorById[mission.unlockSystemId].name}`);
   }
-  pushStory(world, `Mission complete: ${mission.title} (+${mission.rewardCredits} credits)`);
+  pushStory(world, `Mission complete: ${mission.title} (+${rewardCredits} credits)`);
   ensureMissionUnlocks(world);
   return true;
 }
@@ -1521,7 +1527,15 @@ export function acceptMission(world: GameWorld, missionId: string) {
     }
     state.status = "active";
     state.progress = 0;
+    state.bossSpawned = false;
+    state.bossDefeated = false;
+    state.objectiveTimer = mission.objectiveDurationSec ?? 0;
+    state.reinforcementTimer = mission.reinforcementIntervalSec ?? 0;
+    state.challengePressure = 0;
     pushStory(world, `Mission accepted: ${mission.title}`);
+    if (mission.bossEncounter && !world.dockedStationId && world.currentSectorId === mission.targetSystemId) {
+      spawnMissionBossEncounter(world, mission);
+    }
     return true;
   }
 
@@ -1610,6 +1624,80 @@ function desiredVelocityControl(
 ) {
   const delta = subtract(desiredVelocity, currentVelocity);
   return add(currentVelocity, clampMagnitude(delta, acceleration * dt));
+}
+
+function applyTerrainNavigationInfluence(
+  world: GameWorld,
+  position: Vec2,
+  desiredVelocity: Vec2,
+  maxSpeed: number,
+  bodyRadius: number,
+  dt: number,
+  terrainBias = 1
+) {
+  const sector = getCurrentSector(world);
+  let nextVelocity = desiredVelocity;
+  let speedScale = 1;
+
+  sector.asteroids.forEach((asteroid) => {
+    const offset = subtract(position, asteroid.position);
+    const dist = length(offset);
+    const clearance = bodyRadius + asteroid.radius + 120;
+    if (dist <= 4 || dist >= clearance) return;
+    const falloff = 1 - dist / clearance;
+    const push = scale(normalize(offset), falloff * (110 + asteroid.radius * 0.85) * dt * terrainBias);
+    nextVelocity = add(nextVelocity, push);
+  });
+
+  getSystemDestinations(world.currentSectorId)
+    .filter((entry): entry is SystemDestination & { anomalyField: NonNullable<SystemDestination["anomalyField"]> } =>
+      entry.kind === "anomaly" && Boolean(entry.anomalyField)
+    )
+    .forEach((entry) => {
+      const field = entry.anomalyField;
+      const offset = subtract(position, entry.position);
+      const dist = length(offset);
+      if (dist <= 4 || dist > field.radius) return;
+      const falloff = 1 - dist / field.radius;
+      const dir = normalize(offset);
+      if (field.effect === "pull") {
+        nextVelocity = add(nextVelocity, scale(dir, -falloff * field.strength * 0.08 * dt * terrainBias));
+        nextVelocity = add(nextVelocity, scale({ x: -dir.y, y: dir.x }, falloff * field.strength * 0.015 * dt));
+      } else if (field.effect === "push") {
+        nextVelocity = add(nextVelocity, scale(dir, falloff * field.strength * 0.08 * dt * terrainBias));
+      } else if (field.effect === "drag") {
+        speedScale *= 1 - Math.min(0.42, falloff * 0.34 * terrainBias);
+      } else if (field.effect === "ion") {
+        speedScale *= 1 - Math.min(0.22, falloff * 0.18 * terrainBias);
+      } else if (field.effect === "slipstream") {
+        nextVelocity = add(nextVelocity, scale(normalize(nextVelocity), falloff * field.strength * 0.04 * dt));
+      }
+    });
+
+  return clampMagnitude(nextVelocity, maxSpeed * speedScale);
+}
+
+function resolveAsteroidCollisions(world: GameWorld, position: Vec2, velocity: Vec2, bodyRadius: number) {
+  const sector = getCurrentSector(world);
+  let nextPosition = { ...position };
+  let nextVelocity = { ...velocity };
+
+  sector.asteroids.forEach((asteroid) => {
+    const offset = subtract(nextPosition, asteroid.position);
+    const dist = length(offset);
+    const minDist = bodyRadius + asteroid.radius + 3;
+    if (dist <= 0 || dist >= minDist) return;
+    const normal = normalize(offset);
+    const overlap = minDist - dist;
+    nextPosition = add(nextPosition, scale(normal, overlap + 0.5));
+    const radial = nextVelocity.x * normal.x + nextVelocity.y * normal.y;
+    if (radial < 0) {
+      nextVelocity = subtract(nextVelocity, scale(normal, radial * 1.1));
+    }
+    nextVelocity = scale(nextVelocity, 0.92 - Math.min(0.12, overlap * 0.0012));
+  });
+
+  return { position: nextPosition, velocity: nextVelocity };
 }
 
 function objectInRange(world: GameWorld, ref: SelectableRef, range: number) {
@@ -2471,6 +2559,8 @@ function getEnemyManeuverBias(seed: string) {
 function getEnemyPreferredRange(enemyVariantId: string) {
   const variant = enemyVariantById[enemyVariantId];
   if (!variant) return 220;
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
+  if (archetype) return archetype.preferredRange;
   if (variant.combatStyle === "speed") return Math.round(variant.preferredRange * 1.18);
   if (variant.combatStyle === "armor") return Math.round(Math.max(120, variant.preferredRange * 0.88));
   if (variant.combatStyle === "shield") return Math.round(Math.max(140, variant.preferredRange * 0.94));
@@ -2480,6 +2570,8 @@ function getEnemyPreferredRange(enemyVariantId: string) {
 function getEnemyCombatMode(enemyVariantId: string) {
   const variant = enemyVariantById[enemyVariantId];
   if (!variant) return "orbit" as const;
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
+  if (archetype) return archetype.preferredMode;
   const modules = variant.fittedModules.map((moduleId) => moduleById[moduleId]).filter(Boolean);
   if (variant.combatStyle === "speed") {
     return modules.some((module) =>
@@ -2508,13 +2600,17 @@ function getEnemyCombatMode(enemyVariantId: string) {
 function createEnemyFromVariant(
   variantId: string,
   position: Vec2,
-  patrolAnchor = position
+  patrolAnchor = position,
+  bossMissionId?: string
 ) {
   const variant = enemyVariantById[variantId] ?? enemyVariantById["dust-raider"];
-  const patrolBehavior = "anchor-patrol" as const;
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
+  const patrolBehavior = variant.boss ? "stationary" : archetype?.patrolBehavior ?? ("anchor-patrol" as const);
   return {
     id: `enemy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     variantId: variant.id,
+    boss: variant.boss,
+    bossMissionId,
     position: { ...position },
     velocity: { x: 0, y: 0 },
     rotation: 0,
@@ -2582,7 +2678,66 @@ function getSectorResponseVariants(sectorId: string, preferredVariantIds?: strin
   return variantIds.length ? variantIds : ["dust-raider"];
 }
 
-type HostilePackRole = "tackle" | "sniper" | "brawler" | "support" | "skirmisher" | "anchor" | "escort";
+function getSectorChallengePressure(world: GameWorld, sectorId: string) {
+  return world.sectors[sectorId]?.challengePressure ?? 0;
+}
+
+function raiseSectorChallenge(world: GameWorld, sectorId: string, amount: number, source: string) {
+  const sector = world.sectors[sectorId];
+  if (!sector || amount <= 0) return;
+  const before = sector.challengePressure ?? 0;
+  sector.challengePressure = clamp(before + amount, 0, 10);
+  sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - amount * 2.5);
+  if (sector.challengePressure >= 5 && before < 5) {
+    pushStory(world, `${sectorById[sectorId].name}: local threat response escalating${source ? ` after ${source}` : ""}.`);
+  }
+}
+
+function refreshSectorChallenge(world: GameWorld, sectorId: string, dt: number) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  if (!sector || !sectorDef) return;
+  const playerPowerTier = getPlayerPowerTier(world);
+  const hostilePresence = sector.enemies.some((enemy) => enemy.hull > 0);
+  const combatNearby = sector.enemies.some((enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= 760);
+  const hostileSitePressure = sectorDef.danger >= 4 ? 0.02 : sectorDef.danger >= 3 ? 0.012 : 0.005;
+  const presencePressure = hostilePresence ? 0.008 + sectorDef.danger * 0.0015 : 0;
+  const proximityPressure = combatNearby ? 0.018 : 0;
+  const miningPressure =
+    sectorDef.asteroidFields.length > 0 && distance(world.player.position, sectorDef.asteroidFields[0].center) <= 620
+      ? 0.009
+      : 0;
+  const missionPressure =
+    (getActiveMission(world)?.targetSystemId === sectorId ? 0.012 : 0) +
+    (getActiveProceduralContract(world)?.targetSystemId === sectorId ? 0.01 : 0);
+  const decay = sectorDef.security === "high" ? 0.015 : sectorDef.security === "medium" ? 0.012 : sectorDef.security === "low" ? 0.009 : 0.006;
+  const nextPressure = (sector.challengePressure ?? 0) + dt * (hostileSitePressure + presencePressure + proximityPressure + miningPressure + missionPressure);
+  sector.challengePressure = clamp(nextPressure - dt * decay + Math.max(0, playerPowerTier - 1) * dt * 0.0008, 0, 10);
+  sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - dt);
+}
+
+function maybeSpawnSectorReinforcement(world: GameWorld, sectorId: string) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  if (!sector || !sectorDef) return;
+  const pressure = sector.challengePressure ?? 0;
+  if (pressure < 3.4 || sector.reinforcementTimer > 0) return;
+
+  const playerPowerTier = getPlayerPowerTier(world);
+  const preferredVariantIds = getSectorResponseVariants(sectorId);
+  const roles: HostilePackRole[] =
+    pressure >= 7 ? ["tackle", "sniper", "support"] : pressure >= 5 ? ["tackle", "support"] : ["tackle"];
+  if (sectorDef.security === "frontier" && pressure >= 5) roles.unshift("swarm");
+  if (playerPowerTier >= 4 && pressure >= 5.5) roles.push(sectorDef.security === "high" ? "sniper" : "hunter");
+
+  const pack = roles.map((role) => ({
+    role,
+    variantId: pickEnemyVariantForHostileRole(role, preferredVariantIds, new Set<string>(), playerPowerTier)
+  }));
+  spawnTriggeredHostiles(world, sectorId, { ...world.player.position }, pack);
+  sector.reinforcementTimer = clamp(34 - Math.min(12, pressure * 1.2) + Math.max(0, 4 - playerPowerTier) * 2, 16, 40);
+}
+
 type TriggerContext = "belt" | "gate";
 
 interface HostilePackTemplate {
@@ -2612,30 +2767,44 @@ function scoreEnemyVariantForHostileRole(
 ) {
   const variant = enemyVariantById[variantId];
   if (!variant) return Number.NEGATIVE_INFINITY;
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
   const moduleKinds = getEnemyVariantModuleKinds(variantId);
   const totalBulk = variant.shield + variant.armor + variant.hull;
   let score = preferredVariantIds?.includes(variantId) ? 1.5 : 0;
   const techPressure = Math.max(0, playerPowerTier - 1);
+  if (variant.elite) {
+    score += playerPowerTier >= 3 ? 1.8 + techPressure * 0.35 : 0.5;
+  }
 
-  if (role === "tackle") {
-    if (variant.combatStyle === "speed") score += 3.2;
+  if (role === "swarm") {
+    if (archetype?.id === "swarm") score += 4.5;
+    if (variant.combatStyle === "speed") score += 2.5;
+    if (variant.speed >= 118) score += 1.4;
+    if (variant.preferredRange <= 180) score += 1.1;
+    if (moduleKinds.has("missile") || moduleKinds.has("laser") || moduleKinds.has("webifier")) score += 0.5;
+  } else if (role === "tackle") {
+    if (archetype?.id === "interceptor" || archetype?.id === "hunter") score += 4.2;
+    if (variant.combatStyle === "speed") score += 2.8;
     if (variant.speed >= 108) score += 1.6;
     if (variant.preferredRange <= 220) score += 1.0;
-    if (moduleKinds.has("warp_disruptor")) score += 4.2;
-    if (moduleKinds.has("webifier")) score += 2.8;
+    if (moduleKinds.has("warp_disruptor")) score += 4.4;
+    if (moduleKinds.has("webifier")) score += 2.9;
     if (moduleKinds.has("missile") || moduleKinds.has("railgun")) score += 0.5;
   } else if (role === "sniper") {
+    if (archetype?.id === "siege_sniper" || archetype?.id === "artillery") score += 4.0;
     if (variant.preferredRange >= 260) score += 2.6;
     if (variant.lockRange >= 600) score += 1.0;
-    if (variant.combatStyle === "armor") score += 1.6;
+    if (variant.combatStyle === "armor") score += 1.3;
     if (moduleKinds.has("railgun")) score += 2.2;
     if (moduleKinds.has("missile")) score += 0.7;
   } else if (role === "brawler") {
-    if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 2.6;
+    if (archetype?.id === "heavy_bruiser" || archetype?.id === "hunter") score += 4.0;
+    if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 2.4;
     if (variant.preferredRange <= 240) score += 2.0;
     if (totalBulk >= 260) score += 1.0;
     if (moduleKinds.has("laser")) score += 0.6;
   } else if (role === "support") {
+    if (archetype?.id === "support_frigate") score += 4.2;
     if (moduleKinds.has("webifier")) score += 3.0;
     if (moduleKinds.has("warp_disruptor")) score += 3.1;
     if (moduleKinds.has("target_painter")) score += 3.0;
@@ -2647,25 +2816,39 @@ function scoreEnemyVariantForHostileRole(
     if (variant.combatStyle === "speed") score += 0.5;
     score += techPressure * 0.35;
   } else if (role === "skirmisher") {
-    if (variant.combatStyle === "speed") score += 3.0;
+    if (archetype?.id === "missile_skirmisher" || archetype?.id === "hunter" || archetype?.id === "interceptor") score += 3.6;
+    if (variant.combatStyle === "speed") score += 2.8;
     if (variant.speed >= 110) score += 1.5;
     if (variant.preferredRange >= 190 && variant.preferredRange <= 340) score += 1.5;
     if (moduleKinds.has("missile") || moduleKinds.has("railgun") || moduleKinds.has("laser")) score += 0.5;
     score += techPressure * 0.2;
   } else if (role === "anchor") {
+    if (archetype?.id === "heavy_bruiser" || archetype?.id === "siege_sniper" || archetype?.id === "artillery") score += 3.8;
     if (totalBulk >= 280) score += 3.2;
     if (variant.speed <= 100) score += 1.5;
     if (variant.combatStyle === "shield" || variant.combatStyle === "armor") score += 1.5;
     if (moduleKinds.has("shield_booster") || moduleKinds.has("armor_repairer")) score += 1.0;
     score += techPressure * 0.25;
   } else if (role === "escort") {
-    if (variant.combatStyle === "speed") score += 2.2;
+    if (archetype?.id === "interceptor" || archetype?.id === "hunter") score += 3.0;
+    if (variant.combatStyle === "speed") score += 2.0;
     if (variant.speed >= 112) score += 1.2;
     if (moduleKinds.has("missile")) score += 1.8;
     if (moduleKinds.has("railgun")) score += 1.4;
     if (moduleKinds.has("laser")) score += 0.8;
     if (totalBulk <= 250) score += 1.2;
     score += techPressure * 0.3;
+  } else if (role === "artillery") {
+    if (archetype?.id === "artillery" || archetype?.id === "siege_sniper") score += 4.4;
+    if (variant.preferredRange >= 420) score += 2.2;
+    if (variant.lockRange >= 620) score += 1.4;
+    if (moduleKinds.has("missile") || moduleKinds.has("railgun")) score += 1.4;
+  } else if (role === "hunter") {
+    if (archetype?.id === "hunter" || archetype?.id === "interceptor") score += 4.0;
+    if (variant.combatStyle === "speed") score += 2.4;
+    if (variant.speed >= 112) score += 1.6;
+    if (variant.preferredRange <= 260) score += 1.2;
+    if (moduleKinds.has("warp_disruptor") || moduleKinds.has("webifier")) score += 1.2;
   }
 
   if (playerPowerTier >= 3) {
@@ -2685,6 +2868,7 @@ function pickEnemyVariantForHostileRole(
   playerPowerTier: number
 ) {
   const scored = enemyVariants
+    .filter((variant) => !variant.boss)
     .map((variant) => ({
       variant,
       score:
@@ -2713,6 +2897,7 @@ function chooseHostilePackTemplate(context: TriggerContext, sectorId: string, pl
 }
 
 function buildTriggeredHostilePack(
+  world: GameWorld,
   context: TriggerContext,
   sectorId: string,
   playerPowerTier: number,
@@ -2721,11 +2906,18 @@ function buildTriggeredHostilePack(
   const template = chooseHostilePackTemplate(context, sectorId, playerPowerTier);
   const usedVariantIds = new Set<string>();
   const roles = [...template.roles];
-  if (playerPowerTier >= 4 && sectorById[sectorId]?.danger >= 4 && Math.random() < 0.35) {
+  const pressure = getSectorChallengePressure(world, sectorId);
+  if (playerPowerTier >= 4 && sectorById[sectorId]?.danger >= 5 && Math.random() < 0.2) {
     roles.push(context === "belt" ? "support" : "escort");
   }
-  if (playerPowerTier >= 4 && sectorById[sectorId]?.security === "frontier" && Math.random() < 0.25) {
+  if ((playerPowerTier >= 4 || pressure >= 4) && sectorById[sectorId]?.security === "frontier" && Math.random() < 0.2) {
+    roles.push(context === "belt" ? "support" : "escort");
+  }
+  if ((playerPowerTier >= 4 || pressure >= 4) && sectorById[sectorId]?.security === "frontier" && Math.random() < 0.2) {
     roles.push("support");
+  }
+  if (pressure >= 5 && Math.random() < 0.25) {
+    roles.unshift(context === "gate" ? "tackle" : "swarm");
   }
   return roles.map((role) => {
     const variantId = pickEnemyVariantForHostileRole(role, preferredVariantIds, usedVariantIds, playerPowerTier);
@@ -2735,11 +2927,14 @@ function buildTriggeredHostilePack(
 }
 
 function getTriggerSpawnRadius(role: HostilePackRole) {
+  if (role === "swarm") return 120 + Math.random() * 50;
   if (role === "tackle") return 180 + Math.random() * 60;
   if (role === "sniper") return 280 + Math.random() * 90;
   if (role === "support") return 240 + Math.random() * 80;
   if (role === "anchor") return 300 + Math.random() * 90;
   if (role === "escort") return 210 + Math.random() * 70;
+  if (role === "artillery") return 340 + Math.random() * 100;
+  if (role === "hunter") return 170 + Math.random() * 60;
   if (role === "skirmisher") return 210 + Math.random() * 70;
   return 220 + Math.random() * 80;
 }
@@ -2776,6 +2971,11 @@ function getEnemyHealthFraction(enemy: EnemyState, variant: EnemyVariant) {
 function getEnemyRetreatThreshold(enemyVariantId: string) {
   const variant = enemyVariantById[enemyVariantId];
   if (!variant) return 0.52;
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
+  if (archetype?.id === "swarm") return 0.18;
+  if (archetype?.id === "siege_sniper" || archetype?.id === "artillery") return 0.36;
+  if (archetype?.id === "support_frigate") return 0.42;
+  if (archetype?.id === "heavy_bruiser") return 0.48;
   if (variant.combatStyle === "speed") return 0.72;
   if (variant.combatStyle === "shield") return 0.58;
   if (variant.combatStyle === "armor") return 0.42;
@@ -2791,7 +2991,14 @@ function shouldEnemyRetreat(
   const healthFraction = getEnemyHealthFraction(enemy, variant);
   const lowCapacitor = enemy.capacitor < variant.capacitor * 0.16;
   const takingLosses = enemy.recentDamageTimer > 0;
-  const failingPursuit = playerDistance > preferredRange * (variant.combatStyle === "speed" ? 1.45 : 1.7);
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
+  const pursuitScale =
+    archetype?.id === "swarm" ? 1.18 :
+    archetype?.id === "siege_sniper" || archetype?.id === "artillery" ? 1.88 :
+    archetype?.id === "heavy_bruiser" ? 1.42 :
+    archetype?.id === "support_frigate" ? 1.6 :
+    1.7;
+  const failingPursuit = playerDistance > preferredRange * pursuitScale;
   return (
     (takingLosses && healthFraction <= getEnemyRetreatThreshold(enemy.variantId)) ||
     (takingLosses && failingPursuit && healthFraction < 0.82) ||
@@ -2855,6 +3062,140 @@ function spawnTriggeredHostiles(
   pushStory(world, `${spawnedNames.join(", ")} warped toward your position.`);
 }
 
+function getMissionBossSpawnPoint(world: GameWorld, mission: MissionDefinition) {
+  const targetSystemId = mission.targetSystemId;
+  if (!targetSystemId) return null;
+  const sectorDef = sectorById[targetSystemId];
+  if (!sectorDef) return null;
+  if (mission.targetDestinationId) {
+    const destination = getSystemDestination(targetSystemId, mission.targetDestinationId);
+    if (destination) return { ...destination.position };
+  }
+  return {
+    x: sectorDef.width * 0.5,
+    y: sectorDef.height * 0.5
+  };
+}
+
+function spawnMissionBossEncounter(world: GameWorld, mission: MissionDefinition) {
+  const state = world.missions[mission.id];
+  const bossEncounter = mission.bossEncounter ?? bossByMissionId[mission.id];
+  if (!state || state.status !== "active" || state.bossSpawned || !bossEncounter) return;
+  if (world.currentSectorId !== mission.targetSystemId) return;
+  const sector = getCurrentSector(world);
+  if (!enemyVariantById[bossEncounter.bossVariantId]) return;
+
+  const anchor = getMissionBossSpawnPoint(world, mission) ?? { ...world.player.position };
+  const escorts = bossEncounter.escortVariantIds ?? [];
+  const escortCount = Math.max(escorts.length, 1);
+  const spawnPack: Array<{ variantId: string; offset: Vec2; bossMissionId?: string }> = [
+    {
+      variantId: bossEncounter.bossVariantId,
+      offset: { x: 0, y: 0 },
+      bossMissionId: mission.id
+    },
+    ...escorts.map((variantId, index) => ({
+      variantId,
+      offset: {
+        x: Math.cos((Math.PI * 2 * index) / escortCount) * (170 + index * 20),
+        y: Math.sin((Math.PI * 2 * index) / escortCount) * (170 + index * 20)
+      }
+    }))
+  ];
+
+  const sectorDef = sectorById[world.currentSectorId];
+  spawnPack.forEach((entry, index) => {
+    const variantId = entry.variantId;
+    if (!variantId) return;
+    const variant = enemyVariantById[variantId];
+    if (!variant) return;
+    const position = {
+      x: clamp(anchor.x + entry.offset.x + (index === 0 ? 0 : (Math.random() - 0.5) * 40), 80, sectorDef.width - 80),
+      y: clamp(anchor.y + entry.offset.y + (index === 0 ? 0 : (Math.random() - 0.5) * 40), 80, sectorDef.height - 80)
+    };
+    const enemy = createEnemyFromVariant(variantId, position, anchor, entry.bossMissionId ?? mission.id);
+    sector.enemies.push(enemy);
+    aggroEnemyToPlayer(world, enemy.id);
+  });
+
+  state.bossSpawned = true;
+  pushStory(
+    world,
+    `${mission.title}: ${bossEncounter.bossTitle} sighted${bossEncounter.threatSummary ? ` - ${bossEncounter.threatSummary}` : ""}.`
+  );
+}
+
+function updateMissionBossEncounters(world: GameWorld) {
+  missionCatalog.forEach((mission) => {
+    const state = world.missions[mission.id];
+    if (!state || state.status !== "active" || state.bossSpawned || !mission.bossEncounter) return;
+    if (world.currentSectorId !== mission.targetSystemId) return;
+    spawnMissionBossEncounter(world, mission);
+  });
+}
+
+function updateCombatMissionPressure(world: GameWorld, dt: number) {
+  const activeMission = getActiveMission(world);
+  if (!activeMission || !activeMission.combatObjective || activeMission.targetSystemId !== world.currentSectorId) return;
+  const state = world.missions[activeMission.id];
+  if (!state || state.status !== "active") return;
+
+  state.objectiveTimer ??= activeMission.objectiveDurationSec ?? 0;
+  state.reinforcementTimer ??= activeMission.reinforcementIntervalSec ?? 0;
+  state.challengePressure ??= 0;
+
+  if (activeMission.combatObjective === "survive") {
+    state.objectiveTimer = Math.max(0, state.objectiveTimer - dt);
+    state.challengePressure = Math.min(10, state.challengePressure + dt * 0.012);
+    state.reinforcementTimer = Math.max(0, state.reinforcementTimer - dt);
+    if (state.reinforcementTimer <= 0) {
+      const roles = (activeMission.reinforcementRoles?.length
+        ? activeMission.reinforcementRoles
+        : ["tackle", "support"]) as HostilePackRole[];
+      const pack: TriggeredHostileSpawn[] = roles.map((role) => ({
+        role,
+        variantId: pickEnemyVariantForHostileRole(
+          role,
+          activeMission.reinforcementVariantIds,
+          new Set<string>(),
+          getPlayerPowerTier(world)
+        )
+      }));
+      spawnTriggeredHostiles(world, world.currentSectorId, { ...world.player.position }, pack);
+      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? 30;
+      pushStory(world, `${activeMission.title}: another wave is inbound.`);
+    }
+    if (state.objectiveTimer <= 0) {
+      state.progress = 1;
+      state.status = "readyToTurnIn";
+      pushStory(world, `${activeMission.title} survived.`);
+    }
+    return;
+  }
+
+  if (activeMission.combatObjective === "clear") {
+    state.reinforcementTimer = Math.max(0, state.reinforcementTimer - dt);
+    if (state.reinforcementTimer <= 0) {
+      const roles = (activeMission.reinforcementRoles?.length
+        ? activeMission.reinforcementRoles
+        : ["brawler", "support"]) as HostilePackRole[];
+      const pack: TriggeredHostileSpawn[] = roles.map((role) => ({
+        role,
+        variantId: pickEnemyVariantForHostileRole(
+          role,
+          activeMission.reinforcementVariantIds,
+          new Set<string>(),
+          getPlayerPowerTier(world)
+        )
+      }));
+      spawnTriggeredHostiles(world, world.currentSectorId, { ...world.player.position }, pack);
+      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? 26;
+      state.challengePressure = Math.min(10, (state.challengePressure ?? 0) + 0.35);
+      pushStory(world, `${activeMission.title}: reinforcements are joining the pocket.`);
+    }
+  }
+}
+
 function maybeTriggerMiningSpawn(
   world: GameWorld,
   beltId: string,
@@ -2873,6 +3214,7 @@ function maybeTriggerMiningSpawn(
     world.currentSectorId,
     anchorPosition,
     buildTriggeredHostilePack(
+      world,
       "belt",
       world.currentSectorId,
       playerPowerTier,
@@ -2893,7 +3235,7 @@ function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, 
     world,
     destinationSectorId,
     anchorPosition,
-    buildTriggeredHostilePack("gate", destinationSectorId, playerPowerTier, getSectorResponseVariants(destinationSectorId))
+    buildTriggeredHostilePack(world, "gate", destinationSectorId, playerPowerTier, getSectorResponseVariants(destinationSectorId))
   );
 }
 
@@ -2955,6 +3297,9 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   const player = world.player;
   const sectorDef = getCurrentSectorDef(world);
   const derived = computeDerivedStats(player);
+  const playerShip = playerShipById[player.hullId];
+  const bodyRadius = Math.max(14, playerShip.signatureRadius * player.effects.signatureMultiplier * 0.46);
+  const terrainBias = playerShip.shipClass === "industrial" ? 1.08 : 0.92;
 
   player.recentDamageTimer = Math.max(0, player.recentDamageTimer - dt);
   const passiveShieldFactor = player.recentDamageTimer > 0 ? 0.02 : 0.18;
@@ -3150,6 +3495,16 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     }
   }
 
+  desiredVelocity = applyTerrainNavigationInfluence(
+    world,
+    player.position,
+    desiredVelocity,
+    maxSpeed,
+    bodyRadius,
+    dt,
+    terrainBias
+  );
+
   if (length(desiredVelocity) > 1) {
     const angleStep = Math.min(1, derived.turnSpeed * dt * 0.9);
     player.rotation = lerpAngle(player.rotation, desiredFacing, angleStep);
@@ -3176,6 +3531,11 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   player.velocity = scale(player.velocity, 1 - Math.min(0.45, dt * navDamping));
   player.velocity = clampMagnitude(player.velocity, nav.mode === "align" ? maxSpeed * 0.9 : maxSpeed);
   player.position = add(player.position, scale(player.velocity, dt));
+  {
+    const collision = resolveAsteroidCollisions(world, player.position, player.velocity, bodyRadius);
+    player.position = collision.position;
+    player.velocity = collision.velocity;
+  }
   applyPlayerBoundaryBehavior(world, dt, maxSpeed);
 
   if (nav.mode === "idle") {
@@ -3486,6 +3846,7 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
   const enemy = sector.enemies.find((item) => item.id === enemyId);
   if (!enemy) return;
   const variant = enemyVariantById[enemy.variantId];
+  const archetype = getEnemyArchetypeDefinition(variant.archetype);
   const nav = enemy.navigation;
   if (!nav.target) {
     if (enemy.patrolBehavior === "stationary") {
@@ -3500,7 +3861,7 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
   }
   const targetPosition = nav.target ? getObjectPosition(world, nav.target) : enemy.patrolTarget ?? enemy.patrolAnchor;
   if (!targetPosition) return;
-  const effectiveSpeed = variant.speed * enemy.effects.speedMultiplier;
+  const effectiveSpeed = variant.speed * enemy.effects.speedMultiplier * (archetype?.speedMultiplier ?? 1);
   const toTarget = subtract(targetPosition, enemy.position);
   const currentDistance = length(toTarget);
   const dirToTarget = currentDistance > 0 ? normalize(toTarget) : { x: 1, y: 0 };
@@ -3549,12 +3910,30 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
       Math.abs(currentDistance - desiredRange) > orbitBand * 2
         ? normalize(add(scale(tangent, orbitDirection * orbitBias), scale(dirToTarget, correction * 1.4)))
         : normalize(add(scale(tangent, orbitDirection * orbitBias), scale(dirToTarget, correction)));
-    desiredVelocity = scale(orbitVector, clamp(effectiveSpeed * 0.4, 40, effectiveSpeed * 0.62));
+    const orbitSpeedScale = archetype?.id === "swarm" ? 0.68 : archetype?.id === "hunter" ? 0.54 : 0.4;
+    desiredVelocity = scale(orbitVector, clamp(effectiveSpeed * orbitSpeedScale, 40, effectiveSpeed * 0.66));
     desiredFacing = Math.atan2(orbitVector.y, orbitVector.x);
   } else {
     desiredVelocity = scale(dirToTarget, clamp(currentDistance * 0.3, 18, effectiveSpeed * 0.36));
     desiredFacing = Math.atan2(dirToTarget.y, dirToTarget.x);
   }
+
+  const terrainBias =
+    archetype?.id === "swarm" ? 1.12 :
+    archetype?.id === "interceptor" || archetype?.id === "hunter" ? 1.04 :
+    archetype?.id === "siege_sniper" || archetype?.id === "artillery" ? 0.82 :
+    archetype?.id === "heavy_bruiser" ? 0.92 :
+    archetype?.id === "support_frigate" ? 0.96 :
+    1;
+  desiredVelocity = applyTerrainNavigationInfluence(
+    world,
+    enemy.position,
+    desiredVelocity,
+    effectiveSpeed,
+    Math.max(12, variant.signatureRadius * 0.42),
+    dt,
+    terrainBias
+  );
 
   if (length(desiredVelocity) > 1) {
     const angleStep = Math.min(1, variant.turnSpeed * dt * 0.95);
@@ -3566,6 +3945,11 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
   }
   enemy.velocity = clampMagnitude(enemy.velocity, effectiveSpeed);
   enemy.position = add(enemy.position, scale(enemy.velocity, dt));
+  {
+    const collision = resolveAsteroidCollisions(world, enemy.position, enemy.velocity, Math.max(12, variant.signatureRadius * 0.42));
+    enemy.position = collision.position;
+    enemy.velocity = collision.velocity;
+  }
   const sectorDef = getCurrentSectorDef(world);
   enemy.position.x = clamp(enemy.position.x, 30, sectorDef.width - 30);
   enemy.position.y = clamp(enemy.position.y, 30, sectorDef.height - 30);
@@ -3703,6 +4087,14 @@ function updateProjectiles(world: GameWorld, dt: number) {
     }
     projectile.position = add(projectile.position, scale(projectile.velocity, dt));
 
+    const asteroidHit = sector.asteroids.find(
+      (asteroid) => distance(projectile.position, asteroid.position) <= projectile.radius + asteroid.radius
+    );
+    if (asteroidHit) {
+      emitImpact(world, projectile.position, "#b7b0a6", projectile.moduleId);
+      return;
+    }
+
     if (projectile.damage <= 0) {
       if (projectile.ttl > 0) {
         nextProjectiles.push(projectile);
@@ -3826,8 +4218,20 @@ function applyAnomalyFields(world: GameWorld, dt: number) {
           ? { x: -dir.y, y: dir.x }
           : { x: dir.y, y: -dir.x };
       const force = field.strength * falloff * dt * bodyScale;
-      nextVelocity = add(nextVelocity, scale(radial, force));
-      nextVelocity = add(nextVelocity, scale(tangent, force * 0.24));
+      if (field.effect === "pull") {
+        nextVelocity = add(nextVelocity, scale(radial, force));
+        nextVelocity = add(nextVelocity, scale(tangent, force * 0.24));
+      } else if (field.effect === "push") {
+        nextVelocity = add(nextVelocity, scale(radial, force));
+        nextVelocity = add(nextVelocity, scale(tangent, force * 0.16));
+      } else if (field.effect === "drag") {
+        nextVelocity = scale(nextVelocity, 1 - Math.min(0.32, falloff * 0.28 * bodyScale));
+      } else if (field.effect === "ion") {
+        nextVelocity = scale(nextVelocity, 1 - Math.min(0.2, falloff * 0.16 * bodyScale));
+      } else if (field.effect === "slipstream") {
+        nextVelocity = add(nextVelocity, scale(tangent, force * 0.22));
+        nextVelocity = add(nextVelocity, scale(radial, force * 0.04));
+      }
     });
     return clampMagnitude(nextVelocity, maxVelocity);
   };
@@ -3870,6 +4274,15 @@ function cleanupWorld(world: GameWorld) {
       const shakeStrength = 5 * Math.max(0, 1 - distToPlayer / 320);
       sector.cameraShake = Math.min(10, (sector.cameraShake ?? 0) + shakeStrength);
     }
+    raiseSectorChallenge(
+      world,
+      world.currentSectorId,
+      0.12 +
+        variant.threatLevel * 0.035 +
+        (variant.elite ? 0.22 : 0) +
+        (enemy.boss ? 0.36 : 0),
+      variant.name
+    );
     sector.wrecks.push({
       id: `wreck-${Date.now()}-${enemy.id}`,
       position: { ...enemy.position },
@@ -3883,6 +4296,16 @@ function cleanupWorld(world: GameWorld) {
       sourceName: variant.name,
       modules: []
     });
+    if (enemy.boss && enemy.bossMissionId) {
+      const mission = missionById[enemy.bossMissionId];
+      const state = world.missions[enemy.bossMissionId];
+      if (mission && state && state.status === "active") {
+        state.bossDefeated = true;
+        state.progress = Math.max(state.progress, mission.targetCount ?? 1);
+        state.status = "readyToTurnIn";
+        pushStory(world, `${mission.title}: ${variant.name} has been destroyed.`);
+      }
+    }
     missionCatalog
       .filter(
         (mission) =>
@@ -4131,6 +4554,8 @@ function getPrompt(world: GameWorld) {
   const transport = buildTransportTracker(world);
   const procedural = getActiveProceduralContract(world);
   const proceduralState = getActiveProceduralState(world);
+  const activeMission = getActiveMission(world);
+  const activeMissionState = activeMission ? world.missions[activeMission.id] : null;
   if (world.dockedStationId) {
     if (procedural && proceduralState && proceduralState.status !== "completed") {
       return proceduralState.status === "readyToTurnIn"
@@ -4162,6 +4587,15 @@ function getPrompt(world: GameWorld) {
       return `${procedural.title} • Mine ${procedural.targetCount} ${procedural.targetResource}`;
     }
     return `${procedural.title} • Hunt hostiles in ${sectorById[procedural.targetSystemId]?.name ?? procedural.targetSystemId}`;
+  }
+  if (activeMission && activeMissionState && activeMissionState.status === "active") {
+    if (activeMission.combatObjective === "survive") {
+      return `${activeMission.title} • Survive ${Math.ceil(activeMissionState.objectiveTimer ?? activeMission.objectiveDurationSec ?? 0)}s`;
+    }
+    if (activeMission.combatObjective === "clear") {
+      return `${activeMission.title} • Clear pressure pocket${activeMissionState.reinforcementTimer ? ` • reinforcements ${Math.ceil(activeMissionState.reinforcementTimer)}s` : ""}`;
+    }
+    return `${activeMission.title} • Combat objective active`;
   }
   const selected = getObjectInfo(world, world.selectedObject);
   if (!selected) {
@@ -4211,6 +4645,9 @@ export function updateWorld(world: GameWorld, dt: number) {
   const simDt = dt * timeScale;
   updateTacticalSlowTimers(world, dt);
   updateBeltSpawnCooldowns(world, simDt);
+  if (!world.dockedStationId) {
+    refreshSectorChallenge(world, world.currentSectorId, simDt);
+  }
   ensureMissionUnlocks(world);
   normalizeTransportMissionStates(world);
   normalizeProceduralContractState(world);
@@ -4221,6 +4658,7 @@ export function updateWorld(world: GameWorld, dt: number) {
   if (world.dockedStationId) {
     return;
   }
+  updateMissionBossEncounters(world);
   updateBuildSwap(world, dt);
   resetCombatEffects(world);
   applyTacticalSlowEffects(world);
@@ -4232,6 +4670,8 @@ export function updateWorld(world: GameWorld, dt: number) {
   autoEngageNearbyHostile(world);
   runPlayerModules(world, simDt);
   runEnemyModules(world, simDt);
+  updateCombatMissionPressure(world, simDt);
+  maybeSpawnSectorReinforcement(world, world.currentSectorId);
   updateProjectiles(world, simDt);
   cleanupWorld(world);
   updateParticles(world, simDt);

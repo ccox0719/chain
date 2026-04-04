@@ -15,6 +15,7 @@ import {
   DifficultyId
 } from "../../types/game";
 import { missionCatalog } from "../data/missions";
+import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { transportMissionCatalog } from "../missions/data/transportMissions";
 import { moduleById } from "../data/modules";
 import { enemyVariantById, playerShipById } from "../data/ships";
@@ -267,10 +268,12 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
     const variant = enemyVariantById[spawn.variantId];
     for (let index = 0; index < spawn.count; index += 1) {
       const position = scatter(spawn.center, spawn.radius, index, spawn.count);
-      const patrolBehavior = pickEnemyPatrolBehavior();
+      const archetype = getEnemyArchetypeDefinition(variant.archetype);
+      const patrolBehavior = variant.boss ? "stationary" : archetype?.patrolBehavior ?? pickEnemyPatrolBehavior();
       enemies.push({
         id: uid("enemy"),
         variantId: variant.id,
+        boss: variant.boss,
         position,
         velocity: { x: 0, y: 0 },
         rotation: 0,
@@ -300,7 +303,9 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
     wrecks: [],
     floatingText: [],
     particles: [],
-    beltSpawnCooldowns: {}
+    beltSpawnCooldowns: {},
+    challengePressure: 0,
+    reinforcementTimer: 0
   };
 }
 
@@ -314,7 +319,9 @@ export function createInitialWorld(
       {
         missionId: mission.id,
         status: mission.requiredMissionId ? "locked" : "available",
-        progress: 0
+        progress: 0,
+        bossSpawned: false,
+        bossDefeated: false
       }
     ])
   );

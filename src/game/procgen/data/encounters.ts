@@ -5,7 +5,7 @@ export interface EncounterPackTemplate {
   maxDanger: number;
   security?: Array<"high" | "medium" | "low" | "frontier">;
   weight: number;
-  roles: Array<"tackle" | "sniper" | "brawler" | "support" | "skirmisher" | "anchor" | "escort">;
+  roles: Array<"swarm" | "tackle" | "sniper" | "brawler" | "support" | "skirmisher" | "anchor" | "escort" | "artillery" | "hunter">;
 }
 
 export interface LootBonusTemplate {
@@ -21,14 +21,21 @@ export interface LootBonusTemplate {
 }
 
 export const encounterPackTemplates: EncounterPackTemplate[] = [
-  { id: "belt-light-pair", context: "belt", minDanger: 1, maxDanger: 2, weight: 4, roles: ["tackle", "sniper"] },
+  { id: "belt-swarm-pack", context: "belt", minDanger: 1, maxDanger: 3, weight: 4, roles: ["swarm", "swarm", "support"] },
+  { id: "belt-light-pair", context: "belt", minDanger: 1, maxDanger: 2, weight: 3, roles: ["tackle", "sniper"] },
+  { id: "belt-control-screen", context: "belt", minDanger: 3, maxDanger: 6, security: ["low", "frontier"], weight: 3, roles: ["tackle", "sniper", "support"] },
   { id: "belt-mining-harass", context: "belt", minDanger: 2, maxDanger: 4, weight: 3, roles: ["brawler", "support"] },
   { id: "belt-frontier-wave", context: "belt", minDanger: 4, maxDanger: 6, security: ["frontier", "low"], weight: 4, roles: ["anchor", "escort"] },
+  { id: "belt-artillery-lane", context: "belt", minDanger: 3, maxDanger: 6, security: ["low", "frontier"], weight: 3, roles: ["artillery", "hunter", "escort"] },
   { id: "belt-skirmish-net", context: "belt", minDanger: 3, maxDanger: 6, weight: 2, roles: ["skirmisher", "skirmisher", "support"] },
   { id: "gate-check", context: "gate", minDanger: 1, maxDanger: 2, weight: 4, roles: ["tackle", "sniper"] },
   { id: "gate-patrol", context: "gate", minDanger: 2, maxDanger: 4, weight: 3, roles: ["brawler", "support"] },
+  { id: "gate-pressure-line", context: "gate", minDanger: 3, maxDanger: 6, security: ["low", "frontier"], weight: 3, roles: ["swarm", "tackle", "support"] },
   { id: "gate-frontier-wall", context: "gate", minDanger: 4, maxDanger: 6, security: ["frontier", "low"], weight: 4, roles: ["anchor", "escort"] },
-  { id: "gate-pincer", context: "gate", minDanger: 3, maxDanger: 6, weight: 2, roles: ["skirmisher", "skirmisher", "support"] }
+  { id: "gate-command-pair", context: "gate", minDanger: 4, maxDanger: 6, security: ["medium", "low", "frontier"], weight: 2, roles: ["brawler", "sniper", "support"] },
+  { id: "gate-pincer", context: "gate", minDanger: 3, maxDanger: 6, weight: 2, roles: ["skirmisher", "hunter", "support"] },
+  { id: "gate-swarm-ambush", context: "gate", minDanger: 2, maxDanger: 5, security: ["low", "frontier"], weight: 3, roles: ["swarm", "swarm", "tackle"] },
+  { id: "gate-sniper-screen", context: "gate", minDanger: 3, maxDanger: 6, security: ["medium", "low", "frontier"], weight: 2, roles: ["sniper", "tackle", "support"] }
 ];
 
 export const lootBonusTemplates: LootBonusTemplate[] = [
