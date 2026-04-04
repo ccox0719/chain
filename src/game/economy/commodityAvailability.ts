@@ -2,6 +2,7 @@ import { CommodityDefinition, SecurityBand, SystemDestination } from "../../type
 import { commodityCatalog } from "./data/commodities";
 import { stationMarketProfileById } from "./data/stationMarketProfiles";
 import { getCommodityStockBias } from "../procgen/runtime";
+import { ECONOMY_BALANCE } from "../config/balance";
 
 function hashStringToUnitInterval(input: string) {
   let hash = 2166136261;
@@ -32,40 +33,40 @@ function commodityMarketScore(
   const tags = stationTagSet(station);
   const profile = stationMarketProfileById[station.id];
   const stationTags = station.tags ?? [];
-  let score = 0.12;
+  let score = ECONOMY_BALANCE.commodityScore.base;
 
   const matches = commodity.tags.filter((tag) => tags.has(tag)).length;
-  score += matches * 0.14;
-  if (matches > 0) score += 0.08;
+  score += matches * ECONOMY_BALANCE.commodityScore.match;
+  if (matches > 0) score += ECONOMY_BALANCE.commodityScore.matchBonus;
 
-  if (commodity.category === "essentials") score += tags.has("essentials") || tags.has("logistics") ? 0.2 : 0.06;
-  if (commodity.category === "industrial") score += tags.has("industrial") || tags.has("manufacturing") ? 0.18 : 0.08;
-  if (commodity.category === "energy") score += tags.has("fuel") || tags.has("logistics") ? 0.18 : 0.04;
-  if (commodity.category === "medical") score += tags.has("medical") || security === "high" ? 0.22 : 0.04;
-  if (commodity.category === "technology") score += tags.has("research") || tags.has("high-tech") ? 0.24 : 0.02;
-  if (commodity.category === "military") score += tags.has("military") || security === "low" || security === "frontier" ? 0.2 : -0.03;
-  if (commodity.category === "materials") score += tags.has("mining") || tags.has("industrial") ? 0.22 : 0.06;
-  if (commodity.category === "frontier") score += tags.has("frontier") || security === "frontier" ? 0.24 : 0.04;
-  if (commodity.category === "luxury") score += tags.has("trade") || tags.has("high-tech") || security === "high" ? 0.18 : -0.02;
-  if (commodity.category === "salvage") score += tags.has("salvage") || tags.has("industrial") ? 0.24 : 0.05;
+  if (commodity.category === "essentials") score += tags.has("essentials") || tags.has("logistics") ? ECONOMY_BALANCE.commodityScore.category.essentials : 0.06;
+  if (commodity.category === "industrial") score += tags.has("industrial") || tags.has("manufacturing") ? ECONOMY_BALANCE.commodityScore.category.industrial : 0.08;
+  if (commodity.category === "energy") score += tags.has("fuel") || tags.has("logistics") ? ECONOMY_BALANCE.commodityScore.category.energy : 0.04;
+  if (commodity.category === "medical") score += tags.has("medical") || security === "high" ? ECONOMY_BALANCE.commodityScore.category.medical : 0.04;
+  if (commodity.category === "technology") score += tags.has("research") || tags.has("high-tech") ? ECONOMY_BALANCE.commodityScore.category.technology : 0.02;
+  if (commodity.category === "military") score += tags.has("military") || security === "low" || security === "frontier" ? ECONOMY_BALANCE.commodityScore.category.military : -0.03;
+  if (commodity.category === "materials") score += tags.has("mining") || tags.has("industrial") ? ECONOMY_BALANCE.commodityScore.category.materials : 0.06;
+  if (commodity.category === "frontier") score += tags.has("frontier") || security === "frontier" ? ECONOMY_BALANCE.commodityScore.category.frontier : 0.04;
+  if (commodity.category === "luxury") score += tags.has("trade") || tags.has("high-tech") || security === "high" ? ECONOMY_BALANCE.commodityScore.category.luxury : -0.02;
+  if (commodity.category === "salvage") score += tags.has("salvage") || tags.has("industrial") ? ECONOMY_BALANCE.commodityScore.category.salvage : 0.05;
 
-  if (stationTags.includes("market")) score += 0.08;
-  if (stationTags.includes("trade")) score += 0.08;
-  if (stationTags.includes("research")) score += 0.06;
-  if (stationTags.includes("logistics")) score += 0.06;
-  if (stationTags.includes("frontier")) score += 0.03;
+  if (stationTags.includes("market")) score += ECONOMY_BALANCE.commodityScore.tag.market;
+  if (stationTags.includes("trade")) score += ECONOMY_BALANCE.commodityScore.tag.trade;
+  if (stationTags.includes("research")) score += ECONOMY_BALANCE.commodityScore.tag.research;
+  if (stationTags.includes("logistics")) score += ECONOMY_BALANCE.commodityScore.tag.logistics;
+  if (stationTags.includes("frontier")) score += ECONOMY_BALANCE.commodityScore.tag.frontier;
 
-  if (profile) score += (profile.inventoryBias - 1) * 0.16;
-  if (security === "high") score += 0.05;
-  if (security === "frontier") score -= 0.02;
+  if (profile) score += (profile.inventoryBias - 1) * ECONOMY_BALANCE.commodityScore.profileInventoryBias;
+  if (security === "high") score += ECONOMY_BALANCE.commodityScore.securityHigh;
+  if (security === "frontier") score -= Math.abs(ECONOMY_BALANCE.commodityScore.securityFrontier);
 
   const jitter = hashStringToUnitInterval(`${station.id}:${commodity.id}:stock`) - 0.5;
-  score += jitter * 0.16;
+  score += jitter * ECONOMY_BALANCE.commodityScore.jitter;
   if (procgenWorld && systemId) {
     score += getCommodityStockBias(procgenWorld, systemId, commodity.tags);
   }
 
-  return clamp(score, 0.04, 0.98);
+  return clamp(score, ECONOMY_BALANCE.commodityScore.clampMin, ECONOMY_BALANCE.commodityScore.clampMax);
 }
 
 export function isCommodityAvailableAtStation(
@@ -89,9 +90,13 @@ export function getStationCommodityStock(
   if (!station) return [];
   const profile = stationMarketProfileById[station.id];
   const targetCount = clamp(
-    Math.round(4 + (profile?.inventoryBias ?? 1) * 1.2 + (station.tags?.includes("market") ? 1 : 0)),
-    4,
-    7
+    Math.round(
+      ECONOMY_BALANCE.commodityScore.stockTargetBase +
+        (profile?.inventoryBias ?? 1) * ECONOMY_BALANCE.commodityScore.stockTargetBias +
+        (station.tags?.includes("market") ? ECONOMY_BALANCE.commodityScore.stockTargetMarketBonus : 0)
+    ),
+    ECONOMY_BALANCE.commodityScore.stockTargetMin,
+    ECONOMY_BALANCE.commodityScore.stockTargetMax
   );
 
   return commodities

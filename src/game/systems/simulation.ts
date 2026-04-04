@@ -54,7 +54,8 @@ import {
   getModuleBuyPrice,
   getModuleSellPrice,
   getResourceSellPrice,
-  getShipBuyPrice
+  getShipBuyPrice,
+  getShipSellPrice
 } from "../economy/pricing";
 import {
   contractProgressFraction,
@@ -84,16 +85,14 @@ import {
   subtract
 } from "../utils/vector";
 import { findObjectAtPoint, getObjectInfo, getObjectPosition, getOverviewEntries } from "../world/spaceObjects";
-
-const TACTICAL_SLOW_CONFIG = {
-  timeScale: 0.4,
-  durationSec: 4,
-  cooldownSec: 55,
-  capPenaltySec: 10,
-  speedPenaltySec: 8,
-  speedPenaltyMultiplier: 0.85,
-  capacitorRegenPenaltyMultiplier: 0.8
-} as const;
+import {
+  CAPACITOR_BALANCE,
+  COMBAT_BALANCE,
+  MOVEMENT_BALANCE,
+  MISSION_BALANCE,
+  PROGRESSION_BALANCE,
+  SPAWN_BALANCE
+} from "../config/balance";
 
 function addFloatingText(world: GameWorld, position: Vec2, text: string, color: string) {
   world.sectors[world.currentSectorId].floatingText.push({
@@ -338,7 +337,10 @@ function awardPilotLicenseProgress(world: GameWorld, amount: number) {
   if (amount <= 0) return;
   ensurePilotLicense(world);
   const previousLevel = world.player.pilotLicense.level;
-  const nextProgress = world.player.pilotLicense.progress + Math.max(1, Math.round(amount * 1.2));
+  const nextProgress = world.player.pilotLicense.progress + Math.max(
+    1,
+    Math.round(amount * PROGRESSION_BALANCE.pilotLicense.awardMultiplier)
+  );
   world.player.pilotLicense.progress = nextProgress;
   world.player.pilotLicense.level = getPilotLicenseLevelForProgress(nextProgress);
   if (world.player.pilotLicense.level > previousLevel) {
@@ -370,15 +372,8 @@ function getCurrentStation(world: GameWorld) {
   return getSystemStation(world.currentSectorId);
 }
 
-const BOUNDARY_WARNING_DISTANCE = 260;
-const BOUNDARY_GRAVITY_START_DISTANCE = 90;
-const BOUNDARY_OVERSHOOT_ALLOWANCE = 140;
-const BOUNDARY_RETURN_ACCEL = 520;
-const BOUNDARY_SLINGSHOT_DAMPING = 0.08;
-const BOUNDARY_CLUSTER_PULL_RADIUS = 520;
-const BOUNDARY_VISIBLE_MARGIN = 120;
-const BOUNDARY_REBOUND_DISTANCE = 260;
-const BOUNDARY_RUBBER_BAND_MIN_SPEED = 180;
+const BOUNDARY = MOVEMENT_BALANCE.boundary;
+const TERRAIN = MOVEMENT_BALANCE.terrain;
 
 function getBoundaryContext(world: GameWorld) {
   const player = world.player;
@@ -427,14 +422,14 @@ function getBoundaryReboundPoint(world: GameWorld, inward: Vec2): Vec2 {
   const sectorDef = getCurrentSectorDef(world);
   return {
     x: clamp(
-      world.player.position.x + inward.x * BOUNDARY_REBOUND_DISTANCE,
-      BOUNDARY_VISIBLE_MARGIN,
-      sectorDef.width - BOUNDARY_VISIBLE_MARGIN
+      world.player.position.x + inward.x * BOUNDARY.reboundDistance,
+      BOUNDARY.visibleMargin,
+      sectorDef.width - BOUNDARY.visibleMargin
     ),
     y: clamp(
-      world.player.position.y + inward.y * BOUNDARY_REBOUND_DISTANCE,
-      BOUNDARY_VISIBLE_MARGIN,
-      sectorDef.height - BOUNDARY_VISIBLE_MARGIN
+      world.player.position.y + inward.y * BOUNDARY.reboundDistance,
+      BOUNDARY.visibleMargin,
+      sectorDef.height - BOUNDARY.visibleMargin
     )
   };
 }
@@ -448,10 +443,10 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
   const distanceTop = player.position.y;
   const distanceBottom = sectorDef.height - player.position.y;
   const minDistanceToEdge = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
-  const warningDepth = Math.max(0, BOUNDARY_WARNING_DISTANCE - minDistanceToEdge);
-  const gravityDepth = Math.max(0, BOUNDARY_GRAVITY_START_DISTANCE - minDistanceToEdge);
-  const warningLevel = clamp(warningDepth / BOUNDARY_WARNING_DISTANCE, 0, 1);
-  const correctionLevel = clamp(gravityDepth / BOUNDARY_GRAVITY_START_DISTANCE, 0, 1);
+  const warningDepth = Math.max(0, BOUNDARY.warningDistance - minDistanceToEdge);
+  const gravityDepth = Math.max(0, BOUNDARY.gravityStartDistance - minDistanceToEdge);
+  const warningLevel = clamp(warningDepth / BOUNDARY.warningDistance, 0, 1);
+  const correctionLevel = clamp(gravityDepth / BOUNDARY.gravityStartDistance, 0, 1);
 
   const boundary = world.boundary;
   const context = getBoundaryContext(world);
@@ -477,7 +472,7 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
   const overshootTop = Math.max(0, -distanceTop);
   const overshootBottom = Math.max(0, -distanceBottom);
   const overshoot = Math.max(overshootLeft, overshootRight, overshootTop, overshootBottom);
-  const slingshotLevel = clamp(overshoot / BOUNDARY_OVERSHOOT_ALLOWANCE, 0, 1);
+  const slingshotLevel = clamp(overshoot / BOUNDARY.overshootAllowance, 0, 1);
 
   if (warningLevel > 0.04) {
     boundary.forcedFacing = Math.atan2(inward.y, inward.x);
@@ -513,9 +508,9 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
       const reversalStrength = 2.1 + slingshotLevel * 2.4;
       player.velocity = add(player.velocity, scale(inward, -inwardVelocity * reversalStrength));
     }
-    player.velocity = add(player.velocity, scale(inward, BOUNDARY_RETURN_ACCEL * (1 + edgePull * 1.45) * dt));
+    player.velocity = add(player.velocity, scale(inward, BOUNDARY.returnAcceleration * (1 + edgePull * 1.45) * dt));
     const minimumInwardSpeed =
-      BOUNDARY_RUBBER_BAND_MIN_SPEED * (correctionLevel * 0.45 + slingshotLevel * 1.1);
+      BOUNDARY.rubberBandMinSpeed * (correctionLevel * 0.45 + slingshotLevel * 1.1);
     if (minimumInwardSpeed > 0) {
       const correctedInwardVelocity = player.velocity.x * inward.x + player.velocity.y * inward.y;
       if (correctedInwardVelocity < minimumInwardSpeed) {
@@ -527,20 +522,20 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
       boundary.forcedTurnRate,
       5.4 + warningLevel * 3.2 + correctionLevel * 4.5 + slingshotLevel * 7.2
     );
-    player.velocity = scale(player.velocity, 1 - Math.min(0.32, dt * (BOUNDARY_SLINGSHOT_DAMPING + slingshotLevel * 0.55)));
+    player.velocity = scale(player.velocity, 1 - Math.min(0.32, dt * (BOUNDARY.slingshotDamping + slingshotLevel * 0.55)));
   }
 
   if (slingshotLevel > 0) {
     const shift = { x: 0, y: 0 };
-    if (player.position.x < BOUNDARY_VISIBLE_MARGIN) {
-      shift.x = BOUNDARY_VISIBLE_MARGIN - player.position.x;
-    } else if (player.position.x > sectorDef.width - BOUNDARY_VISIBLE_MARGIN) {
-      shift.x = (sectorDef.width - BOUNDARY_VISIBLE_MARGIN) - player.position.x;
+    if (player.position.x < BOUNDARY.visibleMargin) {
+      shift.x = BOUNDARY.visibleMargin - player.position.x;
+    } else if (player.position.x > sectorDef.width - BOUNDARY.visibleMargin) {
+      shift.x = (sectorDef.width - BOUNDARY.visibleMargin) - player.position.x;
     }
-    if (player.position.y < BOUNDARY_VISIBLE_MARGIN) {
-      shift.y = BOUNDARY_VISIBLE_MARGIN - player.position.y;
-    } else if (player.position.y > sectorDef.height - BOUNDARY_VISIBLE_MARGIN) {
-      shift.y = (sectorDef.height - BOUNDARY_VISIBLE_MARGIN) - player.position.y;
+    if (player.position.y < BOUNDARY.visibleMargin) {
+      shift.y = BOUNDARY.visibleMargin - player.position.y;
+    } else if (player.position.y > sectorDef.height - BOUNDARY.visibleMargin) {
+      shift.y = (sectorDef.height - BOUNDARY.visibleMargin) - player.position.y;
     }
 
     if (shift.x !== 0 || shift.y !== 0) {
@@ -550,15 +545,15 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
         position.y += shift.y;
       };
       const isOutOfBounds = (position: Vec2) =>
-        position.x < BOUNDARY_VISIBLE_MARGIN ||
-        position.x > sectorDef.width - BOUNDARY_VISIBLE_MARGIN ||
-        position.y < BOUNDARY_VISIBLE_MARGIN ||
-        position.y > sectorDef.height - BOUNDARY_VISIBLE_MARGIN;
+        position.x < BOUNDARY.visibleMargin ||
+        position.x > sectorDef.width - BOUNDARY.visibleMargin ||
+        position.y < BOUNDARY.visibleMargin ||
+        position.y > sectorDef.height - BOUNDARY.visibleMargin;
 
       moveBody(player.position);
 
       sector.enemies.forEach((enemy) => {
-        if (distance(enemy.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS) {
+        if (distance(enemy.position, player.position) <= BOUNDARY.clusterPullRadius) {
           moveBody(enemy.position);
           moveBody(enemy.patrolAnchor);
           if (enemy.patrolTarget) moveBody(enemy.patrolTarget);
@@ -566,36 +561,36 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
       });
 
       sector.loot.forEach((drop) => {
-        if (distance(drop.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS || isOutOfBounds(drop.position)) {
+        if (distance(drop.position, player.position) <= BOUNDARY.clusterPullRadius || isOutOfBounds(drop.position)) {
           moveBody(drop.position);
         }
       });
 
       sector.wrecks.forEach((wreck) => {
-        if (distance(wreck.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS || isOutOfBounds(wreck.position)) {
+        if (distance(wreck.position, player.position) <= BOUNDARY.clusterPullRadius || isOutOfBounds(wreck.position)) {
           moveBody(wreck.position);
         }
       });
 
       sector.floatingText.forEach((entry) => {
-        if (distance(entry.position, player.position) <= BOUNDARY_CLUSTER_PULL_RADIUS) {
+        if (distance(entry.position, player.position) <= BOUNDARY.clusterPullRadius) {
           moveBody(entry.position);
         }
       });
 
       if (shift.x !== 0) {
-        player.velocity.x *= 0.82;
+        player.velocity.x *= BOUNDARY.clusterDamping;
       }
       if (shift.y !== 0) {
-        player.velocity.y *= 0.82;
+        player.velocity.y *= BOUNDARY.clusterDamping;
       }
     }
   }
 
-  const minX = -BOUNDARY_OVERSHOOT_ALLOWANCE;
-  const maxX = sectorDef.width + BOUNDARY_OVERSHOOT_ALLOWANCE;
-  const minY = -BOUNDARY_OVERSHOOT_ALLOWANCE;
-  const maxY = sectorDef.height + BOUNDARY_OVERSHOOT_ALLOWANCE;
+  const minX = -BOUNDARY.overshootAllowance;
+  const maxX = sectorDef.width + BOUNDARY.overshootAllowance;
+  const minY = -BOUNDARY.overshootAllowance;
+  const maxY = sectorDef.height + BOUNDARY.overshootAllowance;
   if (player.position.x < minX) {
     player.position.x = minX;
     player.velocity.x = Math.abs(player.velocity.x) + maxSpeed * 0.28;
@@ -614,21 +609,12 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: num
 
 function getDifficultyModifiers(world: GameWorld) {
   if (world.difficulty === "easy") {
-    return {
-      playerDamageMultiplier: 1.18,
-      enemyDamageMultiplier: 0.82
-    };
+    return COMBAT_BALANCE.difficulty.easy;
   }
   if (world.difficulty === "hard") {
-    return {
-      playerDamageMultiplier: 0.9,
-      enemyDamageMultiplier: 1.28
-    };
+    return COMBAT_BALANCE.difficulty.hard;
   }
-  return {
-    playerDamageMultiplier: 1,
-    enemyDamageMultiplier: 1
-  };
+  return COMBAT_BALANCE.difficulty.normal;
 }
 
 function getTacticalSlowState(world: GameWorld) {
@@ -636,15 +622,13 @@ function getTacticalSlowState(world: GameWorld) {
 }
 
 function getWorldTimeScale(world: GameWorld) {
-  return getTacticalSlowState(world).activeRemaining > 0 ? TACTICAL_SLOW_CONFIG.timeScale : 1;
+  return getTacticalSlowState(world).activeRemaining > 0 ? CAPACITOR_BALANCE.tacticalSlow.timeScale : 1;
 }
 
 function getShipPowerTier(shipId: string) {
   const ship = playerShipById[shipId];
   if (!ship) return 1;
-  if (ship.shipClass === "cruiser") return 3;
-  if (ship.shipClass === "destroyer") return 2;
-  return 1;
+  return PROGRESSION_BALANCE.shipPowerTierByClass[ship.shipClass];
 }
 
 function getPlayerPowerTier(world: GameWorld) {
@@ -659,10 +643,10 @@ function getPlayerPowerTier(world: GameWorld) {
   const averageTech = moduleTechValues.reduce((sum, value) => sum + value, 0) / moduleTechValues.length;
   const highWater = Math.max(...moduleTechValues);
   let tier = shipTier;
-  if (averageTech >= 2.4) tier += 1;
-  if (averageTech >= 3.2 || highWater >= 4) tier += 1;
-  if (shipTier >= 3 && highWater >= 3) tier = Math.max(tier, 3);
-  return Math.max(1, Math.min(4, tier));
+  if (averageTech >= PROGRESSION_BALANCE.playerPowerTier.averageTechTierThreshold) tier += 1;
+  if (averageTech >= PROGRESSION_BALANCE.playerPowerTier.advancedTechTierThreshold || highWater >= PROGRESSION_BALANCE.playerPowerTier.highWaterThreshold) tier += 1;
+  if (shipTier >= PROGRESSION_BALANCE.playerPowerTier.cruiserFloorTier && highWater >= 3) tier = Math.max(tier, 3);
+  return Math.max(PROGRESSION_BALANCE.playerPowerTier.minTier, Math.min(PROGRESSION_BALANCE.playerPowerTier.maxTier, tier));
 }
 
 function cloneLoadout(loadout: EquippedLoadout): EquippedLoadout {
@@ -698,10 +682,10 @@ function scaleDamagePacket(packet: DamageProfile, scaleFactor: number) {
 
 function clampResists(resists: ResistProfile, bonus = 0): ResistProfile {
   return {
-    em: clamp(resists.em + bonus, 0, 0.82),
-    thermal: clamp(resists.thermal + bonus, 0, 0.82),
-    kinetic: clamp(resists.kinetic + bonus, 0, 0.82),
-    explosive: clamp(resists.explosive + bonus, 0, 0.82)
+    em: clamp(resists.em + bonus, 0, COMBAT_BALANCE.damage.resistClamp),
+    thermal: clamp(resists.thermal + bonus, 0, COMBAT_BALANCE.damage.resistClamp),
+    kinetic: clamp(resists.kinetic + bonus, 0, COMBAT_BALANCE.damage.resistClamp),
+    explosive: clamp(resists.explosive + bonus, 0, COMBAT_BALANCE.damage.resistClamp)
   };
 }
 
@@ -748,13 +732,13 @@ function applyTacticalSlowEffects(world: GameWorld) {
   if (tacticalSlow.speedPenaltyRemaining > 0) {
     world.player.effects.speedMultiplier = Math.min(
       world.player.effects.speedMultiplier,
-      TACTICAL_SLOW_CONFIG.speedPenaltyMultiplier
+      CAPACITOR_BALANCE.tacticalSlow.speedPenaltyMultiplier
     );
   }
   if (tacticalSlow.capPenaltyRemaining > 0) {
     world.player.effects.capacitorRegenMultiplier = Math.min(
       world.player.effects.capacitorRegenMultiplier,
-      TACTICAL_SLOW_CONFIG.capacitorRegenPenaltyMultiplier
+      CAPACITOR_BALANCE.tacticalSlow.capacitorRegenPenaltyMultiplier
     );
   }
 }
@@ -1232,6 +1216,9 @@ function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
   const shipBuyPrices = Object.fromEntries(
     Object.values(playerShipById).map((ship) => [ship.id, scalePrice(getShipBuyPrice(ship, security, station), derived.shipBuyMultiplier)])
   ) as Record<string, number>;
+  const shipSellPrices = Object.fromEntries(
+    Object.values(playerShipById).map((ship) => [ship.id, scalePrice(getShipSellPrice(ship, security, station), derived.shipSellMultiplier)])
+  ) as Record<string, number>;
   return {
     resourceSellPrices: {
       ferrite: scalePrice(getResourceSellPrice("ferrite", security, station), derived.resourceSellMultiplier),
@@ -1242,7 +1229,8 @@ function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
     commoditySellPrices,
     moduleBuyPrices,
     moduleSellPrices,
-    shipBuyPrices
+    shipBuyPrices,
+    shipSellPrices
   };
 }
 
@@ -1642,10 +1630,13 @@ function applyTerrainNavigationInfluence(
   sector.asteroids.forEach((asteroid) => {
     const offset = subtract(position, asteroid.position);
     const dist = length(offset);
-    const clearance = bodyRadius + asteroid.radius + 120;
+    const clearance = bodyRadius + asteroid.radius + TERRAIN.asteroidRepelPadding;
     if (dist <= 4 || dist >= clearance) return;
     const falloff = 1 - dist / clearance;
-    const push = scale(normalize(offset), falloff * (110 + asteroid.radius * 0.85) * dt * terrainBias);
+    const push = scale(
+      normalize(offset),
+      falloff * (TERRAIN.asteroidPushStrength + asteroid.radius * TERRAIN.asteroidRadiusScale) * dt * terrainBias
+    );
     nextVelocity = add(nextVelocity, push);
   });
 
@@ -1661,16 +1652,16 @@ function applyTerrainNavigationInfluence(
       const falloff = 1 - dist / field.radius;
       const dir = normalize(offset);
       if (field.effect === "pull") {
-        nextVelocity = add(nextVelocity, scale(dir, -falloff * field.strength * 0.08 * dt * terrainBias));
-        nextVelocity = add(nextVelocity, scale({ x: -dir.y, y: dir.x }, falloff * field.strength * 0.015 * dt));
+        nextVelocity = add(nextVelocity, scale(dir, -falloff * field.strength * TERRAIN.anomalyPullScale * dt * terrainBias));
+        nextVelocity = add(nextVelocity, scale({ x: -dir.y, y: dir.x }, falloff * field.strength * TERRAIN.anomalySpinScale * dt));
       } else if (field.effect === "push") {
-        nextVelocity = add(nextVelocity, scale(dir, falloff * field.strength * 0.08 * dt * terrainBias));
+        nextVelocity = add(nextVelocity, scale(dir, falloff * field.strength * TERRAIN.anomalyPushScale * dt * terrainBias));
       } else if (field.effect === "drag") {
-        speedScale *= 1 - Math.min(0.42, falloff * 0.34 * terrainBias);
+        speedScale *= 1 - Math.min(0.42, falloff * TERRAIN.dragSlowScale * terrainBias);
       } else if (field.effect === "ion") {
-        speedScale *= 1 - Math.min(0.22, falloff * 0.18 * terrainBias);
+        speedScale *= 1 - Math.min(0.22, falloff * TERRAIN.ionSlowScale * terrainBias);
       } else if (field.effect === "slipstream") {
-        nextVelocity = add(nextVelocity, scale(normalize(nextVelocity), falloff * field.strength * 0.04 * dt));
+        nextVelocity = add(nextVelocity, scale(normalize(nextVelocity), falloff * field.strength * TERRAIN.slipstreamScale * dt));
       }
     });
 
@@ -1685,7 +1676,7 @@ function resolveAsteroidCollisions(world: GameWorld, position: Vec2, velocity: V
   sector.asteroids.forEach((asteroid) => {
     const offset = subtract(nextPosition, asteroid.position);
     const dist = length(offset);
-    const minDist = bodyRadius + asteroid.radius + 3;
+    const minDist = bodyRadius + asteroid.radius + TERRAIN.collisionPadding;
     if (dist <= 0 || dist >= minDist) return;
     const normal = normalize(offset);
     const overlap = minDist - dist;
@@ -1694,7 +1685,7 @@ function resolveAsteroidCollisions(world: GameWorld, position: Vec2, velocity: V
     if (radial < 0) {
       nextVelocity = subtract(nextVelocity, scale(normal, radial * 1.1));
     }
-    nextVelocity = scale(nextVelocity, 0.92 - Math.min(0.12, overlap * 0.0012));
+    nextVelocity = scale(nextVelocity, TERRAIN.collisionDamping - Math.min(0.12, overlap * TERRAIN.collisionOverlapScale));
   });
 
   return { position: nextPosition, velocity: nextVelocity };
@@ -1944,6 +1935,46 @@ export function buyShip(world: GameWorld, shipId: string, priceOverride?: number
   return true;
 }
 
+export function sellShip(world: GameWorld, shipId: string, priceOverride?: number) {
+  const ship = playerShipById[shipId];
+  if (!ship) return false;
+  if (!world.player.ownedShips.includes(shipId)) {
+    pushStory(world, `${ship.name} is not owned.`);
+    return false;
+  }
+  if (world.player.ownedShips.length <= 1) {
+    pushStory(world, `You must keep at least one ship.`);
+    return false;
+  }
+
+  const saleValue = priceOverride ?? getLocalEconomySnapshot(world).shipSellPrices[shipId] ?? Math.max(1, Math.floor(ship.price * 0.56));
+  const fallbackShipId = world.player.ownedShips.find((ownedShipId) => ownedShipId !== shipId) ?? null;
+
+  if (world.player.hullId === shipId) {
+    if (!fallbackShipId) {
+      pushStory(world, `You need another owned ship before selling ${ship.name}.`);
+      return false;
+    }
+    switchShip(world, fallbackShipId);
+  }
+
+  world.player.ownedShips = world.player.ownedShips.filter((ownedShipId) => ownedShipId !== shipId);
+
+  world.player.savedBuilds = world.player.savedBuilds.map((build) =>
+    build.shipId === shipId
+      ? {
+          ...build,
+          shipId: fallbackShipId ?? build.shipId
+        }
+      : build
+  );
+
+  world.player.credits += saleValue;
+  ensureMissionUnlocks(world);
+  pushStory(world, `Sold ${ship.name} for ${saleValue} credits.`);
+  return true;
+}
+
 export function switchShip(world: GameWorld, shipId: string) {
   if (!world.player.ownedShips.includes(shipId)) return false;
   world.player.hullId = shipId;
@@ -2135,10 +2166,10 @@ export function activateTacticalSlow(world: GameWorld) {
     );
     return false;
   }
-  tacticalSlow.activeRemaining = TACTICAL_SLOW_CONFIG.durationSec;
-  tacticalSlow.cooldownRemaining = TACTICAL_SLOW_CONFIG.cooldownSec;
-  tacticalSlow.capPenaltyRemaining = TACTICAL_SLOW_CONFIG.capPenaltySec;
-  tacticalSlow.speedPenaltyRemaining = TACTICAL_SLOW_CONFIG.speedPenaltySec;
+  tacticalSlow.activeRemaining = CAPACITOR_BALANCE.tacticalSlow.durationSec;
+  tacticalSlow.cooldownRemaining = CAPACITOR_BALANCE.tacticalSlow.cooldownSec;
+  tacticalSlow.capPenaltyRemaining = CAPACITOR_BALANCE.tacticalSlow.capPenaltySec;
+  tacticalSlow.speedPenaltyRemaining = CAPACITOR_BALANCE.tacticalSlow.speedPenaltySec;
   pushStory(world, "Tactical slow engaged.");
   return true;
 }
@@ -2439,9 +2470,11 @@ export function toggleModule(
 }
 
 function getRangePenalty(distanceToTarget: number, optimal = 200, falloff = 120) {
-  if (distanceToTarget <= optimal) return 1;
-  const over = Math.max(0, distanceToTarget - optimal);
-  return 1 / (1 + (over / Math.max(falloff, 1)) ** 2);
+  const resolvedOptimal = optimal ?? COMBAT_BALANCE.turret.defaultOptimalRange;
+  const resolvedFalloff = falloff ?? COMBAT_BALANCE.turret.defaultFalloff;
+  if (distanceToTarget <= resolvedOptimal) return 1;
+  const over = Math.max(0, distanceToTarget - resolvedOptimal);
+  return 1 / (1 + (over / Math.max(resolvedFalloff, 1)) ** 2);
 }
 
 function hasCapacitor(player: GameWorld["player"], amount: number) {
@@ -2474,21 +2507,39 @@ function computeTurretApplication(
     (relPos.x * relVel.y - relPos.y * relVel.x) / (rangeToTarget * rangeToTarget)
   );
   const signatureScale = clamp(
-    Math.pow(Math.max(targetSignatureRadius, 1) / Math.max(weapon.signatureResolution ?? 40, 1), 0.55),
+    Math.pow(
+      Math.max(targetSignatureRadius, 1) /
+        Math.max(weapon.signatureResolution ?? COMBAT_BALANCE.turret.defaultSignatureResolution, 1),
+      0.55
+    ),
     0.7,
     1.65
   );
-  const effectiveTracking = Math.max(0.02, (weapon.tracking ?? 0.06) * signatureScale * 4.4);
+  const effectiveTracking = Math.max(
+    COMBAT_BALANCE.turret.minimumTracking,
+    (weapon.tracking ?? 0.06) * signatureScale * COMBAT_BALANCE.turret.trackingScalar
+  );
+  const relSpeed = Math.max(length(relVel), 0.0001);
+  const lineOfFire = normalize(relPos);
+  const radialAlignment = Math.abs((relVel.x * lineOfFire.x + relVel.y * lineOfFire.y) / relSpeed);
+  const lateralAlignment = clamp(1 - radialAlignment, 0, 1);
+  const trajectoryFactor = clamp(
+    1 +
+      radialAlignment * COMBAT_BALANCE.turret.trajectoryRadialBonus -
+      lateralAlignment * COMBAT_BALANCE.turret.trajectoryLateralPenalty,
+    0.6,
+    1.18
+  );
   const angularPressure = angularVelocity * 0.32;
   const trackingRatio = angularPressure / effectiveTracking;
-  const rawTrackingFactor = 1 / (1 + Math.pow(trackingRatio, 1.35));
+  const rawTrackingFactor = 1 / (1 + Math.pow(trackingRatio, COMBAT_BALANCE.turret.trackingExponent));
   const trackingFactor = clamp(0.18 + rawTrackingFactor * 0.82, 0, 1);
-  const damage = (weapon.damage ?? 0) * rangeFactor * trackingFactor;
+  const damage = (weapon.damage ?? 0) * rangeFactor * trackingFactor * trajectoryFactor;
 
   let quality: "miss" | "grazing" | "solid" | "excellent" = "miss";
-  if (damage > (weapon.damage ?? 0) * 0.82) quality = "excellent";
-  else if (damage > (weapon.damage ?? 0) * 0.48) quality = "solid";
-  else if (damage > (weapon.damage ?? 0) * 0.14) quality = "grazing";
+  if (damage > (weapon.damage ?? 0) * COMBAT_BALANCE.turret.qualityExcellent) quality = "excellent";
+  else if (damage > (weapon.damage ?? 0) * COMBAT_BALANCE.turret.qualitySolid) quality = "solid";
+  else if (damage > (weapon.damage ?? 0) * COMBAT_BALANCE.turret.qualityGrazing) quality = "grazing";
 
   return { damage, quality };
 }
@@ -2652,20 +2703,11 @@ function createEnemyFromVariant(
   };
 }
 
-const HOSTILE_TRIGGER_COOLDOWN_SEC = 18;
-const MAX_TRIGGERED_HOSTILES_NEAR_PLAYER = 5;
-
-const HOSTILE_TRIGGER_PROFILES = {
-  low: { chance: 0.1, count: 1 },
-  mid: { chance: 0.2, count: 2 },
-  high: { chance: 0.35, count: 3 }
-} as const;
-
 function getHostileTriggerProfile(sectorId: string) {
   const sectorDef = sectorById[sectorId];
-  if (sectorDef.danger >= 5) return HOSTILE_TRIGGER_PROFILES.high;
-  if (sectorDef.danger >= 3) return HOSTILE_TRIGGER_PROFILES.mid;
-  return HOSTILE_TRIGGER_PROFILES.low;
+  if (sectorDef.danger >= 5) return SPAWN_BALANCE.triggerProfiles.high;
+  if (sectorDef.danger >= 3) return SPAWN_BALANCE.triggerProfiles.mid;
+  return SPAWN_BALANCE.triggerProfiles.low;
 }
 
 function getSectorResponseVariants(sectorId: string, preferredVariantIds?: string[]) {
@@ -2700,19 +2742,38 @@ function refreshSectorChallenge(world: GameWorld, sectorId: string, dt: number) 
   const playerPowerTier = getPlayerPowerTier(world);
   const hostilePresence = sector.enemies.some((enemy) => enemy.hull > 0);
   const combatNearby = sector.enemies.some((enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= 760);
-  const hostileSitePressure = sectorDef.danger >= 4 ? 0.02 : sectorDef.danger >= 3 ? 0.012 : 0.005;
-  const presencePressure = hostilePresence ? 0.008 + sectorDef.danger * 0.0015 : 0;
-  const proximityPressure = combatNearby ? 0.018 : 0;
+  const hostileSitePressure =
+    sectorDef.danger >= 4
+      ? SPAWN_BALANCE.sectorChallenge.hostileSiteDanger4
+      : sectorDef.danger >= 3
+        ? SPAWN_BALANCE.sectorChallenge.hostileSiteDanger3
+        : SPAWN_BALANCE.sectorChallenge.hostileSiteDefault;
+  const presencePressure =
+    hostilePresence
+      ? SPAWN_BALANCE.sectorChallenge.presenceBase + sectorDef.danger * SPAWN_BALANCE.sectorChallenge.presenceDangerScale
+      : 0;
+  const proximityPressure = combatNearby ? SPAWN_BALANCE.sectorChallenge.proximity : 0;
   const miningPressure =
     sectorDef.asteroidFields.length > 0 && distance(world.player.position, sectorDef.asteroidFields[0].center) <= 620
-      ? 0.009
+      ? SPAWN_BALANCE.sectorChallenge.mining
       : 0;
   const missionPressure =
-    (getActiveMission(world)?.targetSystemId === sectorId ? 0.012 : 0) +
-    (getActiveProceduralContract(world)?.targetSystemId === sectorId ? 0.01 : 0);
-  const decay = sectorDef.security === "high" ? 0.015 : sectorDef.security === "medium" ? 0.012 : sectorDef.security === "low" ? 0.009 : 0.006;
+    (getActiveMission(world)?.targetSystemId === sectorId ? SPAWN_BALANCE.sectorChallenge.mission : 0) +
+    (getActiveProceduralContract(world)?.targetSystemId === sectorId ? SPAWN_BALANCE.sectorChallenge.contract : 0);
+  const decay =
+    sectorDef.security === "high"
+      ? SPAWN_BALANCE.sectorChallenge.decay.high
+      : sectorDef.security === "medium"
+        ? SPAWN_BALANCE.sectorChallenge.decay.medium
+        : sectorDef.security === "low"
+          ? SPAWN_BALANCE.sectorChallenge.decay.low
+          : SPAWN_BALANCE.sectorChallenge.decay.frontier;
   const nextPressure = (sector.challengePressure ?? 0) + dt * (hostileSitePressure + presencePressure + proximityPressure + miningPressure + missionPressure);
-  sector.challengePressure = clamp(nextPressure - dt * decay + Math.max(0, playerPowerTier - 1) * dt * 0.0008, 0, 10);
+  sector.challengePressure = clamp(
+    nextPressure - dt * decay + Math.max(0, playerPowerTier - 1) * dt * SPAWN_BALANCE.sectorChallenge.playerPowerTierScale,
+    0,
+    10
+  );
   sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - dt);
 }
 
@@ -2721,21 +2782,29 @@ function maybeSpawnSectorReinforcement(world: GameWorld, sectorId: string) {
   const sectorDef = sectorById[sectorId];
   if (!sector || !sectorDef) return;
   const pressure = sector.challengePressure ?? 0;
-  if (pressure < 3.4 || sector.reinforcementTimer > 0) return;
+  if (pressure < SPAWN_BALANCE.pressure.localReinforcementThreshold || sector.reinforcementTimer > 0) return;
 
   const playerPowerTier = getPlayerPowerTier(world);
   const preferredVariantIds = getSectorResponseVariants(sectorId);
   const roles: HostilePackRole[] =
     pressure >= 7 ? ["tackle", "sniper", "support"] : pressure >= 5 ? ["tackle", "support"] : ["tackle"];
-  if (sectorDef.security === "frontier" && pressure >= 5) roles.unshift("swarm");
-  if (playerPowerTier >= 4 && pressure >= 5.5) roles.push(sectorDef.security === "high" ? "sniper" : "hunter");
+  if (sectorDef.security === "frontier" && pressure >= SPAWN_BALANCE.pressure.frontierSwarmThreshold) roles.unshift("swarm");
+  if (playerPowerTier >= 4 && pressure >= SPAWN_BALANCE.pressure.highTierEscortThreshold) {
+    roles.push(sectorDef.security === "high" ? "sniper" : "hunter");
+  }
 
   const pack = roles.map((role) => ({
     role,
     variantId: pickEnemyVariantForHostileRole(role, preferredVariantIds, new Set<string>(), playerPowerTier)
   }));
   spawnTriggeredHostiles(world, sectorId, { ...world.player.position }, pack);
-  sector.reinforcementTimer = clamp(34 - Math.min(12, pressure * 1.2) + Math.max(0, 4 - playerPowerTier) * 2, 16, 40);
+  sector.reinforcementTimer = clamp(
+    SPAWN_BALANCE.reinforcement.sectorBaseTimerSec -
+      Math.min(12, pressure * SPAWN_BALANCE.reinforcement.sectorPressureScale) +
+      Math.max(0, 4 - playerPowerTier) * SPAWN_BALANCE.reinforcement.sectorPlayerTierPenalty,
+    SPAWN_BALANCE.reinforcement.sectorMinimumTimerSec,
+    SPAWN_BALANCE.reinforcement.sectorMaximumTimerSec
+  );
 }
 
 type TriggerContext = "belt" | "gate";
@@ -2916,7 +2985,7 @@ function buildTriggeredHostilePack(
   if ((playerPowerTier >= 4 || pressure >= 4) && sectorById[sectorId]?.security === "frontier" && Math.random() < 0.2) {
     roles.push("support");
   }
-  if (pressure >= 5 && Math.random() < 0.25) {
+  if (pressure >= SPAWN_BALANCE.pressure.pressurePackThreshold && Math.random() < 0.25) {
     roles.unshift(context === "gate" ? "tackle" : "swarm");
   }
   return roles.map((role) => {
@@ -2927,16 +2996,9 @@ function buildTriggeredHostilePack(
 }
 
 function getTriggerSpawnRadius(role: HostilePackRole) {
-  if (role === "swarm") return 120 + Math.random() * 50;
-  if (role === "tackle") return 180 + Math.random() * 60;
-  if (role === "sniper") return 280 + Math.random() * 90;
-  if (role === "support") return 240 + Math.random() * 80;
-  if (role === "anchor") return 300 + Math.random() * 90;
-  if (role === "escort") return 210 + Math.random() * 70;
-  if (role === "artillery") return 340 + Math.random() * 100;
-  if (role === "hunter") return 170 + Math.random() * 60;
-  if (role === "skirmisher") return 210 + Math.random() * 70;
-  return 220 + Math.random() * 80;
+  const radiusTable = SPAWN_BALANCE.triggeredSpawnRadius ?? {};
+  const [min, spread] = radiusTable[role] ?? radiusTable.default ?? [220, 80];
+  return min + Math.random() * spread;
 }
 
 function updateBeltSpawnCooldowns(world: GameWorld, dt: number) {
@@ -3034,11 +3096,11 @@ function spawnTriggeredHostiles(
   const sector = world.sectors[sectorId];
   const sectorDef = sectorById[sectorId];
   const nearbyHostiles = sector.enemies.filter(
-    (enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= 720
+    (enemy) => enemy.hull > 0 && distance(enemy.position, world.player.position) <= SPAWN_BALANCE.triggeredHostileSearchRadius
   ).length;
-  if (nearbyHostiles >= MAX_TRIGGERED_HOSTILES_NEAR_PLAYER) return;
+  if (nearbyHostiles >= SPAWN_BALANCE.maxTriggeredHostilesNearPlayer) return;
 
-  const actualPack = pack.slice(0, Math.max(1, MAX_TRIGGERED_HOSTILES_NEAR_PLAYER - nearbyHostiles));
+  const actualPack = pack.slice(0, Math.max(1, SPAWN_BALANCE.maxTriggeredHostilesNearPlayer - nearbyHostiles));
   const spawnedNames: string[] = [];
 
   for (let index = 0; index < actualPack.length; index += 1) {
@@ -3162,7 +3224,7 @@ function updateCombatMissionPressure(world: GameWorld, dt: number) {
         )
       }));
       spawnTriggeredHostiles(world, world.currentSectorId, { ...world.player.position }, pack);
-      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? 30;
+      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? MISSION_BALANCE.survive.defaultReinforcementIntervalSec;
       pushStory(world, `${activeMission.title}: another wave is inbound.`);
     }
     if (state.objectiveTimer <= 0) {
@@ -3189,8 +3251,8 @@ function updateCombatMissionPressure(world: GameWorld, dt: number) {
         )
       }));
       spawnTriggeredHostiles(world, world.currentSectorId, { ...world.player.position }, pack);
-      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? 26;
-      state.challengePressure = Math.min(10, (state.challengePressure ?? 0) + 0.35);
+      state.reinforcementTimer = activeMission.reinforcementIntervalSec ?? MISSION_BALANCE.clear.defaultReinforcementIntervalSec;
+      state.challengePressure = Math.min(10, (state.challengePressure ?? 0) + MISSION_BALANCE.clear.pressurePerWave);
       pushStory(world, `${activeMission.title}: reinforcements are joining the pocket.`);
     }
   }
@@ -3206,8 +3268,15 @@ function maybeTriggerMiningSpawn(
   if (sector.beltSpawnCooldowns[beltId] && sector.beltSpawnCooldowns[beltId] > 0) return;
   const profile = getHostileTriggerProfile(world.currentSectorId);
   const playerPowerTier = getPlayerPowerTier(world);
-  const frontierBoost = getCurrentSectorDef(world).security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.02 : 0;
-  const triggerChance = Math.min(0.5, (profile.chance + 0.05 + frontierBoost) * getHostileActivityMultiplier(world, world.currentSectorId));
+  const frontierBoost =
+    getCurrentSectorDef(world).security === "frontier"
+      ? Math.max(0, playerPowerTier - 1) * SPAWN_BALANCE.triggerChance.miningFrontierPerTier
+      : 0;
+  const triggerChance = Math.min(
+    SPAWN_BALANCE.triggerChance.miningMax,
+    (profile.chance + SPAWN_BALANCE.triggerChance.miningBase + frontierBoost) *
+      getHostileActivityMultiplier(world, world.currentSectorId)
+  );
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,
@@ -3221,15 +3290,22 @@ function maybeTriggerMiningSpawn(
       getSectorResponseVariants(world.currentSectorId, preferredVariantIds)
     )
   );
-  sector.beltSpawnCooldowns[beltId] = HOSTILE_TRIGGER_COOLDOWN_SEC;
+  sector.beltSpawnCooldowns[beltId] = SPAWN_BALANCE.hostileTriggerCooldownSec;
 }
 
 function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, anchorPosition: Vec2) {
   const profile = getHostileTriggerProfile(destinationSectorId);
   const destinationDef = sectorById[destinationSectorId];
   const playerPowerTier = getPlayerPowerTier(world);
-  const frontierBoost = destinationDef?.security === "frontier" ? Math.max(0, playerPowerTier - 1) * 0.025 : 0;
-  const triggerChance = Math.min(0.65, (profile.chance + 0.08 + frontierBoost) * getHostileActivityMultiplier(world, destinationSectorId));
+  const frontierBoost =
+    destinationDef?.security === "frontier"
+      ? Math.max(0, playerPowerTier - 1) * SPAWN_BALANCE.triggerChance.portalFrontierPerTier
+      : 0;
+  const triggerChance = Math.min(
+    SPAWN_BALANCE.triggerChance.portalMax,
+    (profile.chance + SPAWN_BALANCE.triggerChance.portalBase + frontierBoost) *
+      getHostileActivityMultiplier(world, destinationSectorId)
+  );
   if (Math.random() > triggerChance) return;
   spawnTriggeredHostiles(
     world,

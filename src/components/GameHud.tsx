@@ -492,7 +492,7 @@ export function GameHud({
   const selectedButtons = [...travelButtons, ...actionButtons];
 
   return (
-      <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
+    <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
       <div className="system-badge">
         {sector.name} · {systemRiskLabel} · {currentRegion.name}
       </div>

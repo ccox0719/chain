@@ -3,10 +3,21 @@ import { ShipFittingDiagram } from "./ShipFittingDiagram";
 import { ShipGeoIcon } from "./ShipGeoIcon";
 import { WeaponDetailsCard } from "./WeaponDetailsCard";
 import { factionData, factionDamageLabel, factionResistLabel } from "../game/data/factions";
-import { CommandAction } from "../types/game";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { moduleById, moduleCatalog } from "../game/data/modules";
+import {
+  CAPACITOR_BALANCE,
+  COMBAT_BALANCE,
+  ECONOMY_BALANCE,
+  MISSION_BALANCE,
+  MOVEMENT_BALANCE,
+  PROGRESSION_BALANCE,
+  SPAWN_BALANCE,
+  clearBalanceOverrides,
+  setBalanceOverride
+} from "../game/config/balance";
+import type { BalanceRootKey } from "../game/config/balance/overrides";
 import { getStationCommodityStock } from "../game/economy/commodityAvailability";
 import { isModuleAvailableAtStation } from "../game/economy/moduleAvailability";
 import { playerShipById, playerShips } from "../game/data/ships";
@@ -90,6 +101,313 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
   deliver: "Delivery",
   travel: "Survey"
 };
+
+const isDevBuild = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+
+const BALANCE_ROOTS = {
+  combat: COMBAT_BALANCE,
+  capacitor: CAPACITOR_BALANCE,
+  economy: ECONOMY_BALANCE,
+  missions: MISSION_BALANCE,
+  movement: MOVEMENT_BALANCE,
+  progression: PROGRESSION_BALANCE,
+  spawns: SPAWN_BALANCE
+} as const;
+
+type BalanceSpec = {
+  root: BalanceRootKey;
+  path: string[];
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  helper: string;
+};
+
+type BalanceGroup = {
+  title: string;
+  note: string;
+  controls: BalanceSpec[];
+};
+
+type BalanceSnapshot = Record<string, number>;
+
+const BALANCE_GROUPS: BalanceGroup[] = [
+  {
+    title: "Combat",
+    note: "Use this to change pressure without changing the whole ship kit.",
+    controls: [
+      {
+        root: "combat",
+        path: ["difficulty", "normal", "playerDamageMultiplier"],
+        label: "Player damage scalar",
+        min: 0.5,
+        max: 1.5,
+        step: 0.01,
+        helper: "Lower makes the player less dominant. Higher pushes faster clears."
+      },
+      {
+        root: "combat",
+        path: ["turret", "defaultOptimalRange"],
+        label: "Turret optimal range",
+        min: 80,
+        max: 320,
+        step: 5,
+        helper: "Changes how close ships want to fight before falloff starts."
+      }
+    ]
+  },
+  {
+    title: "Capacitor",
+    note: "Controls sustain and how much time slow-time buys.",
+    controls: [
+      {
+        root: "capacitor",
+        path: ["playerRegenMultiplier"],
+        label: "Player regen multiplier",
+        min: 0.1,
+        max: 1,
+        step: 0.01,
+        helper: "Lower values make active modules and long fights matter more."
+      },
+      {
+        root: "capacitor",
+        path: ["tacticalSlow", "timeScale"],
+        label: "Tactical slow time scale",
+        min: 0.1,
+        max: 0.8,
+        step: 0.01,
+        helper: "Lower values make slow-time more dramatic."
+      }
+    ]
+  },
+  {
+    title: "Movement",
+    note: "Tightens or loosens the battlefield edges and terrain spacing.",
+    controls: [
+      {
+        root: "movement",
+        path: ["boundary", "warningDistance"],
+        label: "Boundary warning distance",
+        min: 120,
+        max: 420,
+        step: 5,
+        helper: "How early the edge-of-space warning starts."
+      },
+      {
+        root: "movement",
+        path: ["terrain", "asteroidRepelPadding"],
+        label: "Asteroid repel padding",
+        min: 40,
+        max: 220,
+        step: 5,
+        helper: "How much room ships keep from rocks before pushing away."
+      }
+    ]
+  },
+  {
+    title: "Spawns",
+    note: "Main lever for how often extra enemies show up.",
+    controls: [
+      {
+        root: "spawns",
+        path: ["pressure", "localReinforcementThreshold"],
+        label: "Reinforcement threshold",
+        min: 2,
+        max: 12,
+        step: 0.5,
+        helper: "Higher values make follow-up spawns rarer."
+      },
+      {
+        root: "spawns",
+        path: ["maxTriggeredHostilesNearPlayer"],
+        label: "Max triggered hostiles",
+        min: 0,
+        max: 8,
+        step: 1,
+        helper: "Caps how many triggered enemies can stack near the player."
+      }
+    ]
+  },
+  {
+    title: "Missions",
+    note: "Changes how much breathing room objective fights get.",
+    controls: [
+      {
+        root: "missions",
+        path: ["survive", "defaultReinforcementIntervalSec"],
+        label: "Survive wave interval",
+        min: 15,
+        max: 90,
+        step: 1,
+        helper: "Longer intervals mean fewer waves and less pressure."
+      },
+      {
+        root: "missions",
+        path: ["clear", "defaultReinforcementIntervalSec"],
+        label: "Clear wave interval",
+        min: 15,
+        max: 90,
+        step: 1,
+        helper: "Higher values give more time before reinforcement waves."
+      }
+    ]
+  },
+  {
+    title: "Economy",
+    note: "Useful when you want the frontier to pay out more or less aggressively.",
+    controls: [
+      {
+        root: "economy",
+        path: ["securityPriceScale", "frontier"],
+        label: "Frontier price scale",
+        min: 0.7,
+        max: 1.5,
+        step: 0.01,
+        helper: "Raises or lowers frontier station pricing."
+      }
+    ]
+  },
+  {
+    title: "Progression",
+    note: "Soft progression tuning for ship power and license pacing.",
+    controls: [
+      {
+        root: "progression",
+        path: ["shipPowerTierByClass", "cruiser"],
+        label: "Cruiser power tier",
+        min: 1,
+        max: 8,
+        step: 1,
+        helper: "Lets cruisers enter the stronger or weaker end of the ladder."
+      },
+      {
+        root: "progression",
+        path: ["pilotLicense", "awardMultiplier"],
+        label: "Pilot license award multiplier",
+        min: 0.5,
+        max: 2,
+        step: 0.01,
+        helper: "Controls how quickly licenses advance."
+      }
+    ]
+  }
+];
+
+function balanceKey(spec: BalanceSpec) {
+  return `${spec.root}:${spec.path.join(".")}`;
+}
+
+function getBalanceValue(root: BalanceRootKey, path: string[]) {
+  let current: unknown = BALANCE_ROOTS[root];
+  for (const key of path) {
+    if (typeof current !== "object" || current === null) return 0;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return typeof current === "number" ? current : 0;
+}
+
+function captureBalanceSnapshot() {
+  const snapshot: BalanceSnapshot = {};
+  BALANCE_GROUPS.forEach((group) => {
+    group.controls.forEach((spec) => {
+      snapshot[balanceKey(spec)] = getBalanceValue(spec.root, spec.path);
+    });
+  });
+  return snapshot;
+}
+
+function decimalsForStep(step: number) {
+  const raw = String(step);
+  if (!raw.includes(".")) return 0;
+  return raw.length - raw.indexOf(".") - 1;
+}
+
+function formatBalanceNumber(value: number, step: number) {
+  const decimals = Math.min(3, decimalsForStep(step));
+  if (decimals === 0) return Math.round(value).toLocaleString();
+  const fixed = value.toFixed(decimals);
+  return fixed.replace(/\.?0+$/, "");
+}
+
+function balancePercent(value: number, spec: BalanceSpec) {
+  const range = spec.max - spec.min;
+  if (range <= 0) return 0;
+  return Math.max(0, Math.min(100, ((value - spec.min) / range) * 100));
+}
+
+function BalanceSlider({
+  spec,
+  value,
+  baseline,
+  onChange
+}: {
+  spec: BalanceSpec;
+  value: number;
+  baseline: number;
+  onChange: (nextValue: number) => void;
+}) {
+  const currentPct = balancePercent(value, spec);
+  const baselinePct = balancePercent(baseline, spec);
+  const delta = value - baseline;
+  const currentLabel = formatBalanceNumber(value, spec.step);
+  const baselineLabel = formatBalanceNumber(baseline, spec.step);
+  return (
+    <div
+      className="panel-lite"
+      title={`${spec.label}: ${spec.helper}`}
+      style={{ display: "grid", gap: "0.45rem", padding: "0.75rem 0.8rem" }}
+    >
+      <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+        <strong>{spec.label}</strong>
+        <span
+          className={`status-chip${Math.abs(delta) < 0.0001 ? "" : delta > 0 ? " active" : " warning"}`}
+          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.`}
+        >
+          Now {currentLabel} · Was {baselineLabel}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={spec.min}
+        max={spec.max}
+        step={spec.step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        aria-label={spec.label}
+        title={`${spec.label}: ${spec.helper}`}
+      />
+      <div style={{ position: "relative", height: "0.7rem", borderRadius: "999px", background: "rgba(255, 255, 255, 0.08)", overflow: "hidden" }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: `${currentPct}%`,
+            background: "linear-gradient(90deg, rgba(127, 220, 255, 0.85), rgba(127, 220, 255, 0.35))"
+          }}
+        />
+        <div
+          title={`Last value: ${baselineLabel}`}
+          style={{
+            position: "absolute",
+            top: "-0.2rem",
+            bottom: "-0.2rem",
+            left: `${baselinePct}%`,
+            width: "2px",
+            transform: "translateX(-1px)",
+            background: "rgba(255, 255, 255, 0.8)",
+            boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.35)"
+          }}
+        />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-dim)" }}>
+        <span>{formatBalanceNumber(spec.min, spec.step)}</span>
+        <span title={spec.helper}>{spec.helper}</span>
+        <span>{formatBalanceNumber(spec.max, spec.step)}</span>
+      </div>
+    </div>
+  );
+}
 
 const SHIP_ARCHETYPE_LABELS: Record<string, string> = {
   skirmisher: "Skirmisher",
@@ -183,11 +501,10 @@ interface StationPanelProps {
   onAcceptMission: (missionId: string) => void;
   onTurnInMission: (missionId: string) => void;
   onBuyShip: (shipId: string) => void;
+  onSellShip: (shipId: string) => void;
   onSwitchShip: (shipId: string) => void;
   onSaveBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
   onLoadBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
-  onQueueUndockAction: (command: CommandAction) => void;
-  onClearUndockQueue: () => void;
 }
 
 export function StationPanel({
@@ -203,11 +520,10 @@ export function StationPanel({
   onAcceptMission,
   onTurnInMission,
   onBuyShip,
+  onSellShip,
   onSwitchShip,
   onSaveBuild,
-  onLoadBuild,
-  onQueueUndockAction,
-  onClearUndockQueue
+  onLoadBuild
 }: StationPanelProps) {
   const { world, currentStation, selectedInfo } = snapshot;
   const [tab, setTab] = useState<StationTab>("services");
@@ -224,10 +540,98 @@ export function StationPanel({
   const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
+  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
+  const [, setBalanceRefresh] = useState(0);
   const stationTags = currentStation?.tags ?? [];
   const security = snapshot.sector.security;
   const systemFaction = factionData[snapshot.sector.controllingFaction];
   const regionFaction = factionData[snapshot.currentRegion.dominantFaction];
+  function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
+    if (Number.isNaN(nextValue)) return;
+    setBalanceOverride(root, path, nextValue);
+    setBalanceRefresh((value) => value + 1);
+  }
+
+  function resetBalanceValues() {
+    clearBalanceOverrides();
+    setBalanceRefresh((value) => value + 1);
+  }
+
+  const devBalanceModal = isDevBuild && balanceModalOpen ? (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Developer balance dials"
+      onClick={() => setBalanceModalOpen(false)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 120,
+        background: "rgba(0, 0, 0, 0.55)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "5.5rem 1rem 1rem"
+      }}
+    >
+      <article
+        className="panel-lite"
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "min(44rem, 100%)",
+          maxHeight: "min(82vh, 52rem)",
+          display: "flex",
+          flexDirection: "column",
+          borderColor: "rgba(127, 220, 255, 0.28)",
+          boxShadow: "0 28px 80px rgba(0, 0, 0, 0.45)"
+        }}
+      >
+        <div className="mission-card-header" style={{ marginBottom: "0.5rem" }}>
+          <strong>Developer Balance</strong>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="ghost-button mini" onClick={resetBalanceValues}>
+              Reset
+            </button>
+            <button type="button" className="ghost-button mini" onClick={() => setBalanceModalOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+        <div
+          className="dev-balance-grid"
+          style={{
+            display: "grid",
+            gap: "0.75rem",
+            overflowY: "auto",
+            paddingRight: "0.25rem",
+            flex: "1 1 auto"
+          }}
+        >
+          {BALANCE_GROUPS.map((group) => (
+            <section key={group.title} className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem" }}>
+              <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+                <strong>{group.title}</strong>
+                <span className="status-chip">{group.note}</span>
+              </div>
+              <div style={{ display: "grid", gap: "0.7rem" }}>
+                {group.controls.map((spec) => (
+                  <BalanceSlider
+                    key={balanceKey(spec)}
+                    spec={spec}
+                    value={getBalanceValue(spec.root, spec.path)}
+                    baseline={balanceBaseline[balanceKey(spec)] ?? getBalanceValue(spec.root, spec.path)}
+                    onChange={(nextValue) => applyBalanceValue(spec.root, spec.path, nextValue)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </article>
+    </div>
+  ) : null;
 
   function inventoryAllows(tags: string[]) {
     if (tags.includes("common")) return true;
@@ -383,35 +787,6 @@ export function StationPanel({
   const focusedSlotModules = focusedSlot ? inventoryModulesBySlot[focusedSlot.slotType] : [];
 
   if (!currentStation) return null;
-
-  const plannedCommands: Array<{ label: string; command: CommandAction }> = selectedInfo
-    ? selectedInfo.type === "enemy"
-      ? [
-          { label: "Queue Attack",      command: { type: "attack",  target: selectedInfo.ref } },
-          { label: "Queue Approach",    command: { type: "approach", target: selectedInfo.ref } },
-          { label: "Queue Orbit 220 m", command: { type: "orbit",   target: selectedInfo.ref, range: 220 } }
-        ]
-      : selectedInfo.type === "station"
-        ? [
-            { label: "Queue Warp", command: { type: "warp", target: selectedInfo.ref, range: 130 } },
-            { label: "Queue Dock", command: { type: "dock", target: selectedInfo.ref } }
-          ]
-        : selectedInfo.type === "gate"
-          ? [
-              { label: "Queue Align", command: { type: "align", target: selectedInfo.ref } },
-              { label: "Queue Warp",  command: { type: "warp",  target: selectedInfo.ref, range: 120 } },
-              { label: "Queue Jump",  command: { type: "jump",  target: selectedInfo.ref } }
-            ]
-          : selectedInfo.type === "asteroid"
-            ? [
-                { label: "Queue Orbit 100 m", command: { type: "orbit", target: selectedInfo.ref, range: 100 } },
-                { label: "Queue Mine",         command: { type: "mine",  target: selectedInfo.ref } }
-              ]
-            : [
-                { label: "Queue Warp",    command: { type: "warp",    target: selectedInfo.ref, range: 110 } },
-                { label: "Queue Approach", command: { type: "approach", target: selectedInfo.ref } }
-              ]
-    : [];
 
   function moduleMiningSummary(module: (typeof moduleCatalog)[number]) {
     if (module.kind !== "mining_laser") return null;
@@ -576,10 +951,23 @@ export function StationPanel({
         </div>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
+          {isDevBuild && (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setBalanceBaseline(captureBalanceSnapshot());
+                setBalanceModalOpen(true);
+              }}
+            >
+              Balance
+            </button>
+          )}
           <button type="button" className="primary-button" onClick={onUndock}>Undock</button>
         </div>
-        </div>
-        <div className="panel-lite faction-intel-banner" style={{ margin: "0 1.25rem 1rem", borderColor: systemFaction.color }}>
+      </div>
+      {devBalanceModal}
+      <div className="panel-lite faction-intel-banner" style={{ margin: "0 1.25rem 1rem", borderColor: systemFaction.color }}>
           <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
             <strong>Faction Intel</strong>
             <span className="status-chip" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
@@ -779,44 +1167,6 @@ export function StationPanel({
               </div>
             </article>
 
-            <article className="panel-lite">
-              <h3>Undock Planner</h3>
-              {selectedInfo ? (
-                <div className="stack-list">
-                  <div className="market-item">
-                    <div>
-                      <strong>{selectedInfo.name}</strong>
-                      <p>{selectedInfo.type} · {Math.round(selectedInfo.distance)} m</p>
-                    </div>
-                    <div className="market-actions">
-                      {plannedCommands.map((item) => (
-                        <button key={item.label} type="button" onClick={() => onQueueUndockAction(item.command)}>
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p>Select an object from the overview to queue undock commands.</p>
-              )}
-              <div style={{ marginTop: "0.75rem" }}>
-                {world.player.queuedUndockActions.length > 0 ? (
-                  <div className="queued-action-list">
-                    {world.player.queuedUndockActions.map((action, index) => (
-                      <span key={`${action.type}-${index}`} className="status-chip">
-                        {index + 1}. {action.type.replace("_", " ")}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p>Queue empty.</p>
-                )}
-              </div>
-              <button type="button" className="ghost-button" style={{ marginTop: "0.6rem" }} onClick={onClearUndockQueue}>
-                Clear Queue
-              </button>
-            </article>
           </div>
         )}
 
@@ -829,6 +1179,8 @@ export function StationPanel({
                 {availableShips.map((ship) => {
                   const owned = world.player.ownedShips.includes(ship.id);
                   const active = world.player.hullId === ship.id;
+                  const sellPrice = snapshot.economy.shipSellPrices[ship.id] ?? Math.max(1, Math.floor(ship.price * 0.56));
+                  const canSell = owned && world.player.ownedShips.length > 1;
                   return (
                     <div key={ship.id} className="market-item">
                       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -850,9 +1202,25 @@ export function StationPanel({
                             Buy {snapshot.economy.shipBuyPrices[ship.id] ?? ship.price} cr
                           </button>
                         ) : (
-                          <button type="button" onClick={() => onSwitchShip(ship.id)} disabled={active}>
-                            {active ? "Active" : "Activate"}
-                          </button>
+                          <>
+                            <button type="button" onClick={() => onSwitchShip(ship.id)} disabled={active}>
+                              {active ? "Active" : "Activate"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSellShip(ship.id)}
+                              disabled={!canSell}
+                              title={
+                                !canSell
+                                  ? "Keep at least one ship"
+                                  : active
+                                    ? "Sell the active ship by switching to another owned hull first"
+                                    : `Sell ${ship.name}`
+                              }
+                            >
+                              Sell {sellPrice} cr
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>

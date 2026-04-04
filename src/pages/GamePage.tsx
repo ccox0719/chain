@@ -122,11 +122,10 @@ export function GamePage() {
           onAcceptMission={actions.acceptMission}
           onTurnInMission={actions.turnInMission}
           onBuyShip={actions.buyShip}
+          onSellShip={actions.sellShip}
           onSwitchShip={actions.switchShip}
           onSaveBuild={actions.saveBuild}
           onLoadBuild={actions.loadBuild}
-          onQueueUndockAction={actions.issueCommand}
-          onClearUndockQueue={actions.clearUndockQueue}
         />
 
         {deathSummary && (

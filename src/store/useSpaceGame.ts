@@ -24,6 +24,7 @@ import {
   loadBuildSlot,
   saveBuildSlot,
   sellModule,
+  sellShip,
   selectObject,
   startBuildSwap,
   sellCargo,
@@ -269,6 +270,10 @@ export function useSpaceGame() {
       },
       buyShip: (shipId: string) => {
         buyShip(worldRef.current, shipId);
+        refresh();
+      },
+      sellShip: (shipId: string) => {
+        sellShip(worldRef.current, shipId);
         refresh();
       },
       switchShip: (shipId: string) => {

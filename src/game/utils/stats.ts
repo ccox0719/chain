@@ -2,8 +2,7 @@ import { ModuleDefinition, ModuleSlot, PlayerState, ShipBonusProfile } from "../
 import { moduleById } from "../data/modules";
 import { playerShipById } from "../data/ships";
 import { commodityById } from "../economy/data/commodities";
-
-const PLAYER_CAPACITOR_REGEN_MULTIPLIER = 0.45;
+import { CAPACITOR_BALANCE } from "../config/balance";
 
 function applyResistProfile(
   target: { em: number; thermal: number; kinetic: number; explosive: number },
@@ -42,6 +41,7 @@ function applyModuleModifiers(
   derived.moduleBuyMultiplier *= modifiers.moduleBuyMultiplier ?? 1;
   derived.moduleSellMultiplier *= modifiers.moduleSellMultiplier ?? 1;
   derived.shipBuyMultiplier *= modifiers.shipBuyMultiplier ?? 1;
+  derived.shipSellMultiplier *= modifiers.shipSellMultiplier ?? 1;
   derived.turretTrackingMultiplier *= modifiers.turretTrackingMultiplier ?? 1;
   derived.turretOptimalMultiplier *= modifiers.turretOptimalMultiplier ?? 1;
   derived.turretFalloffMultiplier *= modifiers.turretFalloffMultiplier ?? 1;
@@ -95,6 +95,7 @@ function computeBaseDerivedStats(player: PlayerState) {
     moduleBuyMultiplier: 1,
     moduleSellMultiplier: 1,
     shipBuyMultiplier: 1,
+    shipSellMultiplier: 1,
     turretTrackingMultiplier: 1,
     turretOptimalMultiplier: 1,
     turretFalloffMultiplier: 1,
@@ -136,7 +137,8 @@ export function computeDerivedStats(player: PlayerState) {
   derived.moduleBuyMultiplier *= shipBonuses.moduleBuyMultiplier ?? 1;
   derived.moduleSellMultiplier *= shipBonuses.moduleSellMultiplier ?? 1;
   derived.shipBuyMultiplier *= shipBonuses.shipBuyMultiplier ?? 1;
-  derived.capacitorRegen *= PLAYER_CAPACITOR_REGEN_MULTIPLIER;
+  derived.shipSellMultiplier *= shipBonuses.shipSellMultiplier ?? 1;
+  derived.capacitorRegen *= CAPACITOR_BALANCE.playerRegenMultiplier;
 
   (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
     player.equipped[slotType]

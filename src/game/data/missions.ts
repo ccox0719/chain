@@ -1,4 +1,5 @@
 import { MissionDefinition } from "../../types/game";
+import { MISSION_BALANCE } from "../config/balance";
 
 export const missionCatalog: MissionDefinition[] = [
   {
@@ -291,7 +292,7 @@ export const missionCatalog: MissionDefinition[] = [
     targetDestinationId: "blackwake-rift",
     combatObjective: "survive",
     objectiveDurationSec: 150,
-    reinforcementIntervalSec: 34,
+    reinforcementIntervalSec: MISSION_BALANCE.survive.defaultReinforcementIntervalSec,
     reinforcementRoles: ["swarm", "tackle", "support"],
     reinforcementVariantIds: ["blackwake-swarm", "blackwake-interceptor", "blackwake-reaver"]
   },
@@ -308,7 +309,7 @@ export const missionCatalog: MissionDefinition[] = [
     targetSystemId: "ironway",
     targetDestinationId: "ironway-yard",
     combatObjective: "clear",
-    reinforcementIntervalSec: 28,
+    reinforcementIntervalSec: MISSION_BALANCE.clear.defaultReinforcementIntervalSec,
     reinforcementRoles: ["brawler", "support", "sniper"],
     reinforcementVariantIds: ["ironbound-bruiser", "ironbound-artillery"]
   }

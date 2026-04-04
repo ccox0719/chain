@@ -8,31 +8,21 @@ import {
   SystemDestination
 } from "../../types/game";
 import { stationMarketProfileById } from "./data/stationMarketProfiles";
-
-const baseResourcePrices: Record<ResourceId, number> = {
-  ferrite: 22,
-  "ember-crystal": 46,
-  "ghost-alloy": 88
-};
+import { ECONOMY_BALANCE } from "../config/balance";
 
 function securityPriceScale(security: SecurityBand) {
-  if (security === "high") return 1;
-  if (security === "medium") return 1.08;
-  if (security === "low") return 1.22;
-  return 1.38;
+  return ECONOMY_BALANCE.securityPriceScale[security];
 }
 
 function resourceRiskScale(resource: ResourceId, security: SecurityBand) {
-  if (resource === "ferrite") return security === "high" ? 1.06 : 0.98;
-  if (resource === "ember-crystal") return security === "medium" ? 1.08 : security === "low" || security === "frontier" ? 1.16 : 0.94;
-  return security === "frontier" ? 1.24 : security === "low" ? 1.14 : 0.9;
+  return ECONOMY_BALANCE.resourceRiskScale[resource][security];
 }
 
 function stationTradeScale(station: SystemDestination | null) {
   if (!station?.tags?.length) return 1;
-  if (station.tags.includes("market")) return 0.96;
-  if (station.tags.includes("frontier")) return 1.18;
-  if (station.tags.includes("research")) return 1.05;
+  if (station.tags.includes("market")) return ECONOMY_BALANCE.stationTradeScale.market;
+  if (station.tags.includes("frontier")) return ECONOMY_BALANCE.stationTradeScale.frontier;
+  if (station.tags.includes("research")) return ECONOMY_BALANCE.stationTradeScale.research;
   return 1;
 }
 
@@ -58,26 +48,15 @@ function commodityTagAdjust(commodity: CommodityDefinition, station: SystemDesti
 
 function securityCommodityScale(security: SecurityBand, commodity: CommodityDefinition) {
   if (commodity.category === "luxury") {
-    if (security === "high") return 1.08;
-    if (security === "medium") return 1;
-    if (security === "low") return 0.94;
-    return 0.88;
+    return ECONOMY_BALANCE.categories.luxury[security];
   }
   if (commodity.category === "frontier" || commodity.category === "medical" || commodity.id === "fuel-cells") {
-    if (security === "frontier") return 1.3;
-    if (security === "low") return 1.18;
-    if (security === "medium") return 1.05;
-    return 0.96;
+    return ECONOMY_BALANCE.categories.frontier[security];
   }
   if (commodity.category === "salvage") {
-    if (security === "frontier") return 1.24;
-    if (security === "low") return 1.12;
-    return 0.98;
+    return ECONOMY_BALANCE.categories.salvage[security];
   }
-  if (security === "high") return 1;
-  if (security === "medium") return 1.06;
-  if (security === "low") return 1.14;
-  return 1.22;
+  return ECONOMY_BALANCE.categories.default[security];
 }
 
 function categoryScale(tags: string[]) {
@@ -106,7 +85,11 @@ function stationEconomyFactor(
 }
 
 export function getResourceSellPrice(resource: ResourceId, security: SecurityBand, station: SystemDestination | null) {
-  const value = baseResourcePrices[resource] * securityPriceScale(security) * resourceRiskScale(resource, security) * stationTradeScale(station);
+  const value =
+    ECONOMY_BALANCE.baseResourcePrices[resource] *
+    securityPriceScale(security) *
+    resourceRiskScale(resource, security) *
+    stationTradeScale(station);
   return Math.max(1, Math.round(value));
 }
 
@@ -125,6 +108,10 @@ export function getModuleSellPrice(module: ModuleDefinition, security: SecurityB
 export function getShipBuyPrice(ship: ShipHullDefinition, security: SecurityBand, station: SystemDestination | null) {
   const value = ship.price * securityPriceScale(security) * categoryScale(ship.availabilityTags) * stationTradeScale(station);
   return Math.max(1, Math.round(value));
+}
+
+export function getShipSellPrice(ship: ShipHullDefinition, security: SecurityBand, station: SystemDestination | null) {
+  return Math.max(1, Math.round(getShipBuyPrice(ship, security, station) * 0.56));
 }
 
 export function getCommodityBuyPrice(

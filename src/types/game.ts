@@ -285,6 +285,7 @@ export interface ShipBonusProfile {
   moduleBuyMultiplier?: number;
   moduleSellMultiplier?: number;
   shipBuyMultiplier?: number;
+  shipSellMultiplier?: number;
   moduleKinds?: Partial<Record<ModuleKind, ShipModuleBonusProfile>>;
 }
 
@@ -369,6 +370,7 @@ export interface ModuleDefinition {
     moduleBuyMultiplier?: number;
     moduleSellMultiplier?: number;
     shipBuyMultiplier?: number;
+    shipSellMultiplier?: number;
     turretTrackingMultiplier?: number;
     turretOptimalMultiplier?: number;
     turretFalloffMultiplier?: number;
@@ -405,6 +407,7 @@ export interface ModuleDefinition {
     moduleBuyMultiplier?: number;
     moduleSellMultiplier?: number;
     shipBuyMultiplier?: number;
+    shipSellMultiplier?: number;
     turretTrackingMultiplier?: number;
     turretOptimalMultiplier?: number;
     turretFalloffMultiplier?: number;
@@ -956,6 +959,7 @@ export interface DerivedShipStats {
   moduleBuyMultiplier: number;
   moduleSellMultiplier: number;
   shipBuyMultiplier: number;
+  shipSellMultiplier: number;
   turretTrackingMultiplier: number;
   turretOptimalMultiplier: number;
   turretFalloffMultiplier: number;
@@ -1055,6 +1059,7 @@ export interface EconomySnapshot {
   moduleBuyPrices: Record<string, number>;
   moduleSellPrices: Record<string, number>;
   shipBuyPrices: Record<string, number>;
+  shipSellPrices: Record<string, number>;
 }
 
 export interface GameSnapshot {
