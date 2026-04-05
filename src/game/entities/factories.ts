@@ -23,6 +23,7 @@ import { defaultStarterShipConfigId, starterShipConfigById } from "../data/start
 import { getSystemStation, sectorCatalog, sectorById } from "../data/sectors";
 import { createInitialProcgenState, ensureProcgenState } from "../procgen/runtime";
 import { normalizePilotLicense } from "../utils/pilotLicense";
+import { createLocalSiteFromDestination, createTransitLocalSite } from "../world/sites";
 
 let nextId = 0;
 
@@ -81,14 +82,39 @@ function tacticalSlowState() {
 
 function createBoundaryState() {
   return {
+    profile: {
+      id: "transit-bootstrap",
+      type: "transit" as const,
+      center: { x: 0, y: 0 },
+      activeRadius: 0,
+      bufferRadius: 0,
+      containmentRadius: 0,
+      recoveryReleaseRadius: 0,
+      pullStrength: 0,
+      dampingStrength: 0,
+      turnAssistStrength: 0,
+      zoneType: "transit" as const,
+      visualLabel: "Local navigation grid",
+      title: "Local navigation grid",
+      detail: "You are operating inside a local pocket of system space."
+    },
     warningLevel: 0,
     correctionLevel: 0,
     active: false,
+    zone: "active" as const,
     title: null,
     detail: null,
-    tone: "sensor" as const,
+    tone: "transit" as const,
     forcedFacing: null,
-    forcedTurnRate: 0
+    forcedTurnRate: 0,
+    returnState: {
+      active: false,
+      releaseRadius: 0,
+      suspendedNav: null,
+      recoveryPoint: null,
+      pocketId: null,
+      reason: null
+    }
   };
 }
 
@@ -175,7 +201,9 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
       utility: [],
       defense: []
     },
+    weaponHoldFire: false,
     navigation: idleNav(),
+    pendingLocks: [],
     queuedUndockActions: [],
     effects: neutralEffects(),
     tacticalSlow: tacticalSlowState(),
@@ -313,6 +341,8 @@ export function createInitialWorld(
   difficulty: DifficultyId = "normal",
   starterConfigId = defaultStarterShipConfigId
 ): GameWorld {
+  const startSystemId = "lumen-rest";
+  const startStation = getSystemStation(startSystemId);
   const missions: Record<string, MissionState> = Object.fromEntries(
     missionCatalog.map((mission) => [
       mission.id,
@@ -344,17 +374,21 @@ export function createInitialWorld(
   const world: GameWorld = {
     player: createPlayer(starterConfigId),
     difficulty,
-    currentSectorId: "lumen-rest",
-    unlockedSectorIds: ["lumen-rest"],
+    currentSectorId: startSystemId,
+    localSite: startStation
+      ? createLocalSiteFromDestination(startSystemId, startStation)
+      : createTransitLocalSite(startSystemId, { x: 0, y: 0 }),
+    unlockedSectorIds: [startSystemId],
     sectors: Object.fromEntries(sectorCatalog.map((sector) => [sector.id, createRuntimeSector(sector.id)])),
     missions,
     transportMissions,
-    dockedStationId: getSystemStation("lumen-rest")?.id ?? null,
+    dockedStationId: startStation?.id ?? null,
     selectedObject: null,
     lockedTargets: [],
     activeTarget: null,
     routePlan: null,
     elapsedTime: 0,
+    timeScale: 0.75,
     boundary: createBoundaryState(),
     procgen: createInitialProcgenState(),
     storyLog: [
@@ -374,6 +408,7 @@ export function createProjectile(
   velocity: Vec2,
   damage: number,
   target?: ProjectileState["target"],
+  impactPosition?: Vec2 | null,
   qualityLabel?: ProjectileState["qualityLabel"]
 ): ProjectileState {
   return {
@@ -386,6 +421,7 @@ export function createProjectile(
     damage,
     ttl: moduleId.includes("missile") ? 3.6 : 1.6,
     target,
+    impactPosition: impactPosition ? { ...impactPosition } : null,
     qualityLabel
   };
 }

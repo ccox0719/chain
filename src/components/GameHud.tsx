@@ -17,13 +17,13 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
 
 const MODULE_KIND_ICON: Record<string, string> = {
   laser: "◈",
-  railgun: "▣",
-  missile: "✦",
+  railgun: "▶▶",
+  missile: "⧖",
   mining_laser: "⛏",
-  afterburner: "➤",
-  webifier: "⟲",
+  afterburner: "⟴",
+  webifier: "⊕",
   warp_disruptor: "⌖",
-  target_painter: "◍",
+  target_painter: "◎",
   tracking_disruptor: "≋",
   sensor_dampener: "◌",
   energy_neutralizer: "ϟ",
@@ -34,31 +34,40 @@ const MODULE_KIND_ICON: Record<string, string> = {
   passive: "•"
 };
 
-const MODULE_KIND_LABEL: Record<string, string> = {
-  laser: "Laser",
-  railgun: "Rail",
-  missile: "Missile",
-  mining_laser: "Mining",
-  afterburner: "Drive",
-  webifier: "Web",
-  warp_disruptor: "Point",
-  target_painter: "Painter",
-  tracking_disruptor: "Disrupt",
-  sensor_dampener: "Dampen",
-  energy_neutralizer: "Neut",
-  salvager: "Salvage",
-  shield_booster: "Shield",
-  armor_repairer: "Armor",
-  hardener: "Hardener",
-  passive: "Passive"
+// Short uppercase tags used as secondary text on module buttons (icon is primary)
+const MODULE_KIND_ABBREV: Record<string, string> = {
+  laser: "LASER",
+  railgun: "RAIL",
+  missile: "MSL",
+  mining_laser: "MINE",
+  afterburner: "AB",
+  webifier: "WEB",
+  warp_disruptor: "SCRAM",
+  target_painter: "PAINT",
+  tracking_disruptor: "TRCK",
+  sensor_dampener: "DAMP",
+  energy_neutralizer: "NEUT",
+  salvager: "SALV",
+  shield_booster: "SB",
+  armor_repairer: "AR",
+  hardener: "HARD",
+  passive: ""
 };
 
 type RailButton = {
   label: string;
+  icon?: string;
   command?: CommandAction;
   onClick?: () => void;
   disabled?: boolean;
   tone?: "primary" | "neutral" | "danger";
+};
+
+type WarpBand = {
+  label: string;
+  icon?: string;
+  range: number;
+  tone?: "primary" | "neutral";
 };
 
 
@@ -73,8 +82,10 @@ interface GameHudProps {
   onSetActiveTarget: (ref: SelectableRef | null) => void;
   onUnlockTarget: (ref: SelectableRef) => void;
   onToggleModule: (slotType: ModuleSlot, slotIndex: number) => void;
+  onSetWeaponHoldFire: (holdFire: boolean) => void;
   onActivateBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
   onActivateTacticalSlow: () => void;
+  onSetTimeScale: (value: number) => void;
   onIssueCommand: (command: CommandAction) => void;
   onStopShip: () => void;
   onToggleAutopilot: () => void;
@@ -132,6 +143,22 @@ function formatCapTime(seconds: number) {
   return `${Math.round(seconds)}s`;
 }
 
+function formatAngularVelocity(value?: number) {
+  if (value === undefined) return "—";
+  return `${value.toFixed(3)} rad/s`;
+}
+
+function getModuleStateLabel(
+  runtime: { active: boolean; cycleRemaining: number },
+  needsTarget: boolean,
+  hasTarget: boolean
+) {
+  if (!runtime.active) return "Offline";
+  if (runtime.cycleRemaining > 0) return "Cycling";
+  if (needsTarget && !hasTarget) return "Waiting";
+  return "Online";
+}
+
 function getSystemRiskLabel(danger: number) {
   if (danger <= 1) return "Low Risk";
   if (danger <= 2) return "Medium Risk";
@@ -139,50 +166,88 @@ function getSystemRiskLabel(danger: number) {
   return "Extreme Risk";
 }
 
+function getWarpBands(type: SelectableRef["type"]): WarpBand[] {
+  switch (type) {
+    case "gate":
+      return [
+        { label: "W+0", icon: "✦", range: 0, tone: "primary" },
+        { label: "W+10", icon: "✦", range: 10 },
+        { label: "W+20", icon: "✦", range: 20 },
+        { label: "W+30", icon: "✦", range: 30 }
+      ];
+    case "station":
+      return [
+        { label: "W+0", icon: "✦", range: 0, tone: "primary" },
+        { label: "W+10", icon: "✦", range: 10 },
+        { label: "W+20", icon: "✦", range: 20 },
+        { label: "W+30", icon: "✦", range: 30 }
+      ];
+    case "belt":
+    case "anomaly":
+    case "beacon":
+    case "outpost":
+      return [
+        { label: "W+0", icon: "✦", range: 0, tone: "primary" },
+        { label: "W+10", icon: "✦", range: 10 },
+        { label: "W+20", icon: "✦", range: 20 },
+        { label: "W+30", icon: "✦", range: 30 }
+      ];
+    default:
+      return [{ label: "W+0", icon: "✦", range: 0, tone: "primary" }];
+  }
+}
+
+function makeWarpButtons(target: SelectableRef, type: SelectableRef["type"]) {
+  return getWarpBands(type).map((band) => ({
+    label: band.label,
+    icon: band.icon,
+    command: { type: "warp", target, range: band.range } as const,
+    tone: band.tone ?? "neutral"
+  }));
+}
+
 function makeTravelButtons(targetInfo: ObjectInfo | null): RailButton[] {
   if (!targetInfo) return [];
   const { ref, distance } = targetInfo;
   const target = ref;
-  const warp = { type: "warp", target, range: 130 } as const;
+  const warpButtons = makeWarpButtons(target, ref.type);
+  const defaultWarp = warpButtons[0]?.command ?? ({ type: "warp", target, range: 0 } as const);
   const approach = { type: "approach", target } as const;
 
   switch (ref.type) {
     case "station":
       return [
-        { label: distance > 320 ? "Warp To" : "Approach", command: distance > 320 ? warp : approach, tone: "primary" },
-        { label: "Dock", command: { type: "dock", target }, disabled: distance > 165 }
+        ...(distance > 320 ? warpButtons : [{ icon: "→", label: "Approach", command: approach, tone: "primary" as const }]),
+        { icon: "⬡", label: "Dock", command: { type: "dock", target }, disabled: distance > 165 }
       ];
     case "gate":
       return [
-        { label: distance > 320 ? "Warp To" : "Approach", command: distance > 320 ? warp : approach, tone: "primary" },
-        { label: "Jump", command: { type: "jump", target }, disabled: distance > 150 }
+        ...(distance > 320 ? warpButtons : [{ icon: "→", label: "Approach", command: approach, tone: "primary" as const }]),
+        { icon: "⊟", label: "Jump", command: { type: "jump", target }, disabled: distance > 150 }
       ];
     case "enemy":
       return [
-        { label: distance > 420 ? "Warp To" : "Approach", command: distance > 420 ? warp : approach, tone: "primary" },
-        { label: "Orbit 180", command: { type: "orbit", target, range: 180 } },
-        { label: "Keep 320", command: { type: "keep_range", target, range: 320 } }
+        { icon: distance > 420 ? "✦" : "→", label: distance > 420 ? "W+0" : "Approach", command: distance > 420 ? defaultWarp : approach, tone: "primary" },
+        { icon: "↺", label: "Orbit 180", command: { type: "orbit", target, range: 180 } },
+        { icon: "⇤", label: "Keep 320", command: { type: "keep_range", target, range: 320 } }
       ];
     case "asteroid":
       return [
-        { label: distance > 420 ? "Warp To" : "Approach", command: distance > 420 ? warp : approach, tone: "primary" },
-        { label: "Orbit 100", command: { type: "orbit", target, range: 100 } }
+        { icon: distance > 420 ? "✦" : "→", label: distance > 420 ? "W+0" : "Approach", command: distance > 420 ? defaultWarp : approach, tone: "primary" },
+        { icon: "↺", label: "Orbit 100", command: { type: "orbit", target, range: 100 } }
       ];
     case "wreck":
     case "loot":
       return [
-        { label: distance > 320 ? "Warp To" : "Approach", command: distance > 320 ? warp : approach, tone: "primary" }
+        { icon: distance > 320 ? "✦" : "→", label: distance > 320 ? "W+0" : "Approach", command: distance > 320 ? defaultWarp : approach, tone: "primary" }
       ];
     case "belt":
     case "anomaly":
     case "outpost":
     case "beacon":
-      return [
-        { label: "Warp To", command: warp, tone: "primary" },
-        { label: "Approach", command: approach }
-      ];
+      return [...warpButtons, { icon: "→", label: "Approach", command: approach }];
     default:
-      return [{ label: distance > 320 ? "Warp To" : "Approach", command: distance > 320 ? warp : approach, tone: "primary" }];
+      return [{ icon: distance > 320 ? "✦" : "→", label: distance > 320 ? "W+0" : "Approach", command: distance > 320 ? defaultWarp : approach, tone: "primary" }];
   }
 }
 
@@ -195,38 +260,35 @@ function makeActionButtons(
   if (!targetInfo) return [];
   const target = targetInfo.ref;
   const trackButton: RailButton = {
+    icon: "◎",
     label: selectedIsActive ? "Tracking" : "Track",
     onClick: () => onSetActiveTarget(selectedIsActive ? null : target),
     tone: selectedIsActive ? "primary" : "neutral"
   };
-  const stopButton: RailButton = { label: "Stop", command: { type: "stop" }, tone: "danger" };
+  const stopButton: RailButton = { icon: "◼", label: "Stop", command: { type: "stop" }, tone: "danger" };
 
   switch (target.type) {
     case "enemy":
       return [
-        { label: selectedIsLocked ? "Locked" : "Lock", command: { type: "lock", target }, disabled: selectedIsLocked },
+        { icon: "⌖", label: selectedIsLocked ? "Locked" : "Lock", command: { type: "lock", target }, disabled: selectedIsLocked },
         trackButton,
-        { label: "Fire", command: { type: "attack", target }, tone: "primary" },
+        { icon: "◈", label: "Fire", command: { type: "attack", target }, tone: "primary" },
         stopButton
       ];
     case "asteroid":
       return [
-        { label: "Mine", command: { type: "mine", target }, tone: "primary" },
+        { icon: "⛏", label: "Mine", command: { type: "mine", target }, tone: "primary" },
         stopButton
       ];
     case "wreck":
       return [
-        { label: "Salvage", command: { type: "salvage", target }, tone: "primary" },
+        { icon: "◇", label: "Salvage", command: { type: "salvage", target }, tone: "primary" },
         stopButton
       ];
     case "station":
-      return [
-        stopButton
-      ];
+      return [stopButton];
     case "gate":
-      return [
-        stopButton
-      ];
+      return [stopButton];
     default:
       return [stopButton];
   }
@@ -243,8 +305,10 @@ export function GameHud({
   onSetActiveTarget,
   onUnlockTarget,
   onToggleModule,
+  onSetWeaponHoldFire,
   onActivateBuild,
   onActivateTacticalSlow,
+  onSetTimeScale,
   onIssueCommand,
   onStopShip,
   onToggleAutopilot,
@@ -257,6 +321,7 @@ export function GameHud({
     selectedInfo,
     activeTargetInfo,
     lockedTargetInfos,
+    pendingLockInfos,
     overview,
     activeTransportMission,
     activeProceduralContract,
@@ -266,6 +331,7 @@ export function GameHud({
   } = snapshot;
   const ship = playerShipById[world.player.hullId];
   const boundary = world.boundary;
+  const localSite = world.localSite;
   const roundedCargoCapacity = Math.round(derived.cargoCapacity);
   const objectiveRef =
     activeTransportMission && activeTransportMission.objectiveSystemId === world.currentSectorId
@@ -303,11 +369,13 @@ export function GameHud({
   const tacticalSlow = world.player.tacticalSlow;
   const tacticalActive = tacticalSlow.activeRemaining > 0;
   const tacticalReady = !tacticalActive && tacticalSlow.cooldownRemaining <= 0;
+  const timeScale = Math.max(0.25, Math.min(3, world.timeScale || 1));
   const tacticalStatus = tacticalActive
     ? `Active ${tacticalSlow.activeRemaining.toFixed(1)}s`
     : tacticalSlow.cooldownRemaining > 0
       ? `Cooldown ${Math.ceil(tacticalSlow.cooldownRemaining)}s`
       : "Ready";
+  const timeScaleOptions = [0.5, 0.75, 1, 1.5, 2, 3];
   const systemRiskLabel = getSystemRiskLabel(sector.danger);
 
   const filteredOverview = useMemo(() => {
@@ -352,16 +420,17 @@ export function GameHud({
   function getModulePresentation(slotType: ModuleSlot, slotIndex: number) {
     const runtime = world.player.modules[slotType][slotIndex];
     if (!runtime?.moduleId) {
-      return { label: "—", detail: "—", progress: 0, tone: "empty" as const, kind: null as string | null };
+      return { label: "—", detail: "—", progress: 0, tone: "empty" as const, kind: null as string | null, stateLabel: "Empty" };
     }
 
     const module = moduleById[runtime.moduleId];
     if (!module) {
-      return { label: runtime.moduleId, detail: "—", progress: 0, tone: "empty" as const, kind: null as string | null };
+      return { label: runtime.moduleId, detail: "—", progress: 0, tone: "empty" as const, kind: null as string | null, stateLabel: "Empty" };
     }
 
     const needsTarget = Boolean(module.requiresTarget?.length);
     const hasTarget = Boolean(activeTargetInfo && (!module.range || activeTargetInfo.distance <= module.range));
+    const capUse = moduleCapUsePerSecond(module);
     const cycleTime = module.cycleTime ?? 0;
     const progress =
       cycleTime > 0 && runtime.cycleRemaining > 0
@@ -373,28 +442,44 @@ export function GameHud({
     if (!runtime.active) {
       return {
         label: module.name,
-        detail: "⏸",
+        detail: `Off${capUse > 0 ? ` · ${capUse.toFixed(1)}/s` : ""}`,
         progress: 0,
         tone: "idle" as const,
-        kind: module.kind
+        kind: module.kind,
+        stateLabel: "Offline"
       };
     }
 
     if (runtime.cycleRemaining > 0) {
       return {
         label: module.name,
-        detail: `◷ ${runtime.cycleRemaining.toFixed(1)}s`,
+        detail: `◷ ${runtime.cycleRemaining.toFixed(1)}s${capUse > 0 ? ` · ${capUse.toFixed(1)}/s` : ""}`,
         progress,
         tone: "cycling" as const,
-        kind: module.kind
+        kind: module.kind,
+        stateLabel: "Cycling"
       };
     }
 
     if (needsTarget && !hasTarget) {
-      return { label: module.name, detail: "⏳", progress: 0, tone: "blocked" as const, kind: module.kind };
+      return {
+        label: module.name,
+        detail: `Wait${capUse > 0 ? ` · ${capUse.toFixed(1)}/s` : ""}`,
+        progress: 0,
+        tone: "blocked" as const,
+        kind: module.kind,
+        stateLabel: "Waiting"
+      };
     }
 
-    return { label: module.name, detail: "●", progress: 1, tone: "active" as const, kind: module.kind };
+    return {
+      label: module.name,
+      detail: `On${capUse > 0 ? ` · ${capUse.toFixed(1)}/s` : ""}`,
+      progress: 1,
+      tone: "active" as const,
+      kind: module.kind,
+      stateLabel: "Online"
+    };
   }
 
   function getModuleTooltip(slotType: ModuleSlot, slotIndex: number) {
@@ -480,10 +565,54 @@ export function GameHud({
                 activeMissionRoute.nextStep ? ` · next ${activeMissionRoute.nextStep.gateName}` : ""
               }`
           : "Route unavailable";
+  const routeTracker = useMemo(() => {
+    if (activeTransportMission) {
+      return {
+        title: activeTransportMission.title,
+        destination: activeTransportMission.objectiveText,
+        currentSystem: sector.name,
+        jumpsRemaining: activeTransportMission.jumpsRemaining,
+        nextGate: activeTransportMission.nextGateName ?? "Route planned",
+        routeMode: activeTransportMission.recommendedRoute,
+        risk: activeTransportMission.routeRisk
+      };
+    }
+    if (world.routePlan) {
+      const destinationSystem = sectorById[world.routePlan.destinationSystemId];
+      const destinationName =
+        world.routePlan.destinationDestinationId
+          ? getSystemDestination(world.routePlan.destinationSystemId, world.routePlan.destinationDestinationId)?.name
+          : destinationSystem?.name;
+      return {
+        title: "Route Tracker",
+        destination: destinationName ?? world.routePlan.destinationSystemId,
+        currentSystem: sector.name,
+        jumpsRemaining: world.routePlan.steps.length,
+        nextGate: snapshot.nextRouteStep?.gateName ?? "In-system",
+        routeMode: world.routePlan.preference,
+        risk: null as string | null
+      };
+    }
+    if (activeMissionRoute?.route || activeMissionRoute?.targetDestination || activeMissionRoute?.targetSystem) {
+      return {
+        title: activeMission?.title ?? "Mission Route",
+        destination: activeMissionRoute?.targetDestination?.name ?? activeMissionRoute?.targetSystem?.name ?? "Objective",
+        currentSystem: sector.name,
+        jumpsRemaining: activeMissionRoute?.route?.steps.length ?? 0,
+        nextGate: activeMissionRoute?.nextStep?.gateName ?? "In-system",
+        routeMode: activeMissionRoute?.route?.preference ?? "safer",
+        risk: null as string | null
+      };
+    }
+    return null;
+  }, [activeMission?.title, activeMissionRoute, activeTransportMission, sector.name, snapshot.nextRouteStep?.gateName, world.routePlan]);
   const selectedCombatTone = selectedInfo?.combatProfileTone ?? null;
   const selectedIsLocked = Boolean(
     selectedInfo && lockedTargetInfos.some((info) => info.ref.id === selectedInfo.ref.id && info.ref.type === selectedInfo.ref.type)
   );
+  const selectedPendingLock = selectedInfo
+    ? pendingLockInfos.find((entry) => entry.info.ref.id === selectedInfo.ref.id && entry.info.ref.type === selectedInfo.ref.type) ?? null
+    : null;
   const selectedIsActive = Boolean(
     selectedInfo && activeTargetInfo && activeTargetInfo.ref.id === selectedInfo.ref.id && activeTargetInfo.ref.type === selectedInfo.ref.type
   );
@@ -496,6 +625,9 @@ export function GameHud({
       <div className="system-badge">
         {sector.name} · {systemRiskLabel} · {currentRegion.name}
       </div>
+      <div className="system-badge" style={{ top: "3.5rem" }}>
+        {localSite.label} · {localSite.subtitle}
+      </div>
       {boundary.warningLevel > 0.04 && boundary.title && (
         <div
           className="system-badge"
@@ -506,13 +638,17 @@ export function GameHud({
                 ? "rgba(200, 155, 255, 0.45)"
                 : boundary.tone === "belt"
                   ? "rgba(127, 220, 255, 0.45)"
-                  : boundary.tone === "engagement"
+                  : boundary.tone === "mission"
                     ? "rgba(255, 166, 120, 0.45)"
-                    : "rgba(127, 220, 255, 0.45)"
+                    : boundary.tone === "gate"
+                      ? "rgba(255, 194, 120, 0.45)"
+                      : boundary.tone === "station"
+                        ? "rgba(129, 255, 210, 0.45)"
+            : "rgba(127, 220, 255, 0.45)"
           }}
         >
-          {boundary.title}
-          {boundary.active ? " · gravity rebound" : ""}
+          {boundary.title} · {boundary.profile.visualLabel}
+          {boundary.zone === "recovery" ? " · recovery" : boundary.active ? " · containment" : ""}
         </div>
       )}
 
@@ -539,21 +675,38 @@ export function GameHud({
                   {snapshot.nextRouteStep && <span title="Next gate">⊟ {snapshot.nextRouteStep.gateName}</span>}
                 </div>
                 <div className="tactical-status-row">
-                  <span className={`status-chip${capacitorStatus.pressure === "stable" ? " active" : ""}`}>
-                    Cap {derived.capacitorRegen.toFixed(1)}/s regen · {capacitorStatus.activeLoad.toFixed(1)}/s load
-                  </span>
-                  <span className={`status-chip${capacitorStatus.pressure === "draining" ? " active" : ""}`}>
+                  <span
+                    className={`status-chip cap-status-chip cap-${capacitorStatus.pressure}`}
+                    title={`Cap regen ${derived.capacitorRegen.toFixed(1)}/s · load ${capacitorStatus.activeLoad.toFixed(1)}/s`}
+                  >
+                    ⚡{" "}
                     {capacitorStatus.pressure === "idle"
-                      ? "Cap idle"
+                      ? "idle"
                       : capacitorStatus.net >= 0
-                        ? "Cap stable"
-                        : `Cap ${formatCapTime(capacitorStatus.collapseTime ?? 0)} to dry`}
+                        ? `+${capacitorStatus.net.toFixed(1)}/s`
+                        : capacitorStatus.pressure === "draining"
+                          ? `${formatCapTime(capacitorStatus.collapseTime ?? 0)} dry`
+                          : `${capacitorStatus.net.toFixed(1)}/s`}
                   </span>
+                  {tacticalSlow.capPenaltyRemaining > 0 && <span className="status-chip">Cap −20%</span>}
+                  {tacticalSlow.speedPenaltyRemaining > 0 && <span className="status-chip">Spd −15%</span>}
                 </div>
                 <div className="nav-readout">
                   <strong>{snapshot.navLabel}</strong>
                   <span>{snapshot.nearbyPrompt}</span>
                 </div>
+                {routeTracker && (
+                  <div className="nav-readout">
+                    <strong>{routeTracker.title}</strong>
+                    <span>
+                      Dest {routeTracker.destination} · Current {routeTracker.currentSystem} · Jumps {routeTracker.jumpsRemaining}
+                    </span>
+                    <span>
+                      Next gate {routeTracker.nextGate} · Route {routeTracker.routeMode}
+                      {routeTracker.risk ? ` · ${routeTracker.risk} risk` : ""}
+                    </span>
+                  </div>
+                )}
                 {boundary.warningLevel > 0.04 && boundary.detail && (
                   <div className="tactical-status-row">
                     <span className={`status-chip${boundary.active ? " active" : ""}`}>{boundary.detail}</span>
@@ -584,9 +737,23 @@ export function GameHud({
                   </button>
                 </div>
                 <div className="tactical-status-row">
+                  <span className="status-chip" title="Current simulation speed multiplier">
+                    Time x{timeScale.toFixed(timeScale % 1 === 0 ? 0 : 2)}
+                  </span>
+                  {timeScaleOptions.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`ghost-button mini${Math.abs(timeScale - value) < 0.01 ? " active" : ""}`}
+                      onClick={() => onSetTimeScale(value)}
+                      title={`Set time to x${value.toFixed(value % 1 === 0 ? 0 : 2)}`}
+                    >
+                      x{value.toFixed(value % 1 === 0 ? 0 : 2)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tactical-status-row">
                   <span className={`status-chip${tacticalActive ? " active" : ""}`}>{tacticalStatus}</span>
-                  {tacticalSlow.capPenaltyRemaining > 0 && <span className="status-chip">Cap -20%</span>}
-                  {tacticalSlow.speedPenaltyRemaining > 0 && <span className="status-chip">Speed -15%</span>}
                 </div>
                 <div className="build-strip">
                   {world.player.savedBuilds.map((build) => {
@@ -673,6 +840,7 @@ export function GameHud({
                         if (item.command) onIssueCommand(item.command);
                       }}
                     >
+                      {item.icon && <span className="cmd-icon" aria-hidden="true">{item.icon}</span>}
                       {item.label}
                     </button>
                   ))}
@@ -845,38 +1013,59 @@ export function GameHud({
 
       <div className="hud-bottom">
         <div className="module-bar">
-          {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType) =>
-            world.player.modules[slotType].map((runtime, index) => {
-              const view = getModulePresentation(slotType, index);
-              return (
-                <button
-                  key={`${slotType}-${index}-${runtime.moduleId ?? "empty"}`}
-                  type="button"
-                  className={`module-button ${view.tone} kind-${view.kind ?? "empty"}`}
-                  disabled={!runtime.moduleId || world.player.buildSwap.active}
-                  onClick={() => onToggleModule(slotType, index)}
-                  title={getModuleTooltip(slotType, index)}
-                >
-                  <span className="module-kind-badge" aria-hidden="true">
-                    {view.kind ? (MODULE_KIND_ICON[view.kind] ?? "•") : "·"}
-                  </span>
-                  <div className="module-copy">
-                    <span>
-                      {view.label}
-                      {view.kind && <small>{MODULE_KIND_LABEL[view.kind] ?? view.kind}</small>}
-                    </span>
-                    <span>{getSlotSymbol(slotType)}</span>
-                  </div>
-                  <div className="module-state">
-                    <span>{view.detail}</span>
-                    <div className="module-meter">
+          {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType) => (
+            <div key={slotType} className="module-group">
+              <div className="module-group-label">
+                <span aria-hidden="true">
+                  {slotType === "weapon" ? "⚔" : slotType === "utility" ? "⚙" : "⬡"}
+                </span>
+                <span>{slotType === "weapon" ? "WPN" : slotType === "utility" ? "UTIL" : "TANK"}</span>
+                {slotType === "weapon" && (
+                  <button
+                    type="button"
+                    className={`ghost-button mini${world.player.weaponHoldFire ? " active" : ""}`}
+                    onClick={() => onSetWeaponHoldFire(!world.player.weaponHoldFire)}
+                    title={world.player.weaponHoldFire ? "Release weapons to auto-engage" : "Hold fire and preserve capacitor"}
+                    style={{ marginLeft: "auto", padding: "0.2rem 0.45rem" }}
+                  >
+                    {world.player.weaponHoldFire ? "Hold" : "Auto"}
+                  </button>
+                )}
+              </div>
+              {world.player.modules[slotType].map((runtime, index) => {
+                const view = getModulePresentation(slotType, index);
+                const abbrev = view.kind ? (MODULE_KIND_ABBREV[view.kind] ?? view.kind.slice(0, 5).toUpperCase()) : "—";
+                return (
+                  <button
+                    key={`${slotType}-${index}-${runtime.moduleId ?? "empty"}`}
+                    type="button"
+                    className={`module-button ${view.tone} kind-${view.kind ?? "empty"}`}
+                    disabled={!runtime.moduleId || world.player.buildSwap.active}
+                    onClick={() => onToggleModule(slotType, index)}
+                    title={getModuleTooltip(slotType, index)}
+                  >
+                    <div className="module-icon-row">
+                      <span className="module-icon" aria-hidden="true">
+                        {view.kind ? (MODULE_KIND_ICON[view.kind] ?? "•") : "·"}
+                      </span>
+                      <div className="module-label-col">
+                        {abbrev && <span className="module-kind-tag">{abbrev}</span>}
+                        {view.tone === "cycling" && runtime.cycleRemaining > 0 ? (
+                          <span className="module-state-time">{runtime.cycleRemaining.toFixed(1)}s</span>
+                        ) : view.tone === "blocked" ? (
+                          <span className="module-state-time module-state-wait">wait</span>
+                        ) : null}
+                      </div>
+                      <span className={`module-state-dot dot-${view.tone}`} aria-hidden="true" />
+                    </div>
+                    <div className="module-progress">
                       <span style={{ width: `${view.progress * 100}%` }} />
                     </div>
-                  </div>
-                </button>
-              );
-            })
-          )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 

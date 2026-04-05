@@ -110,6 +110,7 @@ export type NavigationMode =
   | "retreat"
   | "orbit"
   | "align"
+  | "boundary_return"
   | "warping"
   | "docking"
   | "jumping";
@@ -136,6 +137,15 @@ export type RoutePreference = "shortest" | "safer";
 export type DifficultyId = "easy" | "normal" | "hard";
 export type DamageType = "em" | "thermal" | "kinetic" | "explosive";
 export type BuildSlotId = "build-1" | "build-2" | "build-3";
+export type StationIdentityId =
+  | "trade-hub"
+  | "military-outpost"
+  | "industrial-station"
+  | "mining-support"
+  | "frontier-outpost"
+  | "logistics-depot"
+  | "research-exchange"
+  | "salvage-den";
 export type StarterShipConfigId =
   | "balanced-patrol"
   | "missile-runner"
@@ -196,6 +206,8 @@ export interface RegionDefinition {
   dominantFaction: FactionId;
   resourceProfile: ResourceId[];
   gameplayRole: string;
+  identitySummary: string;
+  prepAdvice: string;
   color: string;
   threatSummary?: string;
 }
@@ -300,12 +312,17 @@ export interface FactionDefinition {
   id: FactionId;
   name: string;
   description: string;
+  loreBlurb: string;
+  visualIdentity: string;
   color: string;
   icon: string;
   preferredDamageProfile: DamageProfile;
   preferredResistanceProfile: ResistProfile;
   tankStyle: "shield" | "armor" | "mixed";
   doctrineTags: string[];
+  doctrineSummary: string;
+  enemyArchetypePreferences: string[];
+  prepAdvice: string;
   regions: string[];
   threatSummary: string;
 }
@@ -442,16 +459,49 @@ export interface TacticalSlowState {
   speedPenaltyRemaining: number;
 }
 
+export type PocketType = "transit" | "station" | "gate" | "belt" | "anomaly" | "mission" | "wreck";
+export type BoundaryTone = "transit" | "station" | "gate" | "belt" | "anomaly" | "mission" | "wreck";
+export type BoundaryZone = "active" | "buffer" | "containment" | "recovery";
+
+export interface BoundaryProfile {
+  id: string;
+  type: PocketType;
+  center: Vec2;
+  activeRadius: number;
+  bufferRadius: number;
+  containmentRadius: number;
+  recoveryReleaseRadius: number;
+  pullStrength: number;
+  dampingStrength: number;
+  turnAssistStrength: number;
+  zoneType: BoundaryTone;
+  visualLabel: string;
+  title: string;
+  detail: string;
+}
+
+export interface BoundaryReturnState {
+  active: boolean;
+  releaseRadius: number;
+  suspendedNav: NavigationState | null;
+  recoveryPoint: Vec2 | null;
+  pocketId: string | null;
+  reason: string | null;
+}
+
 export interface BoundaryState {
+  profile: BoundaryProfile;
   warningLevel: number;
   correctionLevel: number;
   active: boolean;
+  zone: BoundaryZone;
   title: string | null;
   detail: string | null;
-  tone: "belt" | "anomaly" | "engagement" | "sensor";
+  tone: BoundaryTone;
   forcedFacing: number | null;
   forcedTurnRate: number;
-  }
+  returnState: BoundaryReturnState;
+}
 
 export interface DeathSummary {
   id: string;
@@ -528,6 +578,9 @@ export interface SolarSystemDefinition {
   security: SecurityBand;
   danger: number;
   description: string;
+  identityLabel: string;
+  gameplayPurpose: string;
+  prepAdvice: string;
   flavorText: string;
   controllingFaction: FactionId;
   factionInfluence?: number;
@@ -617,6 +670,9 @@ export interface CommodityDefinition {
 
 export interface StationMarketProfile {
   stationId: string;
+  identity: StationIdentityId;
+  headline: string;
+  planningNote: string;
   supplyTags: string[];
   demandTags: string[];
   buyMultiplier: number;
@@ -675,6 +731,12 @@ export interface ModuleRuntimeState {
   autoRepeat: boolean;
 }
 
+export interface PendingTargetLock {
+  ref: SelectableRef;
+  progress: number;
+  duration: number;
+}
+
 export interface NavigationState {
   mode: NavigationMode;
   target: SelectableRef | null;
@@ -682,6 +744,26 @@ export interface NavigationState {
   destination: Vec2 | null;
   warpFrom: Vec2 | null;
   warpProgress: number;
+}
+
+export type LocalSiteType =
+  | "transit"
+  | "station"
+  | "gate"
+  | "belt"
+  | "anomaly"
+  | "mission"
+  | "wreck"
+  | "outpost";
+
+export interface LocalSiteState {
+  systemId: string;
+  destinationId: string | null;
+  type: LocalSiteType;
+  center: Vec2;
+  activeRadius: number;
+  label: string;
+  subtitle: string;
 }
 
 export interface RouteStep {
@@ -724,7 +806,9 @@ export interface PlayerState {
   inventory: Inventory;
   equipped: EquippedLoadout;
   modules: Record<ModuleSlot, ModuleRuntimeState[]>;
+  weaponHoldFire: boolean;
   navigation: NavigationState;
+  pendingLocks: PendingTargetLock[];
   queuedUndockActions: CommandAction[];
   effects: CombatEffectsState;
   tacticalSlow: TacticalSlowState;
@@ -777,6 +861,7 @@ export interface ProjectileState {
   damage: number;
   ttl: number;
   target?: SelectableRef | null;
+  impactPosition?: Vec2 | null;
   qualityLabel?: "miss" | "grazing" | "solid" | "excellent";
 }
 
@@ -947,6 +1032,8 @@ export interface DerivedShipStats {
   maxSpeed: number;
   maxSpeedWithAfterburner: number;
   lockRange: number;
+  maxLockedTargets: number;
+  lockTimeMultiplier: number;
   warpSpeed: number;
   cargoCapacity: number;
   interactionRange: number;
@@ -1008,6 +1095,7 @@ export interface GameWorld {
   player: PlayerState;
   difficulty: DifficultyId;
   currentSectorId: string;
+  localSite: LocalSiteState;
   unlockedSectorIds: string[];
   sectors: Record<string, SectorRuntime>;
   missions: Record<string, MissionState>;
@@ -1019,6 +1107,7 @@ export interface GameWorld {
   storyLog: string[];
   routePlan: RoutePlan | null;
   elapsedTime: number;
+  timeScale: number;
   boundary: BoundaryState;
   procgen: ProcgenState;
 }
@@ -1067,11 +1156,13 @@ export interface GameSnapshot {
   derived: DerivedShipStats;
   sector: SolarSystemDefinition;
   currentRegion: RegionDefinition;
+  currentSite: SystemDestination | null;
   currentStation: SystemDestination | null;
   activeMission: MissionDefinition | null;
   selectedInfo: ObjectInfo | null;
   activeTargetInfo: ObjectInfo | null;
   lockedTargetInfos: ObjectInfo[];
+  pendingLockInfos: Array<{ info: ObjectInfo; progress: number; duration: number }>;
   overview: OverviewEntry[];
   navLabel: string;
   nearbyPrompt: string | null;

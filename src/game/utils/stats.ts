@@ -4,6 +4,20 @@ import { playerShipById } from "../data/ships";
 import { commodityById } from "../economy/data/commodities";
 import { CAPACITOR_BALANCE } from "../config/balance";
 
+const MAX_LOCKED_TARGETS_BY_CLASS = {
+  frigate: 4,
+  destroyer: 5,
+  cruiser: 6,
+  industrial: 3
+} as const;
+
+const LOCK_SPEED_BY_CLASS = {
+  frigate: 1.18,
+  destroyer: 1.04,
+  cruiser: 0.92,
+  industrial: 0.86
+} as const;
+
 function applyResistProfile(
   target: { em: number; thermal: number; kinetic: number; explosive: number },
   profile: Partial<{ em: number; thermal: number; kinetic: number; explosive: number }>
@@ -83,6 +97,8 @@ function computeBaseDerivedStats(player: PlayerState) {
     maxSpeed: hull.maxSpeed,
     maxSpeedWithAfterburner: hull.maxSpeed,
     lockRange: hull.lockRange,
+    maxLockedTargets: MAX_LOCKED_TARGETS_BY_CLASS[hull.shipClass],
+    lockTimeMultiplier: LOCK_SPEED_BY_CLASS[hull.shipClass],
     warpSpeed: hull.warpSpeed,
     cargoCapacity: hull.cargoCapacity,
     interactionRange: hull.interactionRange,

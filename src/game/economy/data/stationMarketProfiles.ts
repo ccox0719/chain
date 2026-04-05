@@ -3,6 +3,9 @@ import { StationMarketProfile } from "../../../types/game";
 export const stationMarketProfiles: StationMarketProfile[] = [
   {
     stationId: "lumen-station",
+    identity: "logistics-depot",
+    headline: "Starter logistics hub with stable civilian trade and basic fitting support.",
+    planningNote: "Cheap essentials and steady buyback make it a safe place to fit up, clear cargo, and plan the next short run.",
     supplyTags: ["trade", "logistics", "essentials"],
     demandTags: ["luxury", "high-tech"],
     buyMultiplier: 0.96,
@@ -11,6 +14,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "farpoint-exchange",
+    identity: "trade-hub",
+    headline: "Regional exchange where brokered cargo, modules, and route decisions converge.",
+    planningNote: "Best for broad market scans, higher-end stock, and deciding whether to run safe core routes or risk the fringe shortcut.",
     supplyTags: ["market", "trade", "research", "high-tech"],
     demandTags: ["industrial", "frontier", "military"],
     buyMultiplier: 1.01,
@@ -19,6 +25,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "forge-anchor",
+    identity: "industrial-station",
+    headline: "Heavy fabrication anchor tuned for ore flow, plates, and refinery throughput.",
+    planningNote: "Bring minerals and parts in, fit industrial rigs, and launch mining or hauling runs deeper into the fringe.",
     supplyTags: ["industrial", "mining", "materials"],
     demandTags: ["medical", "frontier", "fuel"],
     buyMultiplier: 0.93,
@@ -27,6 +36,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "ironway-depot",
+    identity: "logistics-depot",
+    headline: "Convoy depot focused on fuel, hull turnaround, and industrial lane support.",
+    planningNote: "A practical stop for cargo refits, fuel-heavy routes, and moving goods between the core and foundry space.",
     supplyTags: ["logistics", "industrial", "fuel"],
     demandTags: ["luxury", "medical"],
     buyMultiplier: 0.95,
@@ -35,6 +47,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "shade-hub",
+    identity: "frontier-outpost",
+    headline: "Thin-skinned frontier hub where repairs, ammo, and survival kits matter more than polish.",
+    planningNote: "Stock for risk here. The prices are rough, but demand for medicine, fuel, and trade goods is real.",
     supplyTags: ["frontier", "salvage", "military"],
     demandTags: ["medical", "fuel", "essentials", "trade"],
     buyMultiplier: 1.08,
@@ -43,6 +58,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "blackwake-den",
+    identity: "salvage-den",
+    headline: "Pirate salvage market with hungry buyers for broken hulls, guns, and black-market resupply.",
+    planningNote: "Dangerous but lucrative. Bring salvage, fuel, and hard cargo if you can survive the lane back out.",
     supplyTags: ["frontier", "salvage", "military"],
     demandTags: ["fuel", "industrial", "medical"],
     buyMultiplier: 1.12,
@@ -51,6 +69,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "ghostlight-haven",
+    identity: "mining-support",
+    headline: "Rough mining haven serving prospectors, scavengers, and expedition crews.",
+    planningNote: "A good place to sell ore and salvage, restock survival goods, and launch back into hazard-heavy resource space.",
     supplyTags: ["salvage", "mining", "frontier"],
     demandTags: ["medical", "food", "fuel", "electronics"],
     buyMultiplier: 1.14,
@@ -59,6 +80,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "glass-quay",
+    identity: "research-exchange",
+    headline: "Mixed industrial and research quay where prototypes, sensors, and precision cargo move fast.",
+    planningNote: "Useful for smarter fits and cleaner margins on tech-linked cargo, especially if you are repositioning for better demand.",
     supplyTags: ["trade", "research", "industrial"],
     demandTags: ["mining", "materials", "high-tech"],
     buyMultiplier: 0.98,
@@ -67,6 +91,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "crown-dais",
+    identity: "trade-hub",
+    headline: "Prestige market hub with luxury turnover, broker depth, and high-end stock.",
+    planningNote: "Sell refined cargo high, browse broad stock, and plan longer routes from a stable center of demand.",
     supplyTags: ["market", "trade", "luxury", "high-tech"],
     demandTags: ["industrial", "frontier", "military"],
     buyMultiplier: 1.04,
@@ -75,6 +102,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "slag-yard",
+    identity: "industrial-station",
+    headline: "Refinery yard built around raw material intake, fuel, and foundry logistics.",
+    planningNote: "Strong for ore and industrial exports, weaker for comfort goods. Fit for work before pushing back into dangerous lanes.",
     supplyTags: ["industrial", "materials", "fuel", "mining"],
     demandTags: ["medical", "luxury", "trade"],
     buyMultiplier: 0.94,
@@ -83,6 +113,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "brass-quay",
+    identity: "logistics-depot",
+    headline: "Trade quay optimized for rerouting freight between industry and frontier demand pockets.",
+    planningNote: "A useful relay for hauling plans, cargo swaps, and checking whether the next leg should be safer or richer.",
     supplyTags: ["logistics", "industrial", "trade"],
     demandTags: ["frontier", "fuel", "medical"],
     buyMultiplier: 0.97,
@@ -91,6 +124,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "ashen-anchor",
+    identity: "frontier-outpost",
+    headline: "Hard-used survival anchor with military stock, emergency repairs, and volatile local demand.",
+    planningNote: "Expensive, exposed, and worth it when you need frontier gear or a fast sell on essentials and fuel.",
     supplyTags: ["frontier", "salvage", "military"],
     demandTags: ["medical", "fuel", "essentials", "technology"],
     buyMultiplier: 1.1,
@@ -99,6 +135,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "hush-hold",
+    identity: "mining-support",
+    headline: "Quiet hold supporting prospectors, survey crews, and research teams working dangerous rock.",
+    planningNote: "Plan mining loops and recovery trips here. Ore, fuel, and practical tech all matter more than broad market choice.",
     supplyTags: ["frontier", "research", "mining"],
     demandTags: ["medical", "food", "fuel", "industrial"],
     buyMultiplier: 1.08,
@@ -107,6 +146,9 @@ export const stationMarketProfiles: StationMarketProfile[] = [
   },
   {
     stationId: "revenant-haven",
+    identity: "frontier-outpost",
+    headline: "Last-stop haven where survival economics dominate and every undock is a commitment.",
+    planningNote: "Good for unloading risky cargo at a premium, bad for assuming you can replace anything cheaply once you launch.",
     supplyTags: ["salvage", "frontier", "military"],
     demandTags: ["medical", "fuel", "industrial", "essentials"],
     buyMultiplier: 1.16,

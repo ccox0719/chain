@@ -1,5 +1,7 @@
 import {
   BuildSlotId,
+  BoundaryState,
+  BoundaryProfile,
   CommandAction,
   CommodityId,
   DamageProfile,
@@ -85,6 +87,7 @@ import {
   subtract
 } from "../utils/vector";
 import { findObjectAtPoint, getObjectInfo, getObjectPosition, getOverviewEntries } from "../world/spaceObjects";
+import { createTransitLocalSite, enterDestinationSite, isDestinationLocal, isPositionInLocalSite, syncLocalSite } from "../world/sites";
 import {
   CAPACITOR_BALANCE,
   COMBAT_BALANCE,
@@ -154,23 +157,26 @@ function emitBurst(
 
 function emitImpact(world: GameWorld, position: Vec2, color: string, moduleId?: string) {
   if (moduleId?.includes("missile")) {
-    // Missile: expanding orange fireball with slow debris
-    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.12, 28, "dot", 42);
-    emitBurst(world, position, "#ffb265", 1, 0, 0, 0.22, 20, "dot", 30);
-    emitBurst(world, position, "#ffb265", 18, 80, 300, 0.55, 5, "spark", 18);
-    emitBurst(world, position, "#ffffff", 6, 60, 180, 0.28, 3, "spark", 12);
-    emitBurst(world, position, "#ff8830", 10, 20, 90, 1.2, 5, "dot", 16);
+    // Missile: big expanding fireball with shockwave and slow ember debris
+    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.16, 44, "dot", 58);
+    emitBurst(world, position, "#ffb265", 1, 0, 0, 0.30, 30, "dot", 44);
+    emitBurst(world, position, "#ffb265", 28, 90, 400, 0.65, 6.5, "spark", 24);
+    emitBurst(world, position, "#ffffff", 12, 70, 240, 0.38, 4, "spark", 18);
+    emitBurst(world, position, "#ff8830", 16, 20, 120, 1.4, 6.5, "dot", 22);
+    emitBurst(world, position, "#ff4400", 8, 5, 45, 2.0, 8, "dot", 20);
   } else if (moduleId?.includes("rail")) {
-    // Railgun: white kinetic punch + blue sparks
-    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.10, 22, "dot", 48);
-    emitBurst(world, position, "#b8e8ff", 14, 120, 380, 0.35, 3.5, "spark", 14);
-    emitBurst(world, position, "#ffffff", 5, 80, 220, 0.22, 2.5, "spark", 20);
-    emitBurst(world, position, "#88ccff", 6, 10, 60, 0.6, 4, "dot", 12);
+    // Railgun: blinding kinetic punch + blue-white sparks spraying back
+    emitBurst(world, position, "#ffffff", 1, 0, 0, 0.14, 36, "dot", 65);
+    emitBurst(world, position, "#b8e8ff", 24, 150, 500, 0.45, 5, "spark", 22);
+    emitBurst(world, position, "#ffffff", 10, 90, 280, 0.30, 3.5, "spark", 26);
+    emitBurst(world, position, "#88ccff", 12, 10, 80, 0.9, 5.5, "dot", 18);
+    emitBurst(world, position, "#ddf6ff", 6, 5, 30, 1.2, 6, "dot", 22);
   } else {
-    // Laser: tight cyan flash + thin sparks
-    emitBurst(world, position, color, 1, 0, 0, 0.10, 12, "dot", 24);
-    emitBurst(world, position, color, 10, 60, 220, 0.28, 2.8, "spark", 12);
-    emitBurst(world, position, "#ffffff", 4, 20, 70, 0.18, 2, "dot", 10);
+    // Laser: sharp flash + crackling sparks
+    emitBurst(world, position, color, 1, 0, 0, 0.13, 22, "dot", 36);
+    emitBurst(world, position, color, 20, 70, 300, 0.36, 4, "spark", 20);
+    emitBurst(world, position, "#ffffff", 8, 30, 100, 0.24, 3, "dot", 18);
+    emitBurst(world, position, color, 10, 10, 55, 0.65, 4.5, "dot", 14);
   }
 }
 
@@ -209,18 +215,25 @@ function emitRepairPulse(world: GameWorld, position: Vec2, kind: "shield" | "arm
 }
 
 function emitExplosion(world: GameWorld, position: Vec2, color: string) {
-  // Instant blinding core flash
-  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.18, 48, "dot", 50);
-  emitBurst(world, position, color, 1, 0, 0, 0.28, 32, "dot", 40);
-  // Outer fast sparks — primary color and white mixed
-  emitBurst(world, position, color, 32, 200, 560, 0.5, 4.5, "spark", 18);
-  emitBurst(world, position, "#ffffff", 14, 140, 380, 0.38, 3, "spark", 14);
-  // Mid-speed diamond shards
-  emitBurst(world, position, color, 10, 70, 200, 1.0, 6, "diamond", 22);
-  // Slower glowing debris — drift and linger
-  emitBurst(world, position, color, 18, 30, 110, 1.4, 5, "dot", 20);
+  // Blinding layered core flash
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.24, 80, "dot", 65);
+  emitBurst(world, position, color, 1, 0, 0, 0.20, 58, "dot", 55);
+  emitBurst(world, position, "#ffffff", 1, 0, 0, 0.42, 44, "dot", 45);
+  // Outer shockwave fast sparks — dense and wide
+  emitBurst(world, position, color, 56, 240, 700, 0.58, 6, "spark", 24);
+  emitBurst(world, position, "#ffffff", 24, 160, 480, 0.44, 4, "spark", 20);
+  // Secondary ring of hot sparks
+  emitBurst(world, position, "#ffffff", 14, 100, 260, 0.32, 3, "spark", 16);
+  // Mid-speed diamond shards tumbling out
+  emitBurst(world, position, color, 18, 80, 280, 1.2, 8, "diamond", 28);
+  emitBurst(world, position, "#ffffff", 8, 50, 160, 0.9, 5, "diamond", 20);
+  // Slower glowing debris cloud — drifts and lingers
+  emitBurst(world, position, color, 32, 30, 150, 1.8, 7, "dot", 26);
+  emitBurst(world, position, "#ff9040", 14, 15, 80, 2.2, 8, "dot", 24);
   // Ember core — almost stationary, long glow
-  emitBurst(world, position, "#ffffff", 10, 5, 28, 2.0, 7, "dot", 26);
+  emitBurst(world, position, "#ffffff", 16, 5, 32, 2.8, 9, "dot", 32);
+  const sector = world.sectors[world.currentSectorId];
+  sector.cameraShake = Math.min(14, (sector.cameraShake ?? 0) + 6);
 }
 
 function emitMiningYield(world: GameWorld, position: Vec2, resource: ResourceId) {
@@ -316,7 +329,7 @@ function updateParticles(world: GameWorld, dt: number) {
     p.ttl -= dt;
   }
   sector.particles = sector.particles.filter((p) => p.ttl > 0);
-  if (sector.particles.length > 700) sector.particles = sector.particles.slice(-700);
+  if (sector.particles.length > 1400) sector.particles = sector.particles.slice(-1400);
 }
 
 function pushStory(world: GameWorld, message: string) {
@@ -372,239 +385,75 @@ function getCurrentStation(world: GameWorld) {
   return getSystemStation(world.currentSectorId);
 }
 
-const BOUNDARY = MOVEMENT_BALANCE.boundary;
 const TERRAIN = MOVEMENT_BALANCE.terrain;
 
-function getBoundaryContext(world: GameWorld) {
-  const player = world.player;
-  const destinations = getSystemDestinations(world.currentSectorId);
-  const nearest = destinations
-    .filter((entry) => entry.kind === "anomaly" || entry.kind === "belt" || entry.kind === "wreck")
-    .map((entry) => ({ entry, distance: distance(player.position, entry.position) }))
-    .sort((left, right) => left.distance - right.distance)[0];
-
-  if (nearest?.entry.kind === "anomaly" && nearest.distance <= 520) {
-    return {
-      tone: "anomaly" as const,
-      title: "Deadspace instability detected",
-      detail: "The pocket lets you drift wide, then the field snaps you back inward."
-    };
-  }
-  if (nearest?.entry.kind === "belt" && nearest.distance <= 460) {
-    return {
-      tone: "belt" as const,
-      title: "Leaving belt perimeter",
-      detail: "Dust gravity and lane wash will sling the ship back toward the extraction zone."
-    };
-  }
-  const activeProcedural = getActiveProceduralContract(world);
-  const activeMission = getActiveMission(world);
-  const activeTransport = getActiveTransportMissionDefinition(world);
-  if (
-    (activeProcedural && activeProcedural.targetSystemId === world.currentSectorId) ||
-    (activeMission && activeMission.targetSystemId === world.currentSectorId) ||
-    (activeTransport && getTransportObjectiveTargetSystem(world, activeTransport) === world.currentSectorId)
-  ) {
-    return {
-      tone: "engagement" as const,
-      title: "Leaving engagement zone",
-      detail: "You can drift beyond the pocket edge briefly before the local well throws you back."
-    };
-  }
-  return {
-    tone: "sensor" as const,
-    title: "Navigation boundary reached",
-    detail: "The local grid weakens near the edge, then pulls your ship back like a gravity sling."
-  };
+function applySalvageBoundaryPull(world: GameWorld, dt: number) {
+  void world;
+  void dt;
 }
 
-function getBoundaryReboundPoint(world: GameWorld, inward: Vec2): Vec2 {
-  const sectorDef = getCurrentSectorDef(world);
-  return {
-    x: clamp(
-      world.player.position.x + inward.x * BOUNDARY.reboundDistance,
-      BOUNDARY.visibleMargin,
-      sectorDef.width - BOUNDARY.visibleMargin
-    ),
-    y: clamp(
-      world.player.position.y + inward.y * BOUNDARY.reboundDistance,
-      BOUNDARY.visibleMargin,
-      sectorDef.height - BOUNDARY.visibleMargin
-    )
-  };
+function applyEnemyBoundaryContainment(
+  world: GameWorld,
+  position: Vec2,
+  velocity: Vec2,
+  dt: number
+) {
+  void world;
+  void dt;
+  return { position, velocity };
 }
 
-function applyPlayerBoundaryBehavior(world: GameWorld, dt: number, maxSpeed: number) {
-  const sectorDef = getCurrentSectorDef(world);
-  const { player } = world;
-  const nav = player.navigation;
-  const distanceLeft = player.position.x;
-  const distanceRight = sectorDef.width - player.position.x;
-  const distanceTop = player.position.y;
-  const distanceBottom = sectorDef.height - player.position.y;
-  const minDistanceToEdge = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
-  const warningDepth = Math.max(0, BOUNDARY.warningDistance - minDistanceToEdge);
-  const gravityDepth = Math.max(0, BOUNDARY.gravityStartDistance - minDistanceToEdge);
-  const warningLevel = clamp(warningDepth / BOUNDARY.warningDistance, 0, 1);
-  const correctionLevel = clamp(gravityDepth / BOUNDARY.gravityStartDistance, 0, 1);
-
+function applyPlayerBoundaryBehavior(world: GameWorld, dt: number) {
+  syncLocalSite(world);
   const boundary = world.boundary;
-  const context = getBoundaryContext(world);
-  boundary.warningLevel = warningLevel;
-  boundary.correctionLevel = correctionLevel;
-  boundary.tone = context.tone;
-  boundary.title = warningLevel > 0.04 ? context.title : null;
-  boundary.detail = warningLevel > 0.04 ? context.detail : null;
+  boundary.profile.center = { ...world.localSite.center };
+  boundary.profile.activeRadius = world.localSite.activeRadius;
+  boundary.profile.bufferRadius = world.localSite.activeRadius * 1.15;
+  boundary.profile.containmentRadius = world.localSite.activeRadius * 1.28;
+  boundary.profile.recoveryReleaseRadius = world.localSite.activeRadius * 0.82;
+  boundary.profile.visualLabel = world.localSite.label;
+  boundary.profile.title = world.localSite.label;
+  boundary.profile.detail = world.localSite.subtitle;
+  boundary.tone =
+    world.localSite.type === "anomaly"
+      ? "anomaly"
+      : world.localSite.type === "belt"
+        ? "belt"
+        : world.localSite.type === "mission"
+          ? "mission"
+          : world.localSite.type === "gate"
+            ? "gate"
+            : world.localSite.type === "station" || world.localSite.type === "outpost"
+              ? "station"
+              : "transit";
+  boundary.title = null;
+  boundary.detail = null;
+  boundary.warningLevel = 0;
+  boundary.correctionLevel = 0;
+  boundary.active = false;
+  boundary.zone = "active";
   boundary.forcedFacing = null;
   boundary.forcedTurnRate = 0;
-
-  const center = { x: sectorDef.width / 2, y: sectorDef.height / 2 };
-  const inward = normalize(subtract(center, player.position));
-  const wasActive = boundary.active;
-  boundary.active = correctionLevel > 0.02;
-
-  if (boundary.active && !wasActive) {
-    pushStory(world, context.title);
-  }
-
-  const overshootLeft = Math.max(0, -distanceLeft);
-  const overshootRight = Math.max(0, -distanceRight);
-  const overshootTop = Math.max(0, -distanceTop);
-  const overshootBottom = Math.max(0, -distanceBottom);
-  const overshoot = Math.max(overshootLeft, overshootRight, overshootTop, overshootBottom);
-  const slingshotLevel = clamp(overshoot / BOUNDARY.overshootAllowance, 0, 1);
-
-  if (warningLevel > 0.04) {
-    boundary.forcedFacing = Math.atan2(inward.y, inward.x);
-    boundary.forcedTurnRate = 3.8 + warningLevel * 3.6 + correctionLevel * 3.2 + slingshotLevel * 6.4;
-  }
-
-  if (correctionLevel > 0 || slingshotLevel > 0) {
-    if (
-      nav.target === null &&
-      nav.destination &&
-      nav.mode !== "jumping" &&
-      nav.mode !== "warping" &&
-      nav.mode !== "docking"
-    ) {
-      const destinationDirection = normalize(subtract(nav.destination, player.position));
-      const destinationPush = destinationDirection.x * inward.x + destinationDirection.y * inward.y;
-      const shouldReverseCourse =
-        slingshotLevel > 0.04 ||
-        correctionLevel > 0.38 ||
-        (correctionLevel > 0.08 && destinationPush < -0.1);
-      if (shouldReverseCourse) {
-        nav.mode = "approach";
-        nav.destination = getBoundaryReboundPoint(world, inward);
-        nav.desiredRange = 0;
-        nav.warpFrom = null;
-        nav.warpProgress = 0;
-      }
-    }
-
-    const edgePull = correctionLevel * 0.55 + Math.pow(slingshotLevel, 1.35) * 1.9;
-    const inwardVelocity = player.velocity.x * inward.x + player.velocity.y * inward.y;
-    if (inwardVelocity < 0) {
-      const reversalStrength = 2.1 + slingshotLevel * 2.4;
-      player.velocity = add(player.velocity, scale(inward, -inwardVelocity * reversalStrength));
-    }
-    player.velocity = add(player.velocity, scale(inward, BOUNDARY.returnAcceleration * (1 + edgePull * 1.45) * dt));
-    const minimumInwardSpeed =
-      BOUNDARY.rubberBandMinSpeed * (correctionLevel * 0.45 + slingshotLevel * 1.1);
-    if (minimumInwardSpeed > 0) {
-      const correctedInwardVelocity = player.velocity.x * inward.x + player.velocity.y * inward.y;
-      if (correctedInwardVelocity < minimumInwardSpeed) {
-        player.velocity = add(player.velocity, scale(inward, minimumInwardSpeed - correctedInwardVelocity));
-      }
-    }
-    boundary.forcedFacing = Math.atan2(inward.y, inward.x);
-    boundary.forcedTurnRate = Math.max(
-      boundary.forcedTurnRate,
-      5.4 + warningLevel * 3.2 + correctionLevel * 4.5 + slingshotLevel * 7.2
-    );
-    player.velocity = scale(player.velocity, 1 - Math.min(0.32, dt * (BOUNDARY.slingshotDamping + slingshotLevel * 0.55)));
-  }
-
-  if (slingshotLevel > 0) {
-    const shift = { x: 0, y: 0 };
-    if (player.position.x < BOUNDARY.visibleMargin) {
-      shift.x = BOUNDARY.visibleMargin - player.position.x;
-    } else if (player.position.x > sectorDef.width - BOUNDARY.visibleMargin) {
-      shift.x = (sectorDef.width - BOUNDARY.visibleMargin) - player.position.x;
-    }
-    if (player.position.y < BOUNDARY.visibleMargin) {
-      shift.y = BOUNDARY.visibleMargin - player.position.y;
-    } else if (player.position.y > sectorDef.height - BOUNDARY.visibleMargin) {
-      shift.y = (sectorDef.height - BOUNDARY.visibleMargin) - player.position.y;
-    }
-
-    if (shift.x !== 0 || shift.y !== 0) {
-      const sector = getCurrentSector(world);
-      const moveBody = (position: Vec2) => {
-        position.x += shift.x;
-        position.y += shift.y;
-      };
-      const isOutOfBounds = (position: Vec2) =>
-        position.x < BOUNDARY.visibleMargin ||
-        position.x > sectorDef.width - BOUNDARY.visibleMargin ||
-        position.y < BOUNDARY.visibleMargin ||
-        position.y > sectorDef.height - BOUNDARY.visibleMargin;
-
-      moveBody(player.position);
-
-      sector.enemies.forEach((enemy) => {
-        if (distance(enemy.position, player.position) <= BOUNDARY.clusterPullRadius) {
-          moveBody(enemy.position);
-          moveBody(enemy.patrolAnchor);
-          if (enemy.patrolTarget) moveBody(enemy.patrolTarget);
-        }
-      });
-
-      sector.loot.forEach((drop) => {
-        if (distance(drop.position, player.position) <= BOUNDARY.clusterPullRadius || isOutOfBounds(drop.position)) {
-          moveBody(drop.position);
-        }
-      });
-
-      sector.wrecks.forEach((wreck) => {
-        if (distance(wreck.position, player.position) <= BOUNDARY.clusterPullRadius || isOutOfBounds(wreck.position)) {
-          moveBody(wreck.position);
-        }
-      });
-
-      sector.floatingText.forEach((entry) => {
-        if (distance(entry.position, player.position) <= BOUNDARY.clusterPullRadius) {
-          moveBody(entry.position);
-        }
-      });
-
-      if (shift.x !== 0) {
-        player.velocity.x *= BOUNDARY.clusterDamping;
-      }
-      if (shift.y !== 0) {
-        player.velocity.y *= BOUNDARY.clusterDamping;
-      }
+  if (boundary.returnState.active || world.player.navigation.mode === "boundary_return") {
+    const resume = boundary.returnState.suspendedNav;
+    boundary.returnState.active = false;
+    boundary.returnState.reason = null;
+    boundary.returnState.suspendedNav = null;
+    boundary.returnState.recoveryPoint = null;
+    boundary.returnState.pocketId = null;
+    boundary.returnState.releaseRadius = 0;
+    if (resume) {
+      world.player.navigation.mode = resume.mode;
+      world.player.navigation.target = resume.target;
+      world.player.navigation.desiredRange = resume.desiredRange;
+      world.player.navigation.destination = resume.destination;
+      world.player.navigation.warpFrom = resume.warpFrom;
+      world.player.navigation.warpProgress = resume.warpProgress;
+    } else if (world.player.navigation.mode === "boundary_return") {
+      setIdle(world.player.navigation);
     }
   }
-
-  const minX = -BOUNDARY.overshootAllowance;
-  const maxX = sectorDef.width + BOUNDARY.overshootAllowance;
-  const minY = -BOUNDARY.overshootAllowance;
-  const maxY = sectorDef.height + BOUNDARY.overshootAllowance;
-  if (player.position.x < minX) {
-    player.position.x = minX;
-    player.velocity.x = Math.abs(player.velocity.x) + maxSpeed * 0.28;
-  } else if (player.position.x > maxX) {
-    player.position.x = maxX;
-    player.velocity.x = -Math.abs(player.velocity.x) - maxSpeed * 0.28;
-  }
-  if (player.position.y < minY) {
-    player.position.y = minY;
-    player.velocity.y = Math.abs(player.velocity.y) + maxSpeed * 0.28;
-  } else if (player.position.y > maxY) {
-    player.position.y = maxY;
-    player.velocity.y = -Math.abs(player.velocity.y) - maxSpeed * 0.28;
-  }
+  void dt;
 }
 
 function getDifficultyModifiers(world: GameWorld) {
@@ -622,7 +471,9 @@ function getTacticalSlowState(world: GameWorld) {
 }
 
 function getWorldTimeScale(world: GameWorld) {
-  return getTacticalSlowState(world).activeRemaining > 0 ? CAPACITOR_BALANCE.tacticalSlow.timeScale : 1;
+  const baseScale = Math.max(0.25, Math.min(3, world.timeScale || 1));
+  const tacticalScale = getTacticalSlowState(world).activeRemaining > 0 ? CAPACITOR_BALANCE.tacticalSlow.timeScale : 1;
+  return baseScale * tacticalScale;
 }
 
 function getShipPowerTier(shipId: string) {
@@ -1709,10 +1560,12 @@ export function dock(world: GameWorld) {
   if (!canDock(world)) return false;
   const derived = computeDerivedStats(world.player);
   world.dockedStationId = station.id;
+  enterDestinationSite(world, station.id);
   world.player.velocity = { x: 0, y: 0 };
   world.player.shield = derived.maxShield;
   world.player.capacitor = derived.capacitorCapacity;
   setIdle(world.player.navigation);
+  world.player.pendingLocks = [];
   pushStory(world, `Docked at ${station.name}.`);
   normalizeTransportMissionStates(world);
   normalizeDeliveryMissionStates(world);
@@ -1768,10 +1621,12 @@ export function undock(world: GameWorld) {
   const station = getCurrentStation(world);
   if (!station) return;
   world.dockedStationId = null;
+  enterDestinationSite(world, station.id);
   world.player.position = { x: station.position.x + 120, y: station.position.y + 24 };
   world.player.rotation = 0;
   world.player.velocity = { x: 0, y: 0 };
   setIdle(world.player.navigation);
+  world.player.pendingLocks = [];
   pushStory(world, `Undocked from ${station.name}.`);
   const queued = [...world.player.queuedUndockActions];
   world.player.queuedUndockActions = [];
@@ -2110,6 +1965,39 @@ function queueUndockAction(world: GameWorld, command: CommandAction) {
   pushStory(world, `Queued on undock: ${command.type.replace("_", " ")}`);
 }
 
+function getLockTimeSeconds(world: GameWorld, ref: SelectableRef) {
+  const derived = computeDerivedStats(world.player);
+  const info = getObjectInfo(world, ref);
+  const signature = Math.max(18, info?.signatureRadius ?? 40);
+  return clamp((160 / signature) * (2.2 / Math.max(0.6, derived.lockTimeMultiplier)), 0.7, 4.8);
+}
+
+function updatePendingLocks(world: GameWorld, dt: number) {
+  if (world.player.pendingLocks.length === 0) return;
+  const nextPending: typeof world.player.pendingLocks = [];
+  for (const pending of world.player.pendingLocks) {
+    const info = getObjectInfo(world, pending.ref);
+    if (!info) continue;
+    const derived = computeDerivedStats(world.player);
+    if (info.distance > derived.lockRange * world.player.effects.lockRangeMultiplier) continue;
+    const progress = pending.progress + dt;
+    if (progress >= pending.duration) {
+      if (!world.lockedTargets.find((entry) => entry.id === pending.ref.id && entry.type === pending.ref.type)) {
+        world.lockedTargets.push(pending.ref);
+      }
+      const selectedMatchesPending =
+        world.selectedObject?.id === pending.ref.id && world.selectedObject?.type === pending.ref.type;
+      if (!world.activeTarget || world.activeTarget.type !== "enemy" || selectedMatchesPending) {
+        world.activeTarget = pending.ref;
+      }
+      pushStory(world, `Target locked: ${info.name}.`);
+      continue;
+    }
+    nextPending.push({ ...pending, progress });
+  }
+  world.player.pendingLocks = nextPending;
+}
+
 export function selectObject(world: GameWorld, ref: SelectableRef | null) {
   world.selectedObject = ref;
 }
@@ -2118,8 +2006,30 @@ export function lockTarget(world: GameWorld, ref: SelectableRef) {
   const derived = computeDerivedStats(world.player);
   const info = getObjectInfo(world, ref);
   if (!info || info.distance > derived.lockRange * world.player.effects.lockRangeMultiplier) return false;
+  if (ref.type !== "enemy") {
+    world.activeTarget = ref;
+    return true;
+  }
+  const currentLockCount = world.lockedTargets.length + world.player.pendingLocks.length;
+  if (
+    !world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type) &&
+    !world.player.pendingLocks.find((entry) => entry.ref.id === ref.id && entry.ref.type === ref.type) &&
+    currentLockCount >= derived.maxLockedTargets
+  ) {
+    pushStory(world, `Target control saturated. Max locks ${derived.maxLockedTargets}.`);
+    return false;
+  }
   if (!world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type)) {
-    world.lockedTargets.push(ref);
+    if (!world.player.pendingLocks.find((entry) => entry.ref.id === ref.id && entry.ref.type === ref.type)) {
+      const lockDuration = getLockTimeSeconds(world, ref);
+      world.player.pendingLocks.push({
+        ref,
+        progress: 0,
+        duration: lockDuration
+      });
+      pushStory(world, `Locking target: ${info.name} (${lockDuration.toFixed(1)}s).`);
+    }
+    return true;
   }
   if (!world.activeTarget) {
     world.activeTarget = ref;
@@ -2128,6 +2038,9 @@ export function lockTarget(world: GameWorld, ref: SelectableRef) {
 }
 
 export function unlockTarget(world: GameWorld, ref: SelectableRef) {
+  world.player.pendingLocks = world.player.pendingLocks.filter(
+    (entry) => !(entry.ref.id === ref.id && entry.ref.type === ref.type)
+  );
   world.lockedTargets = world.lockedTargets.filter(
     (entry) => !(entry.id === ref.id && entry.type === ref.type)
   );
@@ -2139,6 +2052,12 @@ export function unlockTarget(world: GameWorld, ref: SelectableRef) {
 export function setActiveTarget(world: GameWorld, ref: SelectableRef | null) {
   if (!ref) {
     world.activeTarget = null;
+    return;
+  }
+  const info = getObjectInfo(world, ref);
+  if (!info) return;
+  if (ref.type !== "enemy") {
+    world.activeTarget = ref;
     return;
   }
   const locked = world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type);
@@ -2196,11 +2115,47 @@ function issuePointNav(world: GameWorld, destination: Vec2) {
   world.player.navigation.warpProgress = 0;
 }
 
+function getDestinationIfSameSystem(world: GameWorld, ref: SelectableRef | null) {
+  if (!ref) return null;
+  if (
+    ref.type !== "station" &&
+    ref.type !== "gate" &&
+    ref.type !== "belt" &&
+    ref.type !== "anomaly" &&
+    ref.type !== "outpost" &&
+    ref.type !== "wreck" &&
+    ref.type !== "beacon"
+  ) {
+    return null;
+  }
+  return getSystemDestination(world.currentSectorId, ref.id);
+}
+
+function isRemoteWarpableDestination(world: GameWorld, ref: SelectableRef | null) {
+  const destination = getDestinationIfSameSystem(world, ref);
+  if (!destination || !destination.warpable) return false;
+  return !isDestinationLocal(world, destination.id);
+}
+
 function activateAllWeapons(world: GameWorld) {
+  if (world.player.weaponHoldFire) return;
   world.player.modules.weapon.forEach((runtime) => {
     if (!runtime.moduleId) return;
     runtime.active = true;
   });
+}
+
+export function setWeaponHoldFire(world: GameWorld, holdFire: boolean) {
+  world.player.weaponHoldFire = holdFire;
+  if (holdFire) {
+    world.player.modules.weapon.forEach((runtime) => {
+      runtime.active = false;
+      runtime.cycleRemaining = 0;
+    });
+    pushStory(world, "Weapons set to hold fire.");
+    return;
+  }
+  pushStory(world, "Weapons released to auto-engage.");
 }
 
 function disableAutopilot(world: GameWorld) {
@@ -2324,6 +2279,7 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
     world.selectedObject = command.target;
     lockTarget(world, command.target);
     setActiveTarget(world, command.target);
+    world.player.weaponHoldFire = false;
     activateAllWeapons(world);
     return true;
   }
@@ -2362,6 +2318,9 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
     return true;
   }
   if (command.type === "approach") {
+    if (isRemoteWarpableDestination(world, command.target)) {
+      return tryExecuteCommand(world, { type: "warp", target: command.target, range: Math.max(80, command.range ?? 120) }, skipDockedCheck);
+    }
     disableAutopilot(world);
     issueNav(world, "approach", command.target, command.range ?? 0);
     return true;
@@ -2373,11 +2332,17 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
     return true;
   }
   if (command.type === "keep_range") {
+    if (isRemoteWarpableDestination(world, command.target)) {
+      return tryExecuteCommand(world, { type: "warp", target: command.target, range: Math.max(80, command.range) }, skipDockedCheck);
+    }
     disableAutopilot(world);
     issueNav(world, "keep_range", command.target, command.range);
     return true;
   }
   if (command.type === "orbit") {
+    if (isRemoteWarpableDestination(world, command.target)) {
+      return tryExecuteCommand(world, { type: "warp", target: command.target, range: Math.max(80, command.range) }, skipDockedCheck);
+    }
     disableAutopilot(world);
     issueNav(world, "orbit", command.target, command.range);
     return true;
@@ -2395,17 +2360,26 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
       return false;
     }
     disableAutopilot(world);
+    if (isRemoteWarpableDestination(world, command.target)) {
+      world.localSite = createTransitLocalSite(world.currentSectorId, world.player.position);
+    }
     issueNav(world, "align", command.target, command.range ?? 120);
     world.player.navigation.mode = "align";
     world.player.navigation.desiredRange = command.range ?? 120;
     return true;
   }
   if (command.type === "dock") {
+    if (isRemoteWarpableDestination(world, command.target)) {
+      return tryExecuteCommand(world, { type: "warp", target: command.target, range: 130 }, skipDockedCheck);
+    }
     disableAutopilot(world);
     issueNav(world, "docking", command.target, 0);
     return true;
   }
   if (command.type === "jump") {
+    if (isRemoteWarpableDestination(world, command.target)) {
+      return tryExecuteCommand(world, { type: "warp", target: command.target, range: 120 }, skipDockedCheck);
+    }
     disableAutopilot(world);
     issueNav(world, "jumping", command.target, 0);
     return true;
@@ -2462,6 +2436,9 @@ export function toggleModule(
   if (!runtime || !moduleId) return false;
   const module = moduleById[moduleId];
   if (!module || module.activation === "passive") return false;
+  if (slotType === "weapon" && !runtime.active) {
+    world.player.weaponHoldFire = false;
+  }
   runtime.active = !runtime.active;
   if (!runtime.active) {
     runtime.cycleRemaining = 0;
@@ -3417,12 +3394,16 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
         world.currentSectorId = gate.connectedSystemId;
         const arrival = gate.arrivalGateId ? getSystemDestination(gate.connectedSystemId, gate.arrivalGateId) : null;
         if (arrival) {
+          enterDestinationSite(world, arrival.id);
           world.player.position = { x: arrival.position.x + 100, y: arrival.position.y + 20 };
           world.player.velocity = { x: 0, y: 0 };
           maybeTriggerPortalSpawn(world, gate.connectedSystemId, arrival.position);
+        } else {
+          world.localSite = createTransitLocalSite(world.currentSectorId, world.player.position);
         }
         advanceRouteAfterJump(world, gate.connectedSystemId);
         setIdle(world.player.navigation);
+        world.player.pendingLocks = [];
         world.selectedObject = null;
         world.lockedTargets = [];
         world.activeTarget = null;
@@ -3513,6 +3494,12 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
       return;
     }
     if (nav.warpProgress >= 1 || distance(player.position, targetPosition) <= nav.desiredRange + 20) {
+      const destination = nav.target ? getDestinationIfSameSystem(world, nav.target) : null;
+      if (destination) {
+        enterDestinationSite(world, destination.id);
+      } else {
+        world.localSite = createTransitLocalSite(world.currentSectorId, targetPosition);
+      }
       player.position = add(targetPosition, scale(direction, -nav.desiredRange));
       emitWarpArrive(world, player.position);
       setIdle(nav);
@@ -3565,7 +3552,8 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
         Math.abs(radialError) > orbitBand * 2
           ? normalize(add(tangent, scale(dirToTarget, correction * 1.3)))
           : normalize(add(tangent, scale(dirToTarget, correction)));
-      const orbitSpeed = clamp(nav.desiredRange * 0.33, 54, maxSpeed * 0.62);
+      const pursuitBoost = Math.abs(radialError) > orbitBand * 2 ? 0.88 : Math.abs(radialError) > orbitBand ? 0.78 : 0.68;
+      const orbitSpeed = clamp(maxSpeed * pursuitBoost, 72, maxSpeed * 0.9);
       desiredVelocity = scale(orbitDirection, orbitSpeed);
       desiredFacing = Math.atan2(orbitDirection.y, orbitDirection.x);
     }
@@ -3612,7 +3600,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     player.position = collision.position;
     player.velocity = collision.velocity;
   }
-  applyPlayerBoundaryBehavior(world, dt, maxSpeed);
+  applyPlayerBoundaryBehavior(world, dt);
 
   if (nav.mode === "idle") {
     player.velocity = scale(player.velocity, 1 - Math.min(0.65, dt * 1.25));
@@ -3622,10 +3610,15 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
 function resolveModuleTarget(world: GameWorld, requiresTarget: SpaceObjectType[] | undefined) {
   if (!requiresTarget) return null;
   const target = world.activeTarget;
-  if (!target) return null;
-  if (!requiresTarget.includes(target.type)) return null;
-  const info = getObjectInfo(world, target);
-  return info ? target : null;
+  if (target && requiresTarget.includes(target.type)) {
+    const info = getObjectInfo(world, target);
+    if (info) return target;
+  }
+  if (requiresTarget.includes("enemy")) {
+    const lockedEnemy = world.lockedTargets.find((entry) => entry.type === "enemy" && Boolean(getObjectInfo(world, entry)));
+    if (lockedEnemy) return lockedEnemy;
+  }
+  return null;
 }
 
 function runPlayerModules(world: GameWorld, dt: number) {
@@ -3668,9 +3661,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
       const targetDistance = targetPosition ? distance(player.position, targetPosition) : 0;
       const inRange = !module.range || (targetPosition && targetDistance <= module.range);
 
-      if (module.kind === "mining_laser" && (!target || !inRange)) {
+      if (module.kind === "mining_laser" && !target) {
         runtime.active = false;
         runtime.cycleRemaining = 0;
+        return;
+      }
+      if (module.kind === "mining_laser" && !inRange) {
         return;
       }
       if (module.kind === "salvager" && (!target || !inRange)) {
@@ -3737,6 +3733,7 @@ function runPlayerModules(world: GameWorld, dt: number) {
             scale(direction, module.kind === "missile" ? 280 : 420),
             0,
             target,
+            targetPosition ? { ...targetPosition } : null,
             quality
           )
         );
@@ -4026,9 +4023,9 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
     enemy.position = collision.position;
     enemy.velocity = collision.velocity;
   }
-  const sectorDef = getCurrentSectorDef(world);
-  enemy.position.x = clamp(enemy.position.x, 30, sectorDef.width - 30);
-  enemy.position.y = clamp(enemy.position.y, 30, sectorDef.height - 30);
+  const boundary = applyEnemyBoundaryContainment(world, enemy.position, enemy.velocity, dt);
+  enemy.position = boundary.position;
+  enemy.velocity = boundary.velocity;
 }
 
 function runEnemyModules(world: GameWorld, dt: number) {
@@ -4127,6 +4124,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
             scale(direction, module.kind === "missile" ? 260 : 360),
             0,
             { id: "player", type: "enemy" },
+            { ...world.player.position },
             quality
           )
         );
@@ -4160,8 +4158,25 @@ function updateProjectiles(world: GameWorld, dt: number) {
         projectile.velocity.x += (desired.x - projectile.velocity.x) * dt * 1.5;
         projectile.velocity.y += (desired.y - projectile.velocity.y) * dt * 1.5;
       }
+      if (targetPos) {
+        projectile.impactPosition = { ...targetPos };
+      }
     }
     projectile.position = add(projectile.position, scale(projectile.velocity, dt));
+
+    if (projectile.damage <= 0 && projectile.impactPosition) {
+      const impactDistance = distance(projectile.position, projectile.impactPosition);
+      if (impactDistance <= Math.max(10, projectile.radius + 10) || projectile.ttl <= 0) {
+        const impactColor =
+          projectile.moduleId.includes("missile")
+            ? "#ffb265"
+            : projectile.owner === "player"
+              ? "#6feeff"
+              : "#ff846f";
+        emitImpact(world, projectile.impactPosition, impactColor, projectile.moduleId);
+        return;
+      }
+    }
 
     const asteroidHit = sector.asteroids.find(
       (asteroid) => distance(projectile.position, asteroid.position) <= projectile.radius + asteroid.radius
@@ -4183,6 +4198,9 @@ function updateProjectiles(world: GameWorld, dt: number) {
       for (const enemy of sector.enemies) {
         if (distance(projectile.position, enemy.position) <= projectile.radius + 18) {
           const module = moduleById[projectile.moduleId];
+          const shieldBefore = enemy.shield;
+          const armorBefore = enemy.armor;
+          const hullBefore = enemy.hull;
           const appliedTotal = applyDamageToTarget(
             enemy,
             createDamagePacket(module?.damageProfile, projectile.damage),
@@ -4201,8 +4219,24 @@ function updateProjectiles(world: GameWorld, dt: number) {
             projectile.damage < 1 ? "#c4d1e8" : projectile.qualityLabel === "excellent" ? "#ffe08a" : "#ffd078"
           );
           if (projectile.damage >= 1) {
+            // Snap impact to enemy center so it clearly lands on the ship
+            const impactPos = enemy.position;
             const impactColor = projectile.moduleId.includes("missile") ? "#ffb265" : "#6feeff";
-            emitImpact(world, projectile.position, impactColor, projectile.moduleId);
+            emitImpact(world, impactPos, impactColor, projectile.moduleId);
+            // Layer-specific hit sparks (mirrors player hit feedback)
+            const hullDamaged = hullBefore > enemy.hull;
+            const armorDamaged = armorBefore > enemy.armor;
+            const shieldDamaged = shieldBefore > enemy.shield;
+            if (hullDamaged) {
+              emitHullHit(world, impactPos);
+              sector.cameraShake = Math.min(8, (sector.cameraShake ?? 0) + 2.5 + projectile.damage * 0.03);
+            } else if (armorDamaged) {
+              emitArmorHit(world, impactPos);
+              sector.cameraShake = Math.min(5, (sector.cameraShake ?? 0) + 1.2 + projectile.damage * 0.015);
+            } else if (shieldDamaged) {
+              emitShieldHit(world, impactPos);
+              sector.cameraShake = Math.min(2.5, (sector.cameraShake ?? 0) + 0.5 + projectile.damage * 0.008);
+            }
           }
           consumed = true;
           break;
@@ -4531,8 +4565,10 @@ function cleanupWorld(world: GameWorld) {
     rebuildPlayerRuntime(world.player);
 
     world.currentSectorId = startSystemId;
+    enterDestinationSite(world, startStation.id);
     world.dockedStationId = startStation.id;
     world.selectedObject = null;
+    world.player.pendingLocks = [];
     world.lockedTargets = [];
     world.activeTarget = null;
     world.routePlan = null;
@@ -4695,12 +4731,13 @@ function getNavLabel(world: GameWorld) {
   if (nav.mode === "approach") return `Approaching ${targetName}`;
   if (nav.mode === "keep_range") return `Keeping ${nav.desiredRange}m from ${targetName}`;
   if (nav.mode === "orbit") return `Orbiting ${targetName} at ${nav.desiredRange}m`;
+  if (nav.mode === "boundary_return") return "Returning to local pocket";
   if (nav.mode === "align") {
     return nav.desiredRange >= 0
-      ? `Aligning to warp on ${targetName} (${Math.round(nav.warpProgress * 100)}%)`
+      ? `Aligning to warp ${targetName} at ${nav.desiredRange}m (${Math.round(nav.warpProgress * 100)}%)`
       : `Aligning to ${targetName}`;
   }
-  if (nav.mode === "warping") return `Warping to ${targetName}`;
+  if (nav.mode === "warping") return `Warping to ${targetName} at ${nav.desiredRange}m`;
   if (nav.mode === "docking") return `Docking on ${targetName}`;
   if (nav.mode === "jumping") return `Jumping via ${targetName}`;
   if (world.routePlan) return `Route active to ${sectorById[world.routePlan.destinationSystemId].name}`;
@@ -4714,8 +4751,15 @@ export function updateWorld(world: GameWorld, dt: number) {
     world.boundary.warningLevel = 0;
     world.boundary.correctionLevel = 0;
     world.boundary.active = false;
+    world.boundary.zone = "active";
     world.boundary.title = null;
     world.boundary.detail = null;
+    world.boundary.returnState.active = false;
+    world.boundary.returnState.reason = null;
+    world.boundary.returnState.suspendedNav = null;
+    world.boundary.returnState.recoveryPoint = null;
+    world.boundary.returnState.pocketId = null;
+    world.boundary.returnState.releaseRadius = 0;
   }
   const timeScale = getWorldTimeScale(world);
   const simDt = dt * timeScale;
@@ -4740,9 +4784,11 @@ export function updateWorld(world: GameWorld, dt: number) {
   applyTacticalSlowEffects(world);
   applyPlayerControlEffects(world);
   applyEnemyControlEffects(world);
+  updatePendingLocks(world, simDt);
   updateRouteAutopilot(world);
   updatePlayerNavigation(world, simDt);
   applyAnomalyFields(world, simDt);
+  applySalvageBoundaryPull(world, simDt);
   autoEngageNearbyHostile(world);
   runPlayerModules(world, simDt);
   runEnemyModules(world, simDt);
@@ -4772,6 +4818,9 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
     derived: computeDerivedStats(world.player),
     sector: getCurrentSectorDef(world),
     currentRegion: regionById[getCurrentSectorDef(world).regionId],
+    currentSite: world.localSite.destinationId
+      ? getSystemDestination(world.currentSectorId, world.localSite.destinationId)
+      : null,
     currentStation,
     activeMission,
     selectedInfo: getObjectInfo(world, world.selectedObject),
@@ -4779,6 +4828,12 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
     lockedTargetInfos: world.lockedTargets
       .map((entry) => getObjectInfo(world, entry))
       .filter((item): item is ObjectInfo => Boolean(item)),
+    pendingLockInfos: world.player.pendingLocks
+      .map((entry) => {
+        const info = getObjectInfo(world, entry.ref);
+        return info ? { info, progress: entry.progress, duration: entry.duration } : null;
+      })
+      .filter((item): item is { info: ObjectInfo; progress: number; duration: number } => Boolean(item)),
     overview: getOverviewEntries(world),
     navLabel: getNavLabel(world),
     nearbyPrompt: getPrompt(world),

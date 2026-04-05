@@ -5,6 +5,7 @@ import { enemyVariantById, playerShipById } from "../data/ships";
 import { getSystemDestination, getSystemDestinations, sectorById } from "../data/sectors";
 import { commodityById } from "../economy/data/commodities";
 import { distance } from "../utils/vector";
+import { getVisibleSystemDestinations } from "./sites";
 
 const DAMAGE_TYPES: DamageType[] = ["em", "thermal", "kinetic", "explosive"];
 
@@ -277,7 +278,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
 function collectRefs(world: GameWorld): SelectableRef[] {
   const sector = world.sectors[world.currentSectorId];
   return [
-    ...getSystemDestinations(world.currentSectorId).map((entry) => ({
+    ...getVisibleSystemDestinations(world).map((entry) => ({
       id: entry.id,
       type: destinationKindToObjectType(entry.kind)
     })),

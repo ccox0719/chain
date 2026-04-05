@@ -33,6 +33,7 @@ import {
   setDifficulty,
   setRouteAutoFollow,
   setRouteDestination,
+  setWeaponHoldFire,
   switchShip,
   toggleModule,
   turnInMission,
@@ -105,6 +106,18 @@ export function useSpaceGame() {
           break;
         case "f8":
           addCredits(worldRef.current, 10000);
+          refresh();
+          break;
+        case "[":
+          worldRef.current.timeScale = Math.max(0.25, Math.min(3, worldRef.current.timeScale - 0.25));
+          refresh();
+          break;
+        case "]":
+          worldRef.current.timeScale = Math.max(0.25, Math.min(3, worldRef.current.timeScale + 0.25));
+          refresh();
+          break;
+        case "0":
+          worldRef.current.timeScale = 1;
           refresh();
           break;
         default:
@@ -256,6 +269,10 @@ export function useSpaceGame() {
         triggerTacticalSlow(worldRef.current);
         refresh();
       },
+      setTimeScale: (timeScale: number) => {
+        worldRef.current.timeScale = Math.max(0.25, Math.min(3, timeScale));
+        refresh();
+      },
       clearDeathSummary: () => {
         clearDeathSummary(worldRef.current);
         refresh();
@@ -282,6 +299,10 @@ export function useSpaceGame() {
       },
       toggleModule: (slotType: ModuleSlot, slotIndex: number) => {
         toggleModule(worldRef.current, slotType, slotIndex);
+        refresh();
+      },
+      setWeaponHoldFire: (holdFire: boolean) => {
+        setWeaponHoldFire(worldRef.current, holdFire);
         refresh();
       },
       selectObject: (ref: SelectableRef | null) => {
@@ -480,8 +501,10 @@ function loadWorld() {
           ...fallback.player.effects,
           ...(parsed.player?.effects ?? {})
         },
+        weaponHoldFire: parsed.player?.weaponHoldFire ?? fallback.player.weaponHoldFire,
         tacticalSlow: parsed.player?.tacticalSlow ?? fallback.player.tacticalSlow,
         deathSummary: parsed.player?.deathSummary ?? fallback.player.deathSummary,
+        pendingLocks: parsed.player?.pendingLocks ?? fallback.player.pendingLocks,
         savedBuilds: mergedBuilds,
         buildSwap: parsed.player?.buildSwap
           ? {
@@ -496,6 +519,10 @@ function loadWorld() {
       sectors: {
         ...mergedSectors
       },
+      timeScale:
+        typeof parsed.timeScale === "number" && Number.isFinite(parsed.timeScale)
+          ? Math.max(0.25, Math.min(3, parsed.timeScale))
+          : 0.75,
       missions: {
         ...fallback.missions,
         ...(parsed.missions ?? {})
@@ -508,6 +535,13 @@ function loadWorld() {
         ...fallback.boundary,
         ...(parsed.boundary ?? {})
       },
+      localSite: parsed.localSite
+        ? {
+            ...fallback.localSite,
+            ...parsed.localSite,
+            center: parsed.localSite.center ?? fallback.localSite.center
+          }
+        : fallback.localSite,
       routePlan: parsed.routePlan ?? null,
       procgen: {
         ...fallback.procgen,

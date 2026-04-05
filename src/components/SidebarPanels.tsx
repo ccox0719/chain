@@ -457,6 +457,7 @@ export function SidebarPanels({
                 <h3>{selectedSystem.name}</h3>
                 <p>{selectedSystem.description}</p>
                 <div className="map-meta-grid">
+                  <span className="status-chip">{selectedSystem.identityLabel}</span>
                   <span className="status-chip">{regionById[selectedSystem.regionId].name}</span>
                   <span className="status-chip">{selectedSystem.security.toUpperCase()}</span>
                   <span className="status-chip">{selectedSystem.traffic} traffic</span>
@@ -473,6 +474,7 @@ export function SidebarPanels({
                     </span>
                   </div>
                   <p style={{ margin: "0 0 0.45rem" }}>{selectedFaction.description}</p>
+                  <p style={{ margin: "0 0 0.45rem", color: "var(--text-dim)" }}>{selectedFaction.doctrineSummary}</p>
                   <div className="map-meta-grid">
                     <span className="status-chip">Damage {factionDamageLabel(selectedFaction.id)}</span>
                     <span className="status-chip">Defense {selectedFaction.tankStyle}</span>
@@ -483,6 +485,14 @@ export function SidebarPanels({
                   </div>
                   <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)" }}>
                     {selectedSystem.threatSummary ?? selectedFaction.threatSummary}
+                  </p>
+                  <div className="tag-row" style={{ marginTop: "0.45rem" }}>
+                    {selectedFaction.enemyArchetypePreferences.map((entry) => (
+                      <span key={entry} className="status-chip">{entry}</span>
+                    ))}
+                  </div>
+                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
+                    Prep: {selectedFaction.prepAdvice}
                   </p>
                   {selectedSystem.contestedFactionIds?.length ? (
                     <div className="tag-row" style={{ marginTop: "0.45rem" }}>
@@ -495,6 +505,28 @@ export function SidebarPanels({
                   ) : null}
                   <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
                     Region power: {regionFaction.icon} {regionFaction.name} · {selectedRegion.threatSummary ?? regionFaction.threatSummary}
+                  </p>
+                </div>
+                <div className="panel-lite" style={{ marginTop: "0.75rem", padding: "0.75rem 0.85rem" }}>
+                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                    <strong>System Role</strong>
+                    <span className="status-chip">{selectedSystem.identityLabel}</span>
+                  </div>
+                  <p style={{ margin: "0 0 0.35rem" }}>{selectedSystem.gameplayPurpose}</p>
+                  <p style={{ margin: 0, color: "var(--text-dim)", fontSize: "0.8rem" }}>
+                    Prep: {selectedSystem.prepAdvice}
+                  </p>
+                </div>
+                <div className="panel-lite" style={{ marginTop: "0.75rem", padding: "0.75rem 0.85rem" }}>
+                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                    <strong>Region Intel</strong>
+                    <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
+                      {regionFaction.icon} {selectedRegion.name}
+                    </span>
+                  </div>
+                  <p style={{ margin: "0 0 0.35rem" }}>{selectedRegion.identitySummary}</p>
+                  <p style={{ margin: 0, color: "var(--text-dim)", fontSize: "0.8rem" }}>
+                    Prep: {selectedRegion.prepAdvice}
                   </p>
                 </div>
                 <div className="tag-row">
@@ -535,12 +567,18 @@ export function SidebarPanels({
               </section>
 
               <section className="panel-lite map-sidebar-panel">
-                <h3>Local Destinations</h3>
+                <h3>System Destinations</h3>
+                <p>
+                  Current site: <strong>{world.localSite.label}</strong>
+                  {" · "}
+                  {world.localSite.subtitle}
+                </p>
                 <ul className="stack-list">
                   {localDestinations.map((destination) => {
                     const ref = { id: destination.id, type: destination.kind as SelectableRef["type"] };
                     const isObjective = objectiveInCurrentSystem === destination.id;
                     const isNextGate = nextGateId === destination.id;
+                    const isCurrentSite = world.localSite.destinationId === destination.id;
                     return (
                       <li
                         key={destination.id}
@@ -551,6 +589,7 @@ export function SidebarPanels({
                         <strong>{destination.name}</strong>
                         <span className="status-chip">
                           {destination.kind}
+                          {isCurrentSite ? " · current site" : ""}
                           {isObjective ? " · objective" : ""}
                           {isNextGate ? " · next gate" : ""}
                         </span>
@@ -560,9 +599,14 @@ export function SidebarPanels({
                             Select
                           </button>
                           {destination.warpable && (
-                            <button type="button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: destination.kind === "gate" ? 120 : 150 })}>
-                              Warp
-                            </button>
+                            <>
+                              <button type="button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: 0 })}>
+                                Warp 0
+                              </button>
+                              <button type="button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: 30 })}>
+                                Warp 30
+                              </button>
+                            </>
                           )}
                           {destination.kind === "station" && (
                             <button type="button" onClick={() => onIssueCommand({ type: "dock", target: ref })}>

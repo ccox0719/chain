@@ -1,9 +1,12 @@
 import { GameWorld, ParticleState, Vec2 } from "../../types/game";
+import { MOVEMENT_BALANCE } from "../config/balance";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { moduleById } from "../data/modules";
-import { getSystemDestinations, sectorById } from "../data/sectors";
+import { sectorById } from "../data/sectors";
 import { computeDerivedStats } from "../utils/stats";
+import { distance } from "../utils/vector";
 import { getObjectInfo } from "../world/spaceObjects";
+import { getVisibleSystemDestinations } from "../world/sites";
 
 let _lowQuality = false;
 
@@ -39,22 +42,29 @@ export function getCameraFrame(
   const viewportWidth = canvas.clientWidth;
   const viewportHeight = canvas.clientHeight;
   const sectorDef = sectorById[world.currentSectorId];
+  const deepSpaceMargin = MOVEMENT_BALANCE.boundary.deepSpaceMargin;
   const viewWidth = viewportWidth / zoom;
   const viewHeight = viewportHeight / zoom;
+  const minX = -deepSpaceMargin;
+  const maxX = sectorDef.width + deepSpaceMargin;
+  const minY = -deepSpaceMargin;
+  const maxY = sectorDef.height + deepSpaceMargin;
+  const totalWidth = maxX - minX;
+  const totalHeight = maxY - minY;
 
   let centerX = world.player.position.x + cameraOffset.x;
   let centerY = world.player.position.y + cameraOffset.y;
 
-  if (viewWidth >= sectorDef.width) {
+  if (viewWidth >= totalWidth) {
     centerX = sectorDef.width / 2;
   } else {
-    centerX = clamp(centerX, viewWidth / 2, sectorDef.width - viewWidth / 2);
+    centerX = clamp(centerX, minX + viewWidth / 2, maxX - viewWidth / 2);
   }
 
-  if (viewHeight >= sectorDef.height) {
+  if (viewHeight >= totalHeight) {
     centerY = sectorDef.height / 2;
   } else {
-    centerY = clamp(centerY, viewHeight / 2, sectorDef.height - viewHeight / 2);
+    centerY = clamp(centerY, minY + viewHeight / 2, maxY - viewHeight / 2);
   }
 
   return {
@@ -160,6 +170,15 @@ function drawDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, radius
 
 let backdropCache: { width: number; height: number; canvas: HTMLCanvasElement } | null = null;
 
+// Seeded pseudo-random so the background is deterministic per session
+function seededRand(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
 function buildBackdropCache(width: number, height: number) {
   if (backdropCache && backdropCache.width === width && backdropCache.height === height) {
     return backdropCache.canvas;
@@ -168,42 +187,192 @@ function buildBackdropCache(width: number, height: number) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const cacheCtx = canvas.getContext("2d");
-  if (!cacheCtx) return canvas;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
 
-  cacheCtx.fillStyle = "#020611";
-  cacheCtx.fillRect(0, 0, width, height);
+  const rng = seededRand(0xdeadbeef);
 
-  const radialA = cacheCtx.createRadialGradient(width * 0.25, height * 0.3, 10, width * 0.25, height * 0.3, width * 0.65);
-  radialA.addColorStop(0, "rgba(52, 114, 255, 0.20)");
-  radialA.addColorStop(1, "rgba(0, 0, 0, 0)");
-  cacheCtx.fillStyle = radialA;
-  cacheCtx.fillRect(0, 0, width, height);
+  // ── Deep space base ──────────────────────────────────────────────────
+  ctx.fillStyle = "#020610";
+  ctx.fillRect(0, 0, width, height);
 
-  const radialB = cacheCtx.createRadialGradient(width * 0.7, height * 0.58, 10, width * 0.7, height * 0.58, width * 0.58);
-  radialB.addColorStop(0, "rgba(255, 106, 76, 0.14)");
-  radialB.addColorStop(1, "rgba(0, 0, 0, 0)");
-  cacheCtx.fillStyle = radialB;
-  cacheCtx.fillRect(0, 0, width, height);
-
-  cacheCtx.strokeStyle = "rgba(102, 196, 255, 0.20)";
-  cacheCtx.lineWidth = 1;
-  cacheCtx.beginPath();
-  for (let x = 0; x <= width; x += 34) {
-    cacheCtx.moveTo(x, 10);
-    cacheCtx.lineTo(x, height - 10);
+  // ── Large nebula blobs (very faint, large radial gradients) ──────────
+  const nebulaSeeds = [
+    { cx: 0.18, cy: 0.28, r: 0.72, color: "52,94,255",  alpha: 0.18 },
+    { cx: 0.72, cy: 0.60, r: 0.62, color: "200,80,255", alpha: 0.13 },
+    { cx: 0.50, cy: 0.85, r: 0.55, color: "255,80,100", alpha: 0.11 },
+    { cx: 0.85, cy: 0.18, r: 0.50, color: "40,200,255", alpha: 0.10 },
+    { cx: 0.30, cy: 0.70, r: 0.45, color: "80,255,160", alpha: 0.07 },
+  ];
+  for (const n of nebulaSeeds) {
+    const gx = n.cx * width;
+    const gy = n.cy * height;
+    const gr = n.r * Math.max(width, height);
+    const grad = ctx.createRadialGradient(gx, gy, gr * 0.02, gx, gy, gr);
+    grad.addColorStop(0, `rgba(${n.color},${n.alpha})`);
+    grad.addColorStop(0.45, `rgba(${n.color},${n.alpha * 0.4})`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
   }
-  for (let y = 0; y <= height; y += 34) {
-    cacheCtx.moveTo(10, y);
-    cacheCtx.lineTo(width - 10, y);
-  }
-  cacheCtx.stroke();
 
-  cacheCtx.strokeStyle = "rgba(114, 206, 255, 0.45)";
-  cacheCtx.lineWidth = 2;
-  cacheCtx.strokeRect(12, 12, width - 24, height - 24);
-  cacheCtx.strokeStyle = "rgba(202, 242, 255, 0.18)";
-  cacheCtx.strokeRect(6, 6, width - 12, height - 12);
+  // ── Low-poly Voronoi-style polygon mesh ───────────────────────────────
+  // Generate a jittered grid of points
+  const cellSize = Math.round(Math.min(width, height) / 11);
+  const cols = Math.ceil(width / cellSize) + 2;
+  const rows = Math.ceil(height / cellSize) + 2;
+
+  const pts: { x: number; y: number }[] = [];
+  for (let row = -1; row <= rows; row++) {
+    for (let col = -1; col <= cols; col++) {
+      pts.push({
+        x: (col + rng() * 0.82 + 0.09) * cellSize,
+        y: (row + rng() * 0.82 + 0.09) * cellSize,
+      });
+    }
+  }
+
+  // Build triangles from a simple Delaunay-like grid subdivision
+  // (grid-based: each cell split into 2 triangles, with jitter applied)
+  const stride = cols + 2;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const i = row * stride + col;
+      const tl = pts[i];
+      const tr = pts[i + 1];
+      const bl = pts[i + stride];
+      const br = pts[i + stride + 1];
+      if (!tl || !tr || !bl || !br) continue;
+
+      // Centroid of each triangle for color sampling
+      const drawTri = (a: {x:number;y:number}, b: {x:number;y:number}, c: {x:number;y:number}) => {
+        const cx = (a.x + b.x + c.x) / 3;
+        const cy = (a.y + b.y + c.y) / 3;
+        // Map centroid to a depth-influenced dark blue/purple hue
+        const nx = cx / width;
+        const ny = cy / height;
+        // Perlin-like value from position
+        const v = Math.sin(nx * 8.3 + 1.2) * Math.cos(ny * 6.7 - 0.8) * 0.5 + 0.5;
+        const v2 = Math.sin(nx * 3.1 - ny * 5.4 + 0.4) * 0.5 + 0.5;
+        // Nebula color influence — each cell picks up the nearest blob slightly
+        const br_val = Math.round(4 + v * 8 + v2 * 6);    // 4–18
+        const bg_val = Math.round(4 + v * 10 + v2 * 4);   // 4–18
+        const bb_val = Math.round(14 + v * 28 + v2 * 16); // 14–58
+        // Vary alpha for depth — dark cells recede, slightly brighter ones pop
+        const base = 0.55 + v * 0.22 + rng() * 0.14;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.lineTo(c.x, c.y);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${br_val},${bg_val},${bb_val},${base.toFixed(3)})`;
+        ctx.fill();
+        // Faint edge lines for polygon wireframe look
+        ctx.strokeStyle = `rgba(60,90,160,0.10)`;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      };
+
+      // Split each cell into two triangles with a slight diagonal choice
+      if (rng() > 0.5) {
+        drawTri(tl, tr, bl);
+        drawTri(tr, br, bl);
+      } else {
+        drawTri(tl, tr, br);
+        drawTri(tl, br, bl);
+      }
+    }
+  }
+
+  // ── Re-apply nebula blobs on top of polygons (softer layer) ──────────
+  for (const n of nebulaSeeds) {
+    const gx = n.cx * width;
+    const gy = n.cy * height;
+    const gr = n.r * Math.max(width, height);
+    const grad = ctx.createRadialGradient(gx, gy, gr * 0.04, gx, gy, gr * 0.75);
+    grad.addColorStop(0, `rgba(${n.color},${(n.alpha * 0.5).toFixed(3)})`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  // ── Distant star clusters (tiny points, grouped) ──────────────────────
+  const clusterCount = 6;
+  for (let ci = 0; ci < clusterCount; ci++) {
+    const clx = rng() * width;
+    const cly = rng() * height;
+    const clr = 60 + rng() * 160;
+    const starCount = Math.round(18 + rng() * 40);
+    for (let si = 0; si < starCount; si++) {
+      const ang = rng() * Math.PI * 2;
+      const dist = Math.pow(rng(), 0.5) * clr;
+      const sx = clx + Math.cos(ang) * dist;
+      const sy = cly + Math.sin(ang) * dist;
+      const sz = rng();
+      const alpha = 0.18 + sz * 0.55;
+      const radius = 0.4 + sz * 0.9;
+      const hue = ci % 2 === 0 ? `rgba(180,210,255,${alpha.toFixed(2)})` : `rgba(255,220,180,${alpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = hue;
+      ctx.fill();
+    }
+  }
+
+  // ── Scattered individual background stars ────────────────────────────
+  const starCount = Math.round((width * height) / 2800);
+  for (let i = 0; i < starCount; i++) {
+    const sx = rng() * width;
+    const sy = rng() * height;
+    const sz = rng();
+    const alpha = 0.12 + sz * 0.65;
+    const r = 0.35 + sz * 0.85;
+    const warm = rng() > 0.65;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = warm
+      ? `rgba(255,230,190,${alpha.toFixed(2)})`
+      : `rgba(190,215,255,${alpha.toFixed(2)})`;
+    ctx.fill();
+  }
+
+  // ── A handful of bright foreground stars with small cross-flare ──────
+  const brightCount = Math.round((width * height) / 28000);
+  for (let i = 0; i < brightCount; i++) {
+    const sx = rng() * width;
+    const sy = rng() * height;
+    const sr = 1.1 + rng() * 1.2;
+    const sa = 0.7 + rng() * 0.3;
+    const sc = rng() > 0.5 ? `rgba(200,225,255,${sa.toFixed(2)})` : `rgba(255,240,210,${sa.toFixed(2)})`;
+    // Glow halo
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 5);
+    grad.addColorStop(0, sc);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(sx - sr * 5, sy - sr * 5, sr * 10, sr * 10);
+    // Core dot
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    // Cross flare
+    ctx.strokeStyle = `rgba(200,225,255,${(sa * 0.35).toFixed(2)})`;
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(sx - sr * 6, sy); ctx.lineTo(sx + sr * 6, sy);
+    ctx.moveTo(sx, sy - sr * 6); ctx.lineTo(sx, sy + sr * 6);
+    ctx.stroke();
+  }
+
+  // ── Subtle vignette to push edges into deep space ────────────────────
+  const vignette = ctx.createRadialGradient(
+    width / 2, height / 2, Math.min(width, height) * 0.28,
+    width / 2, height / 2, Math.max(width, height) * 0.76
+  );
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,2,8,0.72)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
 
   backdropCache = { width, height, canvas };
   return canvas;
@@ -316,6 +485,15 @@ const DEFAULT_BEAM_STYLE: MiningBeamStyle = {
   pulseSpeed: 2.2
 };
 
+const SALVAGE_BEAM_STYLE: MiningBeamStyle = {
+  outerColor: "#96ffd4",
+  coreColor: "#f2fffa",
+  outerWidth: 2.8,
+  coreWidth: 1.1,
+  outerGlow: 16,
+  pulseSpeed: 1.9
+};
+
 function drawStraightBeam(
   ctx: CanvasRenderingContext2D,
   start: Vec2,
@@ -393,6 +571,28 @@ function drawMiningBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
   }
 }
 
+function drawSalvageBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
+  const player = world.player;
+  const allModules = [
+    ...player.modules.weapon,
+    ...player.modules.utility,
+    ...player.modules.defense
+  ];
+  const activeSalvagerRuntime = allModules.find((m) => m.moduleId && m.active && moduleById[m.moduleId]?.kind === "salvager");
+  if (!activeSalvagerRuntime?.moduleId) return;
+  if (world.activeTarget?.type !== "wreck") return;
+
+  const moduleDef = moduleById[activeSalvagerRuntime.moduleId];
+  if (!moduleDef?.range) return;
+
+  const sector = world.sectors[world.currentSectorId];
+  const targetWreck = sector.wrecks.find((wreck) => wreck.id === world.activeTarget?.id);
+  if (!targetWreck) return;
+  if (distance(player.position, targetWreck.position) > moduleDef.range) return;
+
+  drawStraightBeam(ctx, player.position, targetWreck.position, SALVAGE_BEAM_STYLE, world.elapsedTime);
+}
+
 export function renderSector(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -408,7 +608,7 @@ export function renderSector(
   const sector = world.sectors[world.currentSectorId];
   const playerHull = playerShipById[world.player.hullId];
   const derived = computeDerivedStats(world.player);
-  const destinations = getSystemDestinations(world.currentSectorId);
+  const destinations = getVisibleSystemDestinations(world);
 
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
   drawArenaBackdrop(ctx, viewportWidth, viewportHeight, world, zoom, cameraX, cameraY);
@@ -633,27 +833,58 @@ export function renderSector(
   });
 
   sector.projectiles.forEach((projectile, index) => {
+    const isMissile = projectile.moduleId.includes("missile");
     const color =
-      projectile.moduleId.includes("missile")
+      isMissile
         ? "#ffb265"
         : projectile.owner === "player"
           ? "#6feeff"
           : "#ff846f";
-    setGlow(ctx, color, 12);
+    const trailLen = isMissile ? 0.075 : 0.055;
+    const lineW = isMissile ? 3.2 : projectile.moduleId.includes("rail") ? 2.8 : 2.2;
+    // Outer glow pass
+    setGlow(ctx, color, 20);
     ctx.strokeStyle = color;
-    ctx.lineWidth = projectile.moduleId.includes("missile") ? 2.6 : 2;
+    ctx.lineWidth = lineW + 1.5;
+    ctx.globalAlpha = 0.35;
     ctx.beginPath();
     ctx.moveTo(projectile.position.x, projectile.position.y);
     ctx.lineTo(
-      projectile.position.x - projectile.velocity.x * 0.035 - (index % 2) * 1.5,
-      projectile.position.y - projectile.velocity.y * 0.035 - (index % 3) * 1.1
+      projectile.position.x - projectile.velocity.x * trailLen,
+      projectile.position.y - projectile.velocity.y * trailLen
     );
     ctx.stroke();
-    drawDiamond(ctx, projectile.position.x, projectile.position.y, projectile.radius + 1, color, "rgba(255,255,255,0.08)");
+    // Bright core
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = lineW * 0.45;
+    ctx.beginPath();
+    ctx.moveTo(projectile.position.x, projectile.position.y);
+    ctx.lineTo(
+      projectile.position.x - projectile.velocity.x * trailLen * 0.45,
+      projectile.position.y - projectile.velocity.y * trailLen * 0.45
+    );
+    ctx.stroke();
+    // Colored trail
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.beginPath();
+    ctx.moveTo(
+      projectile.position.x - projectile.velocity.x * trailLen * 0.45,
+      projectile.position.y - projectile.velocity.y * trailLen * 0.45
+    );
+    ctx.lineTo(
+      projectile.position.x - projectile.velocity.x * trailLen,
+      projectile.position.y - projectile.velocity.y * trailLen
+    );
+    ctx.stroke();
+    drawDiamond(ctx, projectile.position.x, projectile.position.y, projectile.radius + 2, color, "rgba(255,255,255,0.18)");
     clearGlow(ctx);
+    ctx.globalAlpha = 1;
   });
 
   drawMiningBeam(ctx, world);
+  drawSalvageBeam(ctx, world);
 
   sector.enemies.forEach((enemy, index) => {
     const variant = enemyVariantById[enemy.variantId];
@@ -763,41 +994,6 @@ export function renderSector(
 
   ctx.restore();
 
-  if (world.boundary.warningLevel > 0.02) {
-    const toneColor =
-      world.boundary.tone === "anomaly"
-        ? "181, 126, 255"
-        : world.boundary.tone === "belt"
-          ? "110, 224, 255"
-          : world.boundary.tone === "engagement"
-            ? "255, 150, 110"
-            : "140, 220, 255";
-    const edgeAlpha = 0.08 + world.boundary.warningLevel * 0.22;
-    const gradientSize = Math.max(120, Math.min(viewportWidth, viewportHeight) * 0.22);
-    const top = ctx.createLinearGradient(0, 0, 0, gradientSize);
-    top.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
-    top.addColorStop(1, `rgba(${toneColor}, 0)`);
-    const bottom = ctx.createLinearGradient(0, viewportHeight, 0, viewportHeight - gradientSize);
-    bottom.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
-    bottom.addColorStop(1, `rgba(${toneColor}, 0)`);
-    const left = ctx.createLinearGradient(0, 0, gradientSize, 0);
-    left.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
-    left.addColorStop(1, `rgba(${toneColor}, 0)`);
-    const right = ctx.createLinearGradient(viewportWidth, 0, viewportWidth - gradientSize, 0);
-    right.addColorStop(0, `rgba(${toneColor}, ${edgeAlpha})`);
-    right.addColorStop(1, `rgba(${toneColor}, 0)`);
-    ctx.save();
-    ctx.fillStyle = top;
-    ctx.fillRect(0, 0, viewportWidth, gradientSize);
-    ctx.fillStyle = bottom;
-    ctx.fillRect(0, viewportHeight - gradientSize, viewportWidth, gradientSize);
-    ctx.fillStyle = left;
-    ctx.fillRect(0, 0, gradientSize, viewportHeight);
-    ctx.fillStyle = right;
-    ctx.fillRect(viewportWidth - gradientSize, 0, gradientSize, viewportHeight);
-    ctx.restore();
-  }
-
   ctx.save();
   ctx.fillStyle = "rgba(4, 8, 18, 0.40)";
   ctx.fillRect(16, viewportHeight - 92, 250, 60);
@@ -807,7 +1003,7 @@ export function renderSector(
   ctx.font = '14px "Space Grotesk", sans-serif';
   ctx.fillText(sectorDef.name, 30, viewportHeight - 58);
   ctx.fillStyle = "#96b9df";
-  ctx.fillText(`Nav: ${world.player.navigation.mode}`, 30, viewportHeight - 36);
+  ctx.fillText(`Site: ${world.localSite.label}`, 30, viewportHeight - 36);
 
   ctx.restore();
 }

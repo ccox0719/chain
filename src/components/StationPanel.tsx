@@ -24,6 +24,12 @@ import { playerShipById, playerShips } from "../game/data/ships";
 import { commodityCatalog } from "../game/economy/data/commodities";
 import { getBestSellLocationForCommodity } from "../game/economy/market";
 import {
+  formatStationTradeTag,
+  getStationIdentityMeta,
+  getStationMarketProfile,
+  getStationTradeTags
+} from "../game/economy/stationIntel";
+import {
   getPilotLicenseProgressPercent,
   getPilotLicenseProgressRange,
   getRequiredPilotLicenseLevel,
@@ -35,18 +41,36 @@ import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
 import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
 import { findComparableEquippedWeapon, getWeaponSummaryStats } from "../game/utils/weaponStats";
-import { CommodityId, GameSnapshot, ModuleSlot, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
+import { CommodityId, GameSnapshot, ModuleSlot, ResourceId, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
 type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
 type MarketSortKey = "name" | "category" | "volume" | "owned" | "buyPrice" | "sellPrice" | "profit";
 
 const TAB_LABELS: Record<StationTab, string> = {
-  services: "⚙ Services",
-  ships:    "◈ Ships",
-  market:   "⊞ Market",
-  modules:  "⬡ Modules",
-  fitting:  "⊕ Fitting",
-  missions: "✦ Missions",
+  services: "Overview",
+  ships:    "Shipyard",
+  market:   "Market",
+  modules:  "Builds",
+  fitting:  "Fitting",
+  missions: "Missions",
+};
+
+const TAB_ICONS: Record<StationTab, string> = {
+  services: "◉",
+  ships:    "◈",
+  market:   "⊞",
+  modules:  "⬡",
+  fitting:  "⊕",
+  missions: "✦",
+};
+
+const TAB_COLORS: Record<StationTab, string> = {
+  services: "#7fc0ff",
+  ships:    "#7fc0ff",
+  market:   "#ffbc7c",
+  modules:  "#8de0ae",
+  fitting:  "#ff9471",
+  missions: "#c4a3ff",
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -544,6 +568,10 @@ export function StationPanel({
   const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
   const [, setBalanceRefresh] = useState(0);
   const stationTags = currentStation?.tags ?? [];
+  const stationProfile = getStationMarketProfile(currentStation);
+  const stationIdentity = getStationIdentityMeta(currentStation);
+  const stationTrade = useMemo(() => getStationTradeTags(currentStation), [currentStation?.id, stationTags.join("|")]);
+  const stationTradeTagSet = useMemo(() => new Set(stationTrade.all), [stationTrade]);
   const security = snapshot.sector.security;
   const systemFaction = factionData[snapshot.sector.controllingFaction];
   const regionFaction = factionData[snapshot.currentRegion.dominantFaction];
@@ -636,18 +664,18 @@ export function StationPanel({
   function inventoryAllows(tags: string[]) {
     if (tags.includes("common")) return true;
     if (security === "high") {
-      return tags.some((tag) => stationTags.includes(tag)) && !tags.includes("frontier") && !tags.includes("high-tech");
+      return tags.some((tag) => stationTradeTagSet.has(tag)) && !tags.includes("frontier") && !tags.includes("high-tech");
     }
     if (security === "medium") {
       return (
-        tags.some((tag) => stationTags.includes(tag)) ||
+        tags.some((tag) => stationTradeTagSet.has(tag)) ||
         tags.includes("military") ||
         tags.includes("industrial") ||
         tags.includes("research")
       ) && !tags.includes("frontier");
     }
     return (
-      tags.some((tag) => stationTags.includes(tag)) ||
+      tags.some((tag) => stationTradeTagSet.has(tag)) ||
       tags.includes("military") ||
       tags.includes("industrial") ||
       tags.includes("high-tech") ||
@@ -657,7 +685,7 @@ export function StationPanel({
 
   const availableShips = useMemo(
     () => playerShips.filter((ship) => ship.id === world.player.hullId || inventoryAllows(ship.availabilityTags)),
-    [security, stationTags, world.player.hullId]
+    [security, stationTradeTagSet, world.player.hullId]
   );
   const availableModules = useMemo(
     () => moduleCatalog.filter((module) => isModuleAvailableAtStation(module, security, currentStation)),
@@ -741,6 +769,44 @@ export function StationPanel({
     currentStats.commoditySellMultiplier,
     marketSort
   ]);
+  const stationSupplyLabels = useMemo(
+    () => stationTrade.supply.slice(0, 4).map((tag) => formatStationTradeTag(tag)),
+    [stationTrade]
+  );
+  const stationDemandLabels = useMemo(
+    () => stationTrade.demand.slice(0, 4).map((tag) => formatStationTradeTag(tag)),
+    [stationTrade]
+  );
+  const exportOpportunityRows = useMemo(
+    () =>
+      sortedMarketRows
+        .filter((row) => row.profitPerUnit > 0 && row.hint && row.hint.stationId !== currentStation?.id)
+        .slice(0, 3),
+    [sortedMarketRows, currentStation?.id]
+  );
+  const importDemandRows = useMemo(() => {
+    const demandTags = new Set(stationTrade.demand);
+    return commodityCatalog
+      .map((commodity) => {
+        const sellPrice = snapshot.economy.commoditySellPrices[commodity.id] ?? commodity.basePrice;
+        const matches = commodity.tags.some((tag) => demandTags.has(tag));
+        const premium = sellPrice - commodity.basePrice;
+        return { commodity, sellPrice, premium, matches };
+      })
+      .filter((row) => row.matches)
+      .sort((left, right) => {
+        if (right.premium !== left.premium) return right.premium - left.premium;
+        return right.sellPrice - left.sellPrice;
+      })
+      .slice(0, 3);
+  }, [stationTrade, snapshot.economy.commoditySellPrices]);
+  const bestResourceSales = useMemo(
+    () =>
+      (Object.entries(snapshot.economy.resourceSellPrices) as Array<[ResourceId, number]>)
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 3),
+    [snapshot.economy.resourceSellPrices]
+  );
 
   // Group available modules by slot
   const modulesBySlot = useMemo(() => {
@@ -963,57 +1029,9 @@ export function StationPanel({
               Balance
             </button>
           )}
-          <button type="button" className="primary-button" onClick={onUndock}>Undock</button>
         </div>
       </div>
       {devBalanceModal}
-      <div className="panel-lite faction-intel-banner" style={{ margin: "0 1.25rem 1rem", borderColor: systemFaction.color }}>
-          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-            <strong>Faction Intel</strong>
-            <span className="status-chip" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
-              {systemFaction.icon} {systemFaction.name}
-            </span>
-            <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
-              Region · {regionFaction.icon} {regionFaction.name}
-            </span>
-          </div>
-          <div className="map-meta-grid">
-            <span className="status-chip">Damage {factionDamageLabel(systemFaction.id)}</span>
-            <span className="status-chip">Defense {systemFaction.tankStyle}</span>
-            <span className="status-chip">Resists {factionResistLabel(systemFaction.id)}</span>
-            <span className="status-chip">Threat {snapshot.sector.threatSummary ?? systemFaction.threatSummary}</span>
-          </div>
-          <p style={{ margin: "0.5rem 0 0", color: "var(--text-dim)" }}>
-            {systemFaction.description}
-          </p>
-          {snapshot.currentRegion.threatSummary && (
-            <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
-              Region prep: {snapshot.currentRegion.threatSummary}
-            </p>
-          )}
-        </div>
-        {snapshot.regionalEvent && (
-          <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
-          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-            <strong>{snapshot.regionalEvent.name}</strong>
-            <span className="status-chip">{snapshot.currentRegion.name}</span>
-          </div>
-          <p style={{ margin: 0 }}>{snapshot.regionalEvent.description}</p>
-          {snapshot.regionalEvent.serviceOffer && (
-            <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.78rem" }}>{snapshot.regionalEvent.serviceOffer}</p>
-          )}
-        </div>
-      )}
-      {snapshot.currentHotspot && (
-        <div className="panel-lite" style={{ margin: "0 1.25rem 1rem", padding: "0.8rem 1rem" }}>
-          <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-            <strong>{snapshot.currentHotspot.title}</strong>
-            <span className="status-chip">Hotspot</span>
-          </div>
-          <p style={{ margin: 0 }}>{snapshot.currentHotspot.description}</p>
-        </div>
-      )}
-
       {/* Tab navigation */}
       <div className="station-tabs">
         {(Object.keys(TAB_LABELS) as StationTab[]).map((t) => (
@@ -1021,11 +1039,17 @@ export function StationPanel({
             key={t}
             type="button"
             className={`station-tab${tab === t ? " active" : ""}`}
+            style={{ "--tab-color": TAB_COLORS[t] } as React.CSSProperties}
             onClick={() => setTab(t)}
           >
-            {TAB_LABELS[t]}
+            <span className="station-tab-icon">{TAB_ICONS[t]}</span>
+            <span className="station-tab-label">{TAB_LABELS[t]}</span>
           </button>
         ))}
+        <button type="button" className="station-tab station-tab--undock" onClick={onUndock}>
+          <span className="station-tab-icon">➤</span>
+          <span className="station-tab-label">Undock</span>
+        </button>
       </div>
 
       {/* Scrollable content */}
@@ -1033,8 +1057,87 @@ export function StationPanel({
 
         {/* ── SERVICES TAB ── */}
         {tab === "services" && (
-          <div className="station-grid">
-            <article className="panel-lite">
+          <>
+            <div className="station-services-overview-grid">
+              <div className="panel-lite station-command-banner" style={{ margin: 0 }}>
+                <div className="station-command-copy">
+                  <div className="mission-card-header" style={{ marginBottom: "0.4rem" }}>
+                    <strong>{stationIdentity.icon} {stationIdentity.label}</strong>
+                    <span className="status-chip">{snapshot.currentRegion.name}</span>
+                    <span className="status-chip">{snapshot.sector.name}</span>
+                  </div>
+                  <p style={{ margin: 0 }}>{stationProfile?.headline ?? currentStation.description}</p>
+                  <p className="station-command-note">{stationProfile?.planningNote ?? stationIdentity.summary}</p>
+                </div>
+                <div className="station-command-tags">
+                  <div>
+                    <span className="station-command-label">Stocks well</span>
+                    <div className="map-meta-grid">
+                      {stationSupplyLabels.length > 0 ? stationSupplyLabels.map((label) => (
+                        <span key={label} className="status-chip">{label}</span>
+                      )) : <span className="status-chip">General service stock</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="station-command-label">Pays for</span>
+                    <div className="map-meta-grid">
+                      {stationDemandLabels.length > 0 ? stationDemandLabels.map((label) => (
+                        <span key={label} className="status-chip">{label}</span>
+                      )) : <span className="status-chip">Routine local demand</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="panel-lite faction-intel-banner" style={{ margin: 0, borderColor: systemFaction.color }}>
+                <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                  <strong>Faction Intel</strong>
+                  <span className="status-chip" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
+                    {systemFaction.icon} {systemFaction.name}
+                  </span>
+                  <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
+                    Region · {regionFaction.icon} {regionFaction.name}
+                  </span>
+                </div>
+                <div className="map-meta-grid">
+                  <span className="status-chip">Damage {factionDamageLabel(systemFaction.id)}</span>
+                  <span className="status-chip">Defense {systemFaction.tankStyle}</span>
+                  <span className="status-chip">Resists {factionResistLabel(systemFaction.id)}</span>
+                  <span className="status-chip">{snapshot.sector.identityLabel}</span>
+                  <span className="status-chip">Threat {snapshot.sector.threatSummary ?? systemFaction.threatSummary}</span>
+                </div>
+                <p style={{ margin: "0.5rem 0 0", color: "var(--text-dim)" }}>
+                  {systemFaction.doctrineSummary}
+                </p>
+                <div className="tag-row" style={{ marginTop: "0.45rem" }}>
+                  {systemFaction.enemyArchetypePreferences.map((entry) => (
+                    <span key={entry} className="status-chip">{entry}</span>
+                  ))}
+                </div>
+              </div>
+              {snapshot.regionalEvent && (
+                <div className="panel-lite station-services-callout">
+                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                    <strong>{snapshot.regionalEvent.name}</strong>
+                    <span className="status-chip">{snapshot.currentRegion.name}</span>
+                  </div>
+                  <p style={{ margin: 0 }}>{snapshot.regionalEvent.description}</p>
+                  {snapshot.regionalEvent.serviceOffer && (
+                    <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.78rem" }}>{snapshot.regionalEvent.serviceOffer}</p>
+                  )}
+                </div>
+              )}
+              {snapshot.currentHotspot && (
+                <div className="panel-lite station-services-callout">
+                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                    <strong>{snapshot.currentHotspot.title}</strong>
+                    <span className="status-chip">Hotspot</span>
+                  </div>
+                  <p style={{ margin: 0 }}>{snapshot.currentHotspot.description}</p>
+                </div>
+              )}
+            </div>
+            <div className="station-grid">
+              <article className="panel-lite">
               <h3>Ship Status — {playerShipById[world.player.hullId]?.name}</h3>
               <div className="svc-ship-header">
                 <div className="svc-ship-icon">
@@ -1165,9 +1268,9 @@ export function StationPanel({
                   Sell All Cargo
                 </button>
               </div>
-            </article>
-
-          </div>
+              </article>
+            </div>
+          </>
         )}
 
         {/* ── SHIPS TAB ── */}
@@ -1330,13 +1433,84 @@ export function StationPanel({
                   <ResistBlock label="Hull" current={currentHull.hullResists} preview={previewHull.hullResists} />
                 </div>
               </div>
-            </article>
-          </div>
+              </article>
+            </div>
         )}
 
         {/* ── MARKET TAB ── */}
         {tab === "market" && (
           <div className="mkt-container">
+            <div className="station-grid station-grid-compact">
+              <article className="panel-lite station-service-card">
+                <div className="mission-card-header">
+                  <strong>Local Supply</strong>
+                  <span className="status-chip">{stationIdentity.label}</span>
+                </div>
+                <p>This dock regularly turns over these cargo lines and service priorities.</p>
+                <div className="station-service-pills">
+                  {stationSupplyLabels.length > 0 ? stationSupplyLabels.map((label) => (
+                    <span key={label} className="status-chip">{label}</span>
+                  )) : <span className="status-chip">General stock</span>}
+                </div>
+                <div className="station-brief-list">
+                  <div>
+                    <strong>Region role</strong>
+                    <span>{snapshot.currentRegion.gameplayRole}</span>
+                  </div>
+                </div>
+              </article>
+
+              <article className="panel-lite station-service-card">
+                <div className="mission-card-header">
+                  <strong>Outbound Trades</strong>
+                  <span className="status-chip">{exportOpportunityRows.length} leads</span>
+                </div>
+                {exportOpportunityRows.length > 0 ? exportOpportunityRows.map((row) => (
+                  <div key={row.commodity.id} className="station-brief-list">
+                    <div>
+                      <strong>{row.commodity.name}</strong>
+                      <span>Buy here {row.buyPrice} cr · best sale +{row.profitPerUnit} cr/unit</span>
+                    </div>
+                    <small>{row.hint?.stationName} · {row.hint?.systemName}</small>
+                  </div>
+                )) : (
+                  <p style={{ margin: 0, color: "var(--text-dim)" }}>No standout export lane from this dock at the moment.</p>
+                )}
+              </article>
+
+              <article className="panel-lite station-service-card">
+                <div className="mission-card-header">
+                  <strong>Inbound Demand</strong>
+                  <span className="status-chip">{stationDemandLabels[0] ?? "Local demand"}</span>
+                </div>
+                {importDemandRows.length > 0 ? importDemandRows.map((row) => (
+                  <div key={row.commodity.id} className="station-brief-list">
+                    <div>
+                      <strong>{row.commodity.name}</strong>
+                      <span>Sells here for {row.sellPrice} cr · {row.premium >= 0 ? "+" : ""}{row.premium} vs base</span>
+                    </div>
+                    <small>{row.commodity.tags.map((tag) => formatStationTradeTag(tag)).slice(0, 2).join(" · ")}</small>
+                  </div>
+                )) : (
+                  <p style={{ margin: 0, color: "var(--text-dim)" }}>This dock is not signaling any standout import premium right now.</p>
+                )}
+              </article>
+
+              <article className="panel-lite station-service-card">
+                <div className="mission-card-header">
+                  <strong>Ore Buyback</strong>
+                  <span className="status-chip">Local rates</span>
+                </div>
+                {bestResourceSales.map(([resourceId, value]) => (
+                  <div key={resourceId} className="station-brief-list">
+                    <div>
+                      <strong>{resourceId}</strong>
+                      <span>{value} cr/unit</span>
+                    </div>
+                  </div>
+                ))}
+              </article>
+            </div>
             <div className="mkt-header-bar">
               <div className="mkt-table-copy">
                 <strong>Commodity Exchange</strong>
