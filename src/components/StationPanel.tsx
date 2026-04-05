@@ -159,25 +159,16 @@ type BalanceSnapshot = Record<string, number>;
 const BALANCE_GROUPS: BalanceGroup[] = [
   {
     title: "Combat",
-    note: "Use this to change pressure without changing the whole ship kit.",
+    note: "One dial that makes combat safer or harsher in a way you can feel immediately.",
     controls: [
       {
         root: "combat",
-        path: ["difficulty", "normal", "playerDamageMultiplier"],
-        label: "Player damage scalar",
-        min: 0.5,
-        max: 1.5,
+        path: ["pressure", "dial"],
+        label: "Combat pressure",
+        min: 0.6,
+        max: 1.4,
         step: 0.01,
-        helper: "Lower makes the player less dominant. Higher pushes faster clears."
-      },
-      {
-        root: "combat",
-        path: ["turret", "defaultOptimalRange"],
-        label: "Turret optimal range",
-        min: 80,
-        max: 320,
-        step: 5,
-        helper: "Changes how close ships want to fight before falloff starts."
+        helper: "Lower makes you hit harder, take less, and get engaged later. Higher does the reverse."
       }
     ]
   },
@@ -376,6 +367,14 @@ function BalanceSlider({
   const delta = value - baseline;
   const currentLabel = formatBalanceNumber(value, spec.step);
   const baselineLabel = formatBalanceNumber(baseline, spec.step);
+  const modeLabel =
+    spec.root === "combat" && spec.path.join(".") === "pressure.dial"
+      ? value < 0.9
+        ? "Safer"
+        : value > 1.1
+          ? "Deadlier"
+          : "Balanced"
+      : null;
   return (
     <div
       className="panel-lite"
@@ -386,7 +385,7 @@ function BalanceSlider({
         <strong>{spec.label}</strong>
         <span
           className={`status-chip${Math.abs(delta) < 0.0001 ? "" : delta > 0 ? " active" : " warning"}`}
-          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.`}
+          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.${modeLabel ? ` ${modeLabel}.` : ""}`}
         >
           Now {currentLabel} · Was {baselineLabel}
         </span>
@@ -578,11 +577,13 @@ export function StationPanel({
   function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
     if (Number.isNaN(nextValue)) return;
     setBalanceOverride(root, path, nextValue);
+    setBalanceBaseline(captureBalanceSnapshot());
     setBalanceRefresh((value) => value + 1);
   }
 
   function resetBalanceValues() {
     clearBalanceOverrides();
+    setBalanceBaseline(captureBalanceSnapshot());
     setBalanceRefresh((value) => value + 1);
   }
 

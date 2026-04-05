@@ -1,6 +1,10 @@
 import { createBalanceConfig } from "./overrides";
 
 const COMBAT_BALANCE_DEFAULT = {
+  // Master combat pressure dial. Lower values soften the fight; higher values make it harsher.
+  pressure: {
+    dial: 1
+  },
   // Core damage model defaults. Used when a weapon does not provide a typed profile.
   damage: {
     defaultProfile: { em: 0.25, thermal: 0.25, kinetic: 0.25, explosive: 0.25 },

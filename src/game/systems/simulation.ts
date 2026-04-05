@@ -466,6 +466,19 @@ function getDifficultyModifiers(world: GameWorld) {
   return COMBAT_BALANCE.difficulty.normal;
 }
 
+function getCombatPressureModifiers() {
+  const dial = clamp(COMBAT_BALANCE.pressure.dial ?? 1, 0.6, 1.4);
+  const offset = dial - 1;
+  return {
+    dial,
+    playerDamageMultiplier: clamp(1 - offset * 0.35, 0.75, 1.2),
+    enemyDamageMultiplier: clamp(1 + offset * 0.42, 0.78, 1.3),
+    playerTrackingMultiplier: clamp(1 - offset * 0.28, 0.8, 1.2),
+    enemyTrackingMultiplier: clamp(1 + offset * 0.24, 0.82, 1.22),
+    enemyDetectionMultiplier: clamp(1 + offset * 0.18, 0.88, 1.18)
+  };
+}
+
 function getTacticalSlowState(world: GameWorld) {
   return world.player.tacticalSlow;
 }
@@ -1965,37 +1978,10 @@ function queueUndockAction(world: GameWorld, command: CommandAction) {
   pushStory(world, `Queued on undock: ${command.type.replace("_", " ")}`);
 }
 
-function getLockTimeSeconds(world: GameWorld, ref: SelectableRef) {
-  const derived = computeDerivedStats(world.player);
-  const info = getObjectInfo(world, ref);
-  const signature = Math.max(18, info?.signatureRadius ?? 40);
-  return clamp((160 / signature) * (2.2 / Math.max(0.6, derived.lockTimeMultiplier)), 0.7, 4.8);
-}
-
 function updatePendingLocks(world: GameWorld, dt: number) {
-  if (world.player.pendingLocks.length === 0) return;
-  const nextPending: typeof world.player.pendingLocks = [];
-  for (const pending of world.player.pendingLocks) {
-    const info = getObjectInfo(world, pending.ref);
-    if (!info) continue;
-    const derived = computeDerivedStats(world.player);
-    if (info.distance > derived.lockRange * world.player.effects.lockRangeMultiplier) continue;
-    const progress = pending.progress + dt;
-    if (progress >= pending.duration) {
-      if (!world.lockedTargets.find((entry) => entry.id === pending.ref.id && entry.type === pending.ref.type)) {
-        world.lockedTargets.push(pending.ref);
-      }
-      const selectedMatchesPending =
-        world.selectedObject?.id === pending.ref.id && world.selectedObject?.type === pending.ref.type;
-      if (!world.activeTarget || world.activeTarget.type !== "enemy" || selectedMatchesPending) {
-        world.activeTarget = pending.ref;
-      }
-      pushStory(world, `Target locked: ${info.name}.`);
-      continue;
-    }
-    nextPending.push({ ...pending, progress });
+  if (world.player.pendingLocks.length > 0) {
+    world.player.pendingLocks = [];
   }
-  world.player.pendingLocks = nextPending;
 }
 
 export function selectObject(world: GameWorld, ref: SelectableRef | null) {
@@ -2003,37 +1989,12 @@ export function selectObject(world: GameWorld, ref: SelectableRef | null) {
 }
 
 export function lockTarget(world: GameWorld, ref: SelectableRef) {
-  const derived = computeDerivedStats(world.player);
   const info = getObjectInfo(world, ref);
-  if (!info || info.distance > derived.lockRange * world.player.effects.lockRangeMultiplier) return false;
-  if (ref.type !== "enemy") {
-    world.activeTarget = ref;
-    return true;
-  }
-  const currentLockCount = world.lockedTargets.length + world.player.pendingLocks.length;
-  if (
-    !world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type) &&
-    !world.player.pendingLocks.find((entry) => entry.ref.id === ref.id && entry.ref.type === ref.type) &&
-    currentLockCount >= derived.maxLockedTargets
-  ) {
-    pushStory(world, `Target control saturated. Max locks ${derived.maxLockedTargets}.`);
-    return false;
-  }
+  if (!info) return false;
   if (!world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type)) {
-    if (!world.player.pendingLocks.find((entry) => entry.ref.id === ref.id && entry.ref.type === ref.type)) {
-      const lockDuration = getLockTimeSeconds(world, ref);
-      world.player.pendingLocks.push({
-        ref,
-        progress: 0,
-        duration: lockDuration
-      });
-      pushStory(world, `Locking target: ${info.name} (${lockDuration.toFixed(1)}s).`);
-    }
-    return true;
+    world.lockedTargets.push(ref);
   }
-  if (!world.activeTarget) {
-    world.activeTarget = ref;
-  }
+  world.activeTarget = ref;
   return true;
 }
 
@@ -2056,14 +2017,7 @@ export function setActiveTarget(world: GameWorld, ref: SelectableRef | null) {
   }
   const info = getObjectInfo(world, ref);
   if (!info) return;
-  if (ref.type !== "enemy") {
-    world.activeTarget = ref;
-    return;
-  }
-  const locked = world.lockedTargets.find((entry) => entry.id === ref.id && entry.type === ref.type);
-  if (locked) {
-    world.activeTarget = locked;
-  }
+  world.activeTarget = ref;
 }
 
 export function activateTacticalSlow(world: GameWorld) {
@@ -2253,6 +2207,21 @@ function autoEngageNearbyHostile(world: GameWorld) {
   lockTarget(world, targetRef);
   setActiveTarget(world, targetRef);
   activateAllWeapons(world);
+}
+
+function maintainEnemyLockIntent(world: GameWorld) {
+  if (world.dockedStationId || world.player.buildSwap.active) return;
+  const candidate = world.selectedObject?.type === "enemy"
+    ? world.selectedObject
+    : world.activeTarget?.type === "enemy"
+      ? world.activeTarget
+      : null;
+  if (!candidate) return;
+
+  const alreadyLocked = world.lockedTargets.some((entry) => entry.id === candidate.id && entry.type === candidate.type);
+  if (alreadyLocked) return;
+
+  lockTarget(world, candidate);
 }
 
 function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedCheck = false) {
@@ -3626,6 +3595,7 @@ function runPlayerModules(world: GameWorld, dt: number) {
   const player = world.player;
   const derived = computeDerivedStats(player);
   const difficulty = getDifficultyModifiers(world);
+  const combatPressure = getCombatPressureModifiers();
 
   if (player.buildSwap.active) {
     (["weapon", "utility", "defense"] as ModuleSlot[]).forEach((slotType) => {
@@ -3694,7 +3664,11 @@ function runPlayerModules(world: GameWorld, dt: number) {
         if (target?.type === "enemy") {
           const enemy = sector.enemies.find((entry) => entry.id === target.id);
           if (enemy && module.kind !== "missile") {
-            const adjustedModule = getTurretAdjustedModule(module, derived, player.effects.turretTrackingMultiplier);
+            const adjustedModule = getTurretAdjustedModule(
+              module,
+              derived,
+              player.effects.turretTrackingMultiplier * combatPressure.playerTrackingMultiplier
+            );
             const application = computeTurretApplication(
               player.position,
               player.velocity,
@@ -3703,13 +3677,14 @@ function runPlayerModules(world: GameWorld, dt: number) {
               adjustedModule,
               enemyVariantById[enemy.variantId].signatureRadius * enemy.effects.signatureMultiplier
             );
-            appliedDamage = application.damage * difficulty.playerDamageMultiplier;
+            appliedDamage = application.damage * difficulty.playerDamageMultiplier * combatPressure.playerDamageMultiplier;
             quality = application.quality;
           } else if (module.kind === "missile") {
             appliedDamage =
               (module.damage ?? 0) *
               getRangePenalty(targetDistance, module.optimal, module.falloff) *
-              difficulty.playerDamageMultiplier;
+              difficulty.playerDamageMultiplier *
+              combatPressure.playerDamageMultiplier;
             quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
           }
           if (enemy) {
@@ -4031,6 +4006,7 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
 function runEnemyModules(world: GameWorld, dt: number) {
   const sector = getCurrentSector(world);
   const difficulty = getDifficultyModifiers(world);
+  const combatPressure = getCombatPressureModifiers();
   sector.enemies.forEach((enemy) => {
     const variant = enemyVariantById[enemy.variantId];
     enemy.recentDamageTimer = Math.max(0, enemy.recentDamageTimer - dt);
@@ -4040,8 +4016,11 @@ function runEnemyModules(world: GameWorld, dt: number) {
 
     const playerRef: SelectableRef = { id: "player", type: "enemy" };
     const playerDistance = distance(enemy.position, world.player.position);
-    const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier;
-    const pursuitRange = Math.max(detectionRange * 1.95, getEnemyPreferredRange(enemy.variantId) * 2.2);
+    const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier * combatPressure.enemyDetectionMultiplier;
+    const pursuitRange = Math.max(
+      detectionRange * 1.95,
+      getEnemyPreferredRange(enemy.variantId) * 2.2 * combatPressure.enemyDetectionMultiplier
+    );
     const seesPlayer = playerDistance <= detectionRange || (enemy.pursuitTimer > 0 && playerDistance <= pursuitRange);
     const retreating = seesPlayer && shouldEnemyRetreat(enemy, variant, playerDistance);
     if (seesPlayer) {
@@ -4097,17 +4076,18 @@ function runEnemyModules(world: GameWorld, dt: number) {
             world.player.velocity,
             {
               ...module,
-              tracking: (module.tracking ?? 0) * enemy.effects.turretTrackingMultiplier
+              tracking: (module.tracking ?? 0) * enemy.effects.turretTrackingMultiplier * combatPressure.enemyTrackingMultiplier
             },
             playerShipById[world.player.hullId].signatureRadius * world.player.effects.signatureMultiplier
           );
-          appliedDamage = application.damage * difficulty.enemyDamageMultiplier;
+          appliedDamage = application.damage * difficulty.enemyDamageMultiplier * combatPressure.enemyDamageMultiplier;
           quality = application.quality;
         } else {
           appliedDamage =
             (module.damage ?? 0) *
             getRangePenalty(playerDistance, module.optimal, module.falloff) *
-            difficulty.enemyDamageMultiplier;
+            difficulty.enemyDamageMultiplier *
+            combatPressure.enemyDamageMultiplier;
           quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
         }
         const appliedTotal = applyDamageToTarget(
@@ -4784,6 +4764,7 @@ export function updateWorld(world: GameWorld, dt: number) {
   applyTacticalSlowEffects(world);
   applyPlayerControlEffects(world);
   applyEnemyControlEffects(world);
+  maintainEnemyLockIntent(world);
   updatePendingLocks(world, simDt);
   updateRouteAutopilot(world);
   updatePlayerNavigation(world, simDt);
