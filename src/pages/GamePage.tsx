@@ -108,7 +108,11 @@ export function GamePage() {
           />
         )}
 
-        <DeveloperBalanceModal open={balanceOpen} onClose={() => setBalanceOpen(false)} />
+        <DeveloperBalanceModal
+          open={balanceOpen}
+          onClose={() => setBalanceOpen(false)}
+          onRegenShip={actions.regenShip}
+        />
 
         {starterPickerOpen && (
           <StarterShipPicker

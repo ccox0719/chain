@@ -1325,7 +1325,7 @@ export const enemyVariants: EnemyVariant[] = [
     combatStyle: "shield",
     threatLevel: 2,
     shield: 52,
-    armor: 70,
+    armor: 56,
     hull: 76,
     capacitor: 100,
     capacitorRegen: 9,

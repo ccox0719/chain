@@ -435,10 +435,12 @@ function BalanceSlider({
 
 export function DeveloperBalanceModal({
   open,
-  onClose
+  onClose,
+  onRegenShip
 }: {
   open: boolean;
   onClose: () => void;
+  onRegenShip: () => void;
 }) {
   const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
   const [, setBalanceRefresh] = useState(0);
@@ -502,6 +504,9 @@ export function DeveloperBalanceModal({
         <div className="mission-card-header" style={{ marginBottom: "0.5rem" }}>
           <strong>Developer Balance</strong>
           <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="ghost-button mini" onClick={onRegenShip}>
+              Regen Ship
+            </button>
             <button type="button" className="ghost-button mini" onClick={() => void exportBalanceValues()}>
               Export
             </button>

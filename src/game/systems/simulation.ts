@@ -1733,6 +1733,17 @@ export function repairShip(world: GameWorld) {
   return true;
 }
 
+export function regenShip(world: GameWorld) {
+  const derived = getCachedDerivedStats(world.player);
+  world.player.hull = derived.maxHull;
+  world.player.armor = derived.maxArmor;
+  world.player.shield = derived.maxShield;
+  world.player.capacitor = derived.capacitorCapacity;
+  world.player.recentDamageTimer = 0;
+  pushStory(world, "Ship regenerated to full condition.");
+  return true;
+}
+
 export function sellCargo(world: GameWorld) {
   const economy = getLocalEconomySnapshot(world);
   let soldValue = 0;

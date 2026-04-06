@@ -20,6 +20,7 @@ import {
   issueCommand,
   lockTarget,
   repairShip,
+  regenShip,
   resolveSelectionAtPoint,
   loadBuildSlot,
   saveBuildSlot,
@@ -227,6 +228,10 @@ export function useSpaceGame() {
       },
       repair: () => {
         repairShip(worldRef.current);
+        refresh();
+      },
+      regenShip: () => {
+        regenShip(worldRef.current);
         refresh();
       },
       sellCargo: () => {
