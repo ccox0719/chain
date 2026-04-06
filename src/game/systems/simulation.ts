@@ -514,11 +514,12 @@ function getCombatPressureModifiers() {
   const offset = dial - 1;
   return {
     dial,
-    playerDamageMultiplier: clamp(1 - offset * 0.35, 0.75, 1.2),
-    enemyDamageMultiplier: clamp(1 + offset * 0.42, 0.78, 1.3),
-    playerTrackingMultiplier: clamp(1 - offset * 0.28, 0.8, 1.2),
-    enemyTrackingMultiplier: clamp(1 + offset * 0.24, 0.82, 1.22),
-    enemyDetectionMultiplier: clamp(1 + offset * 0.18, 0.88, 1.18)
+    playerDamageMultiplier: clamp(1 - offset * 0.7, 0.6, 1.4),
+    enemyDamageMultiplier: clamp(1 + offset * 0.9, 0.6, 1.45),
+    playerTrackingMultiplier: clamp(1 - offset * 0.45, 0.65, 1.35),
+    enemyTrackingMultiplier: clamp(1 + offset * 0.4, 0.7, 1.3),
+    enemyDetectionMultiplier: clamp(1 + offset * 0.3, 0.75, 1.25),
+    enemyDamageTakenMultiplier: clamp(1 + offset * 1.2, 0.5, 1.5)
   };
 }
 
@@ -3808,14 +3809,19 @@ function runPlayerModules(world: GameWorld, dt: number) {
               adjustedModule,
               enemyVariantById[enemy.variantId].signatureRadius * enemy.effects.signatureMultiplier
             );
-            appliedDamage = application.damage * difficulty.playerDamageMultiplier * combatPressure.playerDamageMultiplier;
+            appliedDamage =
+              application.damage *
+              difficulty.playerDamageMultiplier *
+              combatPressure.playerDamageMultiplier *
+              combatPressure.enemyDamageTakenMultiplier;
             quality = application.quality;
           } else if (module.kind === "missile") {
             appliedDamage =
               (module.damage ?? 0) *
               getRangePenalty(targetDistance, module.optimal, module.falloff) *
               difficulty.playerDamageMultiplier *
-              combatPressure.playerDamageMultiplier;
+              combatPressure.playerDamageMultiplier *
+              combatPressure.enemyDamageTakenMultiplier;
             quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
           }
           if (enemy) {
