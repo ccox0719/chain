@@ -35,6 +35,7 @@ import {
   getRequiredPilotLicenseLevel,
   hasPilotLicenseForModule
 } from "../game/utils/pilotLicense";
+import { getMiningModuleTier } from "../game/utils/mining";
 import { transportMissionCatalog } from "../game/missions/data/transportMissions";
 import { contractProgressFraction } from "../game/procgen/runtime";
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
@@ -937,10 +938,13 @@ export function StationPanel({
 
   function moduleMiningSummary(module: (typeof moduleCatalog)[number]) {
     if (module.kind !== "mining_laser") return null;
+    const miningTier = getMiningModuleTier(module);
     const yieldAmount = Math.max(1, Math.round((module.miningAmount ?? 0) * (module.miningYieldMultiplier ?? 1)));
-    if (module.minesAllInRange) return `Sweeps all asteroids in range for ${yieldAmount} ore/cycle.`;
+    if (module.minesAllInRange) {
+      return `Tier ${miningTier} sweeper. Sweeps all asteroids in range for ${yieldAmount} ore/cycle${miningTier > 1 ? " with better yield on lower-grade ore." : "."}`;
+    }
     const targets = module.miningTargets?.length ? module.miningTargets.join(", ") : "any ore";
-    return `Mines ${targets} for ${yieldAmount} ore/cycle${module.autoMine ? " and auto-locks nearby ore." : "."}`;
+    return `Tier ${miningTier} extractor. Mines ${targets} for ${yieldAmount} ore/cycle${miningTier > 1 ? " with better yield on lower-grade ore" : ""}${module.autoMine ? " and auto-locks nearby ore." : "."}`;
   }
 
   function handleSlotDrop(slotType: ModuleSlot, index: number) {
@@ -1097,20 +1101,38 @@ export function StationPanel({
             <span className={`sec-tag sec-${snapshot.sector.security}`}>{snapshot.sector.security.toUpperCase()}</span>
           </span>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
-          {isDevBuild && (
+        <div className="station-header-actions">
+          <div className="station-header-topline">
+            <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
             <button
               type="button"
-              className="ghost-button"
-              onClick={() => {
-                setBalanceBaseline(captureBalanceSnapshot());
-                setBalanceModalOpen(true);
-              }}
+              onClick={onRepair}
+              disabled={getRepairCost(world.player) <= 0}
+              title={getRepairCost(world.player) <= 0 ? "Ship already fully repaired" : `Repair ship for ${getRepairCost(world.player)} credits`}
             >
-              Balance
+              Repair ({getRepairCost(world.player)} cr)
             </button>
-          )}
+            <button
+              type="button"
+              onClick={onSellCargo}
+              disabled={cargoUsed <= 0}
+              title={cargoUsed <= 0 ? "No cargo to sell" : `Sell all cargo (${cargoUsed}u)`}
+            >
+              Sell Cargo
+            </button>
+            {isDevBuild && (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setBalanceBaseline(captureBalanceSnapshot());
+                  setBalanceModalOpen(true);
+                }}
+              >
+                Balance
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {devBalanceModal}
@@ -1374,14 +1396,6 @@ export function StationPanel({
                   <ResistBlock label="Armor" current={currentHull.armorResists} preview={currentStats.armorResists} />
                   <ResistBlock label="Hull" current={currentHull.hullResists} preview={currentStats.hullResists} />
                 </div>
-              </div>
-              <div className="action-row">
-                <button type="button" onClick={onRepair}>
-                  Repair ({getRepairCost(world.player)} cr)
-                </button>
-                <button type="button" onClick={onSellCargo}>
-                  Sell All Cargo
-                </button>
               </div>
               </article>
             </div>

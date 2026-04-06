@@ -18,6 +18,7 @@ interface ContextMenuProps {
   x: number;
   y: number;
   target: SelectableRef;
+  controlRanges?: { orbitRange: number; keepRange: number } | null;
   onCommand: (
     command:
       | { type: "approach"; target: SelectableRef; range?: number }
@@ -35,7 +36,7 @@ interface ContextMenuProps {
   ) => void;
 }
 
-export function ContextMenu({ x, y, target, onCommand }: ContextMenuProps) {
+export function ContextMenu({ x, y, target, controlRanges, onCommand }: ContextMenuProps) {
   const warpItems = getWarpBands(target).map((range) => ({
     label: `Warp ${range}`,
     command: { type: "warp", target, range } as const
@@ -49,10 +50,14 @@ export function ContextMenu({ x, y, target, onCommand }: ContextMenuProps) {
     target.type === "enemy"
       ? [
           ...common,
-          { label: "Orbit 120 m", command: { type: "orbit", target, range: 120 } as const },
-          { label: "Orbit 220 m", command: { type: "orbit", target, range: 220 } as const },
-          { label: "Keep 260 m", command: { type: "keep_range", target, range: 260 } as const },
-          { label: "Keep 420 m", command: { type: "keep_range", target, range: 420 } as const },
+          {
+            label: `Orbit ${Math.round(controlRanges?.orbitRange ?? 120)} m`,
+            command: { type: "orbit", target, range: controlRanges?.orbitRange ?? 120 } as const
+          },
+          {
+            label: `Keep ${Math.round(controlRanges?.keepRange ?? 260)} m`,
+            command: { type: "keep_range", target, range: controlRanges?.keepRange ?? 260 } as const
+          },
           { label: "Attack", command: { type: "attack", target } as const }
         ]
       : target.type === "station"

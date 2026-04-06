@@ -1556,12 +1556,28 @@ select {
   padding: 0.9rem 1.4rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 1rem;
 }
 
 .station-header-info {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+}
+
+.station-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.station-header-topline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .station-name {
@@ -1590,6 +1606,10 @@ select {
   scrollbar-width: none;
 }
 .station-tabs::-webkit-scrollbar { display: none; }
+
+.station-service-bar {
+  display: none;
+}
 
 .station-tab {
   display: flex;
@@ -3516,10 +3536,14 @@ select {
 
   .hud-stats  { grid-template-columns: 1fr 1fr; }
   .station-command-banner { grid-template-columns: 1fr; }
+  .station-header { padding: 0.75rem 0.75rem 0.65rem; align-items: flex-start; }
+  .station-header-actions { align-items: flex-start; width: 100%; }
+  .station-header-topline { justify-content: flex-start; width: 100%; }
   .station-tabs { justify-content: flex-start; padding: 0.45rem 0.75rem; gap: 0.2rem; }
   .station-tab { flex: 0 0 auto; padding: 0.42rem 0.6rem; min-width: 50px; max-width: none; }
   .station-tab-icon { font-size: 1rem; }
   .station-tab-label { font-size: 0.58rem; }
+  .station-header-topline button { min-width: 0; flex: 1 1 0; padding-inline: 0.65rem; }
   .station-content { padding: 0.85rem 0.75rem; }
 
   .missions-grid {
@@ -5575,7 +5599,7 @@ select {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 8px);
   left: 8px;
-  width: 176px;
+  width: 216px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -5649,6 +5673,7 @@ select {
   flex-direction: column;
   gap: 5px;
   padding: 7px 8px 7px 10px;
+  overflow: visible;
 }
 
 .status-card-head {
@@ -5656,6 +5681,7 @@ select {
   align-items: center;
   gap: 5px;
   min-height: 0;
+  flex-wrap: wrap;
 }
 
 .status-hull-icon {
@@ -5739,27 +5765,34 @@ select {
   display: none;
 }
 
-.speed-nano {
+.status-time-controls {
   display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  padding: 0.15rem 0.1rem 0;
+  align-items: center;
+  gap: 0.28rem;
+  width: 100%;
+  padding: 0;
+  flex-wrap: wrap;
 }
 
-.speed-nano-label {
-  font-size: 0.62rem;
+.status-time-controls .util-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
+.status-time-controls .status-time-reset {
+  width: 38px;
+  font-size: 0.72rem;
+}
+
+.status-time-label {
+  margin-left: 0.15rem;
+  font-size: 0.64rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--text-dim);
-}
-
-.speed-nano-value {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 0.9;
-  letter-spacing: -0.06em;
+  letter-spacing: 0.08em;
   color: var(--neon-b);
-  text-shadow: 0 0 14px rgba(127, 192, 255, 0.16);
+  white-space: nowrap;
 }
 
 .status-nav {
@@ -5773,6 +5806,7 @@ select {
 
 /* Collapsed status card — just head + bars */
 .status-card.collapsed .status-stats,
+.status-card.collapsed .status-time-controls,
 .status-card.collapsed .status-nav { display: none; }
 
 /* ── Route nano strip ── */
@@ -6052,12 +6086,87 @@ select {
   flex-shrink: 0;
 }
 
+.ov-hover-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.6rem 0.65rem 0.65rem;
+  border-top: 1px solid var(--hud-border);
+  background: linear-gradient(180deg, rgba(10, 15, 28, 0.96), rgba(7, 11, 20, 0.98));
+}
+
+.ov-hover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ov-hover-title {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.ov-hover-title strong {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ov-hover-title small {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  line-height: 1.25;
+}
+
+.ov-hover-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.22rem 0.45rem;
+  align-items: baseline;
+  font-size: 0.63rem;
+}
+
+.ov-hover-grid span {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov-hover-grid strong {
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.ov-hover-note {
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(127, 192, 255, 0.08);
+  font-size: 0.63rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+.ov-hover-note.weakness {
+  color: #f0c18c;
+}
+
 /* ================================================================
    UTILITY STRIP (bottom-left)
    ================================================================ */
 .util-strip {
   display: flex;
+  flex-direction: column;
   gap: 3px;
+}
+
+.util-strip-row {
+  display: flex;
+  gap: 3px;
+  flex-wrap: nowrap;
 }
 
 /* Icon-only utility button */
@@ -6205,61 +6314,20 @@ select {
 
 .cmd-btn:disabled { opacity: 0.28; cursor: not-allowed; }
 
-/* ── Travel dial — octagonal instrument ── */
+/* ── Time controls ── */
 .travel-hud {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.travel-dial-outer {
-  width: 80px;
-  height: 80px;
-  background: rgba(127, 192, 255, 0.22);
-  clip-path: polygon(22% 0%, 78% 0%, 100% 22%, 100% 78%, 78% 100%, 22% 100%, 0% 78%, 0% 22%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.travel-hud.moving .util-btn {
+  border-color: rgba(127, 192, 255, 0.28);
 }
 
-.travel-dial-inner {
-  width: calc(100% - 2px);
-  height: calc(100% - 2px);
-  background: rgba(4, 8, 18, 0.96);
-  clip-path: polygon(22% 0%, 78% 0%, 100% 22%, 100% 78%, 78% 100%, 22% 100%, 0% 78%, 0% 22%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
+.travel-hud.moving .status-time-reset {
+  color: var(--neon-b);
 }
-
-.travel-speed {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-
-.travel-state {
-  font-size: 0.48rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  white-space: nowrap;
-  max-width: 48px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-}
-
-/* Glow when moving */
-.travel-hud.moving .travel-dial-outer {
-  background: rgba(127, 192, 255, 0.35);
-}
-.travel-hud.moving .travel-speed { color: var(--neon-b); }
 
 /* ================================================================
    MODULE CLUSTER (bottom-right)
@@ -6528,8 +6596,6 @@ select {
   .hud-tl { width: 148px; }
   .hud-tr { width: 140px; }
   .status-card { padding: 5px 6px 5px 8px; gap: 3px; }
-  .travel-dial-outer { width: 64px; height: 64px; }
-  .travel-speed { font-size: 0.9rem; }
   .mod-btn { width: 38px; height: 38px; }
   .util-btn { width: 36px; height: 36px; }
 }

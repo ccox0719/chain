@@ -4,6 +4,8 @@ import { moduleById } from "../game/data/modules";
 import { getSystemDestination, sectorById } from "../game/data/sectors";
 import { enemyVariantById, playerShipById } from "../game/data/ships";
 import { planRoute } from "../game/universe/routePlanning";
+import { getCombatControlRanges } from "../game/utils/combatRanges";
+import { getMiningModuleTier } from "../game/utils/mining";
 import { getCargoUsed, getStationaryCapacitorRegenMultiplier } from "../game/utils/stats";
 import { CommandAction, GameSnapshot, ModuleSlot, ObjectInfo, SelectableRef } from "../types/game";
 import { contractProgressFraction } from "../game/procgen/runtime";
@@ -146,6 +148,27 @@ function getSystemRiskTone(danger: number): "low" | "med" | "hi" | "extr" {
   return "extr";
 }
 
+function getOverviewTooltip(entry: ObjectInfo) {
+  const lines = [entry.name];
+  if (entry.subtitle) lines.push(entry.subtitle);
+  if (entry.factionLabel) lines.push(`Faction: ${entry.factionLabel}`);
+  if (entry.roleLabel) lines.push(`Role: ${entry.roleLabel}`);
+  if (entry.threatLabel) lines.push(`Threat: ${entry.threatLabel}`);
+  if (entry.combatProfileLabel) lines.push(`Profile: ${entry.combatProfileLabel}`);
+  if (entry.weaknessLabel) lines.push(entry.weaknessLabel);
+  if (entry.type === "enemy") {
+    if (entry.velocity !== undefined) lines.push(`Speed: ${Math.round(entry.velocity)} m/s`);
+    if (entry.signatureRadius !== undefined) lines.push(`Signature: ${Math.round(entry.signatureRadius)} m`);
+    if (entry.preferredRange !== undefined) lines.push(`Preferred range: ${Math.round(entry.preferredRange)} m`);
+    if (entry.shieldPercent !== undefined) lines.push(`Shield: ${Math.round(entry.shieldPercent * 100)}%`);
+    if (entry.armorPercent !== undefined) lines.push(`Armor: ${Math.round(entry.armorPercent * 100)}%`);
+    if (entry.hullPercent !== undefined) lines.push(`Hull: ${Math.round(entry.hullPercent * 100)}%`);
+  } else {
+    lines.push(`Distance: ${Math.round(entry.distance)} m`);
+  }
+  return lines.join("\n");
+}
+
 function makeWarpButtons(target: SelectableRef, type: SelectableRef["type"]): RailButton[] {
   const makeBand = (label: string, range: number, tone?: "primary") => ({
     label,
@@ -171,13 +194,14 @@ function makeWarpButtons(target: SelectableRef, type: SelectableRef["type"]): Ra
   }
 }
 
-function makeTravelButtons(targetInfo: ObjectInfo | null): RailButton[] {
+function makeTravelButtons(world: GameSnapshot["world"], targetInfo: ObjectInfo | null): RailButton[] {
   if (!targetInfo) return [];
   const { ref, distance } = targetInfo;
   const target = ref;
   const warpBtns = makeWarpButtons(target, ref.type);
   const defaultWarp = warpBtns[0]?.command ?? ({ type: "warp", target, range: 0 } as const);
   const approach = { type: "approach", target } as const;
+  const combatRanges = ref.type === "enemy" ? getCombatControlRanges(world, ref) : null;
 
   switch (ref.type) {
     case "station":
@@ -194,7 +218,9 @@ function makeTravelButtons(targetInfo: ObjectInfo | null): RailButton[] {
           : [{ icon: "→", label: "Approach", command: approach, tone: "primary" as const }]),
         { icon: "⊟", label: "Jump", command: { type: "jump", target }, disabled: distance > 150 }
       ];
-    case "enemy":
+    case "enemy": {
+      const orbitRange = combatRanges?.orbitRange ?? 180;
+      const keepRange = combatRanges?.keepRange ?? 320;
       return [
         {
           icon: distance > 420 ? "✦" : "→",
@@ -202,9 +228,10 @@ function makeTravelButtons(targetInfo: ObjectInfo | null): RailButton[] {
           command: distance > 420 ? defaultWarp : approach,
           tone: "primary"
         },
-        { icon: "↺", label: "Orbit", command: { type: "orbit", target, range: 180 } },
-        { icon: "⇤", label: "Keep", command: { type: "keep_range", target, range: 320 } }
+        { icon: "↺", label: `Orbit ${Math.round(orbitRange)}m`, command: { type: "orbit", target, range: orbitRange } },
+        { icon: "⇤", label: `Keep ${Math.round(keepRange)}m`, command: { type: "keep_range", target, range: keepRange } }
       ];
+    }
     case "asteroid":
       return [
         {
@@ -544,12 +571,15 @@ export function GameHud({
     if (m.capacitorDrain) parts.push(`Cap ${m.capacitorDrain}/s drain`);
     parts.push(`${moduleCapPressureLabel(m)} · ${moduleFitAdvice(m)}`);
     if (m.kind === "mining_laser") {
+      const miningTier = getMiningModuleTier(m);
       const miningTargets = m.miningTargets?.length ? m.miningTargets.join(", ") : "any ore";
+      parts.push(`Tier ${miningTier}`);
       parts.push(m.minesAllInRange ? "Sweeps all in range" : `Mines ${miningTargets}`);
       if (m.miningAmount) {
         const boostedYield = Math.max(1, Math.round(m.miningAmount * (m.miningYieldMultiplier ?? 1)));
         parts.push(`Yield ${boostedYield}/cycle${m.miningYieldMultiplier && m.miningYieldMultiplier !== 1 ? ` x${m.miningYieldMultiplier.toFixed(2)}` : ""}`);
       }
+      if (miningTier > 1) parts.push("Better yield on lower-grade ore");
       if (m.autoMine) parts.push("Auto-mine");
     }
     if (m.kind === "salvager") {
@@ -567,6 +597,7 @@ export function GameHud({
   >("all");
   const [overviewCollapsed, setOverviewCollapsed] = useState(false);
   const [statusCollapsed, setStatusCollapsed] = useState(false);
+  const [hoveredOverviewRef, setHoveredOverviewRef] = useState<SelectableRef | null>(null);
 
   // ── Tactical
   const tacticalSlow = world.player.tacticalSlow;
@@ -595,8 +626,18 @@ export function GameHud({
     });
   }, [overview, overviewFilter]);
 
+  const hoveredOverviewInfo = useMemo(() => {
+    if (!hoveredOverviewRef || hoveredOverviewRef.type !== "enemy") return null;
+    return (
+      filteredOverview.find(
+        (entry) =>
+          entry.ref.id === hoveredOverviewRef.id && entry.ref.type === hoveredOverviewRef.type
+      ) ?? null
+    );
+  }, [filteredOverview, hoveredOverviewRef]);
+
   // ── Command buttons for selected target
-  const travelButtons = makeTravelButtons(selectedInfo);
+  const travelButtons = makeTravelButtons(world, selectedInfo);
   const actionButtons = makeActionButtons(selectedInfo, selectedIsActive, onSetActiveTarget);
   const allCmdButtons = [...travelButtons, ...actionButtons];
 
@@ -711,20 +752,36 @@ export function GameHud({
             )}
           </div>
 
-          <div className="speed-nano" title="Current speed">
-            <span className="speed-nano-label">SPD</span>
-            <span className="speed-nano-value">{speed}</span>
-          </div>
-
-          <div className={`travel-hud${speed > 10 ? " moving" : ""}`}>
-            <div className="travel-dial-outer">
-              <div className="travel-dial-inner">
-                <span className="travel-speed">{speed}</span>
-                <span className="travel-state" title={snapshot.navLabel ?? ""}>
-                  {(snapshot.navLabel ?? "IDLE").slice(0, 8)}
-                </span>
-              </div>
-            </div>
+          <div className={`travel-hud status-time-controls${speed > 10 ? " moving" : ""}`} aria-label="Time controls">
+            <button
+              type="button"
+              className={`util-btn${timeScale <= 0.25 ? " dim" : ""}`}
+              title={`Slow time to ${Math.max(0.25, timeScale - 0.25).toFixed(2)}x`}
+              disabled={timeScale <= 0.25}
+              onClick={() => onSetTimeScale(Math.max(0.25, timeScale - 0.25))}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="util-btn status-time-reset"
+              title={`Reset time to 1.00x (current ${timeScale.toFixed(2)}x)`}
+              onClick={() => onSetTimeScale(1)}
+            >
+              1×
+            </button>
+            <button
+              type="button"
+              className={`util-btn${timeScale >= 3 ? " dim" : ""}`}
+              title={`Speed time to ${Math.min(3, timeScale + 0.25).toFixed(2)}x`}
+              disabled={timeScale >= 3}
+              onClick={() => onSetTimeScale(Math.min(3, timeScale + 0.25))}
+            >
+              +
+            </button>
+            <span className="status-time-label" title={`Current time scale ${timeScale.toFixed(2)}x`}>
+              {timeScale.toFixed(2)}x
+            </span>
           </div>
 
         </div>
@@ -933,6 +990,15 @@ export function GameHud({
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      title={getOverviewTooltip(entry)}
+                      onMouseEnter={() => {
+                        if (entry.type === "enemy") setHoveredOverviewRef(entry.ref);
+                      }}
+                      onMouseLeave={() => setHoveredOverviewRef(null)}
+                      onFocus={() => {
+                        if (entry.type === "enemy") setHoveredOverviewRef(entry.ref);
+                      }}
+                      onBlur={() => setHoveredOverviewRef(null)}
                       onClick={() => onSelectOverview(entry.ref)}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -959,6 +1025,72 @@ export function GameHud({
                   <div className="ov-empty">—</div>
                 )}
               </div>
+
+              {hoveredOverviewInfo && (
+                <div className="ov-hover-card" aria-live="polite">
+                  <div className="ov-hover-head">
+                    <div className="ov-hover-title">
+                      <strong>{hoveredOverviewInfo.name}</strong>
+                      <small>{hoveredOverviewInfo.subtitle}</small>
+                    </div>
+                    {hoveredOverviewInfo.threatLabel && (
+                      <span className="status-chip">{hoveredOverviewInfo.threatLabel}</span>
+                    )}
+                  </div>
+
+                  <div className="ov-hover-grid">
+                    <span>Faction</span>
+                    <strong>{hoveredOverviewInfo.factionLabel ?? "Unknown"}</strong>
+                    <span>Role</span>
+                    <strong>{hoveredOverviewInfo.roleLabel ?? "Hostile"}</strong>
+                    <span>Speed</span>
+                    <strong>{Math.round(hoveredOverviewInfo.velocity)} m/s</strong>
+                    <span>Signature</span>
+                    <strong>
+                      {hoveredOverviewInfo.signatureRadius
+                        ? `${Math.round(hoveredOverviewInfo.signatureRadius)} m`
+                        : "—"}
+                    </strong>
+                    <span>Preferred</span>
+                    <strong>
+                      {hoveredOverviewInfo.preferredRange
+                        ? `${Math.round(hoveredOverviewInfo.preferredRange)} m`
+                        : "—"}
+                    </strong>
+                    <span>Track</span>
+                    <strong>
+                      {hoveredOverviewInfo.angularVelocity
+                        ? `${hoveredOverviewInfo.angularVelocity.toFixed(3)} rad/s`
+                        : "—"}
+                    </strong>
+                    <span>Shield</span>
+                    <strong>
+                      {hoveredOverviewInfo.shieldPercent !== undefined
+                        ? `${Math.round(hoveredOverviewInfo.shieldPercent * 100)}%`
+                        : "—"}
+                    </strong>
+                    <span>Armor</span>
+                    <strong>
+                      {hoveredOverviewInfo.armorPercent !== undefined
+                        ? `${Math.round(hoveredOverviewInfo.armorPercent * 100)}%`
+                        : "—"}
+                    </strong>
+                    <span>Hull</span>
+                    <strong>
+                      {hoveredOverviewInfo.hullPercent !== undefined
+                        ? `${Math.round(hoveredOverviewInfo.hullPercent * 100)}%`
+                        : "—"}
+                    </strong>
+                  </div>
+
+                  {hoveredOverviewInfo.combatProfileLabel && (
+                    <div className="ov-hover-note">{hoveredOverviewInfo.combatProfileLabel}</div>
+                  )}
+                  {hoveredOverviewInfo.weaknessLabel && (
+                    <div className="ov-hover-note weakness">{hoveredOverviewInfo.weaknessLabel}</div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -969,6 +1101,7 @@ export function GameHud({
       ════════════════════════════════════════ */}
       <div className="hud-bl">
         <div className="util-strip">
+          <div className="util-strip-row">
           {/* Stop */}
           <button
             type="button"
@@ -1027,6 +1160,7 @@ export function GameHud({
           >
             ⧖
           </button>
+          </div>
         </div>
       </div>
 
@@ -1207,4 +1341,3 @@ export function GameHud({
     </div>
   );
 }
-

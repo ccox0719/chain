@@ -409,6 +409,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     capacitorUse: 9,
     miningAmount: 4,
     miningYieldMultiplier: 1.1,
+    miningTier: 1,
     miningTargets: ["ferrite"],
     modifiers: {}
   },
@@ -430,6 +431,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     capacitorUse: 14,
     miningAmount: 7,
     miningYieldMultiplier: 1.22,
+    miningTier: 3,
     miningTargets: ["ferrite", "ember-crystal"],
     modifiers: {}
   },
@@ -451,6 +453,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     capacitorUse: 18,
     miningAmount: 8,
     miningYieldMultiplier: 1.32,
+    miningTier: 4,
     miningTargets: ["ghost-alloy"],
     modifiers: {}
   },
@@ -472,6 +475,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     capacitorUse: 24,
     miningAmount: 3,
     miningYieldMultiplier: 1.45,
+    miningTier: 5,
     miningTargets: ["ferrite", "ember-crystal", "ghost-alloy"],
     minesAllInRange: true,
     autoMine: true,
@@ -1088,6 +1092,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 200,
     capacitorUse: 12,
     miningAmount: 6,
+    miningTier: 2,
     miningTargets: ["ferrite", "ember-crystal"],
     modifiers: {}
   },

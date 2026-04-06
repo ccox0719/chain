@@ -7,6 +7,7 @@ import { GameMenu } from "../components/GameMenu";
 import { SidebarPanels } from "../components/SidebarPanels";
 import { StarterShipPicker } from "../components/StarterShipPicker";
 import { StationPanel } from "../components/StationPanel";
+import { getCombatControlRanges } from "../game/utils/combatRanges";
 import { useSpaceGame } from "../store/useSpaceGame";
 
 export function GamePage() {
@@ -17,6 +18,10 @@ export function GamePage() {
     () => window.localStorage.getItem("starfall-world") === null
   );
   const deathSummary = snapshot.world.player.deathSummary;
+  const contextCombatRanges =
+    contextMenu && contextMenu.target.type === "enemy"
+      ? getCombatControlRanges(snapshot.world, contextMenu.target)
+      : null;
 
   return (
     <div className="game-shell">
@@ -81,6 +86,7 @@ export function GamePage() {
             x={contextMenu.x}
             y={contextMenu.y}
             target={contextMenu.target}
+            controlRanges={contextCombatRanges}
             onCommand={(command) => {
               actions.issueCommand(command);
               actions.closeContextMenu();

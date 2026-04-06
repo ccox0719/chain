@@ -49,7 +49,8 @@ function idleNav(): NavigationState {
     desiredRange: 0,
     destination: null,
     warpFrom: null,
-    warpProgress: 0
+    warpProgress: 0,
+    postWarpDock: false
   };
 }
 

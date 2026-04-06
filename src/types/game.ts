@@ -376,6 +376,7 @@ export interface ModuleDefinition {
   repairAmount?: number;
   miningAmount?: number;
   miningYieldMultiplier?: number;
+  miningTier?: number;
   salvageYieldMultiplier?: number;
   miningTargets?: ResourceId[];
   minesAllInRange?: boolean;
@@ -789,6 +790,7 @@ export interface NavigationState {
   destination: Vec2 | null;
   warpFrom: Vec2 | null;
   warpProgress: number;
+  postWarpDock: boolean;
 }
 
 export type LocalSiteType =

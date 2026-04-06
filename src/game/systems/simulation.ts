@@ -88,6 +88,7 @@ import {
   scale,
   subtract
 } from "../utils/vector";
+import { canMineResource, getMiningYieldMultiplier } from "../utils/mining";
 import { findObjectAtPoint, getObjectInfo, getObjectPosition, getOverviewEntries } from "../world/spaceObjects";
 import { createTransitLocalSite, enterDestinationSite, isDestinationLocal, isPositionInLocalSite, syncLocalSite } from "../world/sites";
 import {
@@ -1524,6 +1525,7 @@ function setIdle(nav: NavigationState) {
   nav.desiredRange = 0;
   nav.warpFrom = null;
   nav.warpProgress = 0;
+  nav.postWarpDock = false;
 }
 
 function shortestAngleDiff(from: number, to: number) {
@@ -2123,6 +2125,7 @@ function issueNav(world: GameWorld, mode: NavigationState["mode"], target: Selec
   world.player.navigation.destination = target ? getObjectPosition(world, target) : null;
   world.player.navigation.warpFrom = null;
   world.player.navigation.warpProgress = 0;
+  world.player.navigation.postWarpDock = false;
 }
 
 function issuePointNav(world: GameWorld, destination: Vec2) {
@@ -2132,6 +2135,7 @@ function issuePointNav(world: GameWorld, destination: Vec2) {
   world.player.navigation.destination = { ...destination };
   world.player.navigation.warpFrom = null;
   world.player.navigation.warpProgress = 0;
+  world.player.navigation.postWarpDock = false;
 }
 
 function getDestinationIfSameSystem(world: GameWorld, ref: SelectableRef | null) {
@@ -2289,7 +2293,7 @@ function maintainEnemyLockIntent(world: GameWorld) {
   lockTarget(world, candidate);
 }
 
-function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedCheck = false) {
+function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedCheck = false): boolean {
   if (world.dockedStationId && !skipDockedCheck && command.type !== "show_info") {
     if ("target" in command) {
       world.selectedObject = command.target;
@@ -2404,7 +2408,12 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
   }
   if (command.type === "dock") {
     if (isRemoteWarpableDestination(world, command.target)) {
-      return tryExecuteCommand(world, { type: "warp", target: command.target, range: 130 }, skipDockedCheck);
+      const destination = getDestinationIfSameSystem(world, command.target);
+      const warped = tryExecuteCommand(world, { type: "warp", target: command.target, range: 130 }, skipDockedCheck);
+      if (warped && destination?.kind === "station") {
+        world.player.navigation.postWarpDock = true;
+      }
+      return warped;
     }
     disableAutopilot(world);
     issueNav(world, "docking", command.target, 0);
@@ -2598,10 +2607,6 @@ function getTurretAdjustedModule(
   };
 }
 
-function canMineResource(module: { miningTargets?: ResourceId[] }, resource: ResourceId) {
-  return !module.miningTargets?.length || module.miningTargets.includes(resource);
-}
-
 function findAutoMiningTarget(
   world: GameWorld,
   module: { range?: number; miningTargets?: ResourceId[]; minesAllInRange?: boolean; autoMine?: boolean }
@@ -2719,7 +2724,8 @@ function createEnemyFromVariant(
       desiredRange: 0,
       destination: null,
       warpFrom: null,
-      warpProgress: 0
+      warpProgress: 0,
+      postWarpDock: false
     },
     lockedTargets: [],
     activeTarget: null,
@@ -3547,6 +3553,8 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     }
   } else if (nav.mode === "warping" && targetPosition && nav.warpFrom) {
     const previousPosition = { ...player.position };
+    const targetRef = nav.target;
+    const shouldDockAfterWarp = nav.postWarpDock;
     nav.warpProgress = clamp(nav.warpProgress + dt * 0.9, 0, 1);
     const direction = normalize(subtract(targetPosition, nav.warpFrom));
     const totalDistance = Math.max(distance(nav.warpFrom, targetPosition) - nav.desiredRange, 1);
@@ -3568,13 +3576,14 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
       player.velocity = { x: 0, y: 0 };
       nav.warpFrom = null;
       nav.warpProgress = 0;
+      nav.postWarpDock = false;
       setIdle(nav);
       aggroEnemyToPlayer(world, warpInterdictor.enemy.id);
       pushStory(world, `Warp interrupted by ${warpInterdictor.variant.name}.`);
       return;
     }
     if (nav.warpProgress >= 1 || distance(player.position, targetPosition) <= nav.desiredRange + 20) {
-      const destination = nav.target ? getDestinationIfSameSystem(world, nav.target) : null;
+      const destination = targetRef ? getDestinationIfSameSystem(world, targetRef) : null;
       if (destination) {
         enterDestinationSite(world, destination.id);
       } else {
@@ -3583,6 +3592,9 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
       player.position = add(targetPosition, scale(direction, -nav.desiredRange));
       emitWarpArrive(world, player.position);
       setIdle(nav);
+      if (shouldDockAfterWarp && targetRef) {
+        issueNav(world, "docking", targetRef, 0);
+      }
     }
     return;
   } else if (
@@ -3860,10 +3872,16 @@ function runPlayerModules(world: GameWorld, dt: number) {
           let totalMined = 0;
           eligibleAsteroids.forEach((entry) => {
             if (remainingSpace <= 0 || entry.oreRemaining <= 0) return;
+            const tierBonus = getMiningYieldMultiplier(module, entry.resource);
             const mined = Math.min(
               Math.max(
                 1,
-                Math.round((module.miningAmount ?? 0) * derived.miningYieldMultiplier * (module.miningYieldMultiplier ?? 1))
+                Math.round(
+                  (module.miningAmount ?? 0) *
+                    derived.miningYieldMultiplier *
+                    (module.miningYieldMultiplier ?? 1) *
+                    tierBonus
+                )
               ),
               entry.oreRemaining,
               remainingSpace
