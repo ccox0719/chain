@@ -128,8 +128,6 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
   travel: "Survey"
 };
 
-const isDevBuild = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
-
 const BALANCE_ROOTS = {
   combat: COMBAT_BALANCE,
   capacitor: CAPACITOR_BALANCE,
@@ -445,7 +443,7 @@ export function DeveloperBalanceModal({
   const [, setBalanceRefresh] = useState(0);
 
   useEffect(() => {
-    if (!open || !isDevBuild) return;
+    if (!open) return;
     setBalanceBaseline(captureBalanceSnapshot());
     setBalanceRefresh((value) => value + 1);
   }, [open]);
@@ -463,7 +461,7 @@ export function DeveloperBalanceModal({
     setBalanceRefresh((value) => value + 1);
   }
 
-  if (!isDevBuild || !open) return null;
+  if (!open) return null;
 
   return (
     <div
@@ -1139,17 +1137,15 @@ export function StationPanel({
             >
               Sell Cargo
             </button>
-            {isDevBuild && (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  onOpenBalance();
-                }}
-              >
-                Balance
-              </button>
-            )}
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                onOpenBalance();
+              }}
+            >
+              Balance
+            </button>
           </div>
         </div>
       </div>

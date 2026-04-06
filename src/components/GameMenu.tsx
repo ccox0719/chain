@@ -1,7 +1,5 @@
 import { DifficultyId } from "../types/game";
 
-const isDevBuild = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
-
 interface GameMenuProps {
   difficulty: DifficultyId;
   onSetDifficulty: (difficulty: DifficultyId) => void;
@@ -48,15 +46,13 @@ export function GameMenu({ difficulty, onSetDifficulty, onResetGame, onOpenBalan
           </button>
         </div>
 
-        {isDevBuild && (
-          <div className="panel-lite">
-            <h3>Developer</h3>
-            <p>Adjust simulation balance values while testing.</p>
-            <button type="button" onClick={onOpenBalance}>
-              Open Balance Window
-            </button>
-          </div>
-        )}
+        <div className="panel-lite">
+          <h3>Developer</h3>
+          <p>Adjust simulation balance values from the main menu.</p>
+          <button type="button" onClick={onOpenBalance}>
+            Open Balance Window
+          </button>
+        </div>
       </section>
     </div>
   );
