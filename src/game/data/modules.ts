@@ -105,6 +105,8 @@ function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefini
     damage: base.damage ? Number((base.damage * powerScale).toFixed(2)) : base.damage,
     repairAmount: base.repairAmount ? Number((base.repairAmount * powerScale).toFixed(2)) : base.repairAmount,
     miningAmount: base.miningAmount ? Number((base.miningAmount * powerScale).toFixed(2)) : base.miningAmount,
+    miningYieldMultiplier: base.miningYieldMultiplier ? Number((base.miningYieldMultiplier * powerScale).toFixed(2)) : base.miningYieldMultiplier,
+    salvageYieldMultiplier: base.salvageYieldMultiplier ? Number((base.salvageYieldMultiplier * powerScale).toFixed(2)) : base.salvageYieldMultiplier,
     speedBonus: base.speedBonus ? Number((base.speedBonus * powerScale).toFixed(2)) : base.speedBonus,
     resistBonus: base.resistBonus ? Number((base.resistBonus * powerScale).toFixed(3)) : base.resistBonus,
     signatureBonus: base.signatureBonus ? Number((base.signatureBonus * powerScale).toFixed(3)) : base.signatureBonus,
@@ -135,6 +137,8 @@ function makeCivilianVariant(base: ModuleDefinition): ModuleDefinition {
     damage: base.damage ? Number((base.damage * 0.62).toFixed(2)) : base.damage,
     repairAmount: base.repairAmount ? Number((base.repairAmount * 0.68).toFixed(2)) : base.repairAmount,
     miningAmount: base.miningAmount ? Number((base.miningAmount * 0.72).toFixed(2)) : base.miningAmount,
+    miningYieldMultiplier: base.miningYieldMultiplier ? Number((base.miningYieldMultiplier * 0.72).toFixed(2)) : base.miningYieldMultiplier,
+    salvageYieldMultiplier: base.salvageYieldMultiplier ? Number((base.salvageYieldMultiplier * 0.72).toFixed(2)) : base.salvageYieldMultiplier,
     speedBonus: base.speedBonus ? Number((base.speedBonus * 0.72).toFixed(2)) : base.speedBonus,
     resistBonus: base.resistBonus ? Number((base.resistBonus * 0.65).toFixed(3)) : base.resistBonus,
     signatureBonus: base.signatureBonus ? Number((base.signatureBonus * 0.75).toFixed(3)) : base.signatureBonus,
@@ -404,6 +408,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 170,
     capacitorUse: 9,
     miningAmount: 4,
+    miningYieldMultiplier: 1.1,
     miningTargets: ["ferrite"],
     modifiers: {}
   },
@@ -424,6 +429,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 190,
     capacitorUse: 14,
     miningAmount: 7,
+    miningYieldMultiplier: 1.22,
     miningTargets: ["ferrite", "ember-crystal"],
     modifiers: {}
   },
@@ -444,6 +450,7 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 210,
     capacitorUse: 18,
     miningAmount: 8,
+    miningYieldMultiplier: 1.32,
     miningTargets: ["ghost-alloy"],
     modifiers: {}
   },
@@ -464,8 +471,10 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     range: 240,
     capacitorUse: 24,
     miningAmount: 3,
+    miningYieldMultiplier: 1.45,
     miningTargets: ["ferrite", "ember-crystal", "ghost-alloy"],
     minesAllInRange: true,
+    autoMine: true,
     modifiers: {}
   },
   {
@@ -629,6 +638,8 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     cycleTime: 3.8,
     range: 120,
     capacitorUse: 14,
+    salvageYieldMultiplier: 1.18,
+    autoSalvage: true,
     modifiers: {}
   },
   {
@@ -1056,6 +1067,8 @@ const baseModuleCatalogRaw: ModuleDefinition[] = [
     cycleTime: 2.9,
     range: 170,
     capacitorUse: 16,
+    salvageYieldMultiplier: 1.36,
+    autoSalvage: true,
     modifiers: {}
   },
   {

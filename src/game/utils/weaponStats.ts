@@ -27,6 +27,26 @@ export interface CompactModuleMetric {
   tone: string;
 }
 
+export interface UtilityDisplayFact {
+  label: string;
+  value: string;
+}
+
+export interface UtilityDisplayChip {
+  label: string;
+  value: string;
+  tone: string;
+}
+
+export interface UtilityModuleDisplay {
+  purposeLabel: string;
+  activationLabel: string;
+  summary: string;
+  chips: UtilityDisplayChip[];
+  facts: UtilityDisplayFact[];
+  auditLines: string[];
+}
+
 export interface ResistanceProfileEntry {
   type: DamageType;
   label: string;
@@ -258,12 +278,22 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
   const capCost = module.capacitorDrain ?? (module.capacitorUse && module.cycleTime ? module.capacitorUse / module.cycleTime : 0);
   const rate = module.cycleTime && module.cycleTime > 0 ? 1 / module.cycleTime : module.activation === "passive" ? 1 : 0.5;
   const range = module.range ?? 0;
+  const miningYield = module.kind === "mining_laser"
+    ? Math.max(1, Math.round((module.miningAmount ?? 0) * (module.miningYieldMultiplier ?? 1)))
+    : 0;
+  const salvageBonusPct = module.kind === "salvager"
+    ? Math.max(0, ((module.salvageYieldMultiplier ?? 1) - 1) * 100)
+    : 0;
 
   const impact =
-    module.repairAmount ??
-    module.speedBonus ??
-    module.miningAmount ??
-    module.resistBonus ??
+    module.kind === "mining_laser"
+      ? miningYield
+      : module.kind === "salvager"
+        ? salvageBonusPct
+        : module.repairAmount ??
+          module.speedBonus ??
+          module.miningAmount ??
+          module.resistBonus ??
     module.signatureBonus ??
     module.speedPenalty ??
     module.trackingPenalty ??
@@ -294,7 +324,7 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
           : module.kind === "afterburner"
             ? module.speedBonus ?? 0
             : module.kind === "mining_laser"
-              ? module.miningAmount ?? 0
+              ? miningYield
               : module.kind === "webifier"
                 ? module.speedPenalty ?? 0
                 : module.kind === "target_painter"
@@ -338,9 +368,9 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
         module.kind === "afterburner"
           ? `+${module.speedBonus ?? 0} speed`
           : module.kind === "mining_laser"
-            ? `${module.miningAmount ?? 0} ore`
+            ? `${miningYield} ore${module.miningYieldMultiplier && module.miningYieldMultiplier !== 1 ? ` x${module.miningYieldMultiplier.toFixed(2)}` : ""}`
             : module.kind === "salvager"
-              ? `${Math.round((module.cycleTime ?? 0) > 0 ? 60 / (module.cycleTime ?? 1) : 0)} / min`
+              ? `${salvageBonusPct > 0 ? `+${Math.round(salvageBonusPct)}%` : "No"} salvage`
               : module.kind === "shield_booster" || module.kind === "armor_repairer"
                 ? `+${module.repairAmount ?? 0}`
                 : module.kind === "hardener"
@@ -395,9 +425,9 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
               : module.kind === "afterburner"
                 ? "Mobility"
                 : module.kind === "mining_laser"
-                  ? "Coverage"
+                  ? "Automation"
                   : module.kind === "salvager"
-                    ? "Recovery"
+                    ? "Automation"
                     : module.kind === "webifier"
                       ? "Control"
                       : module.kind === "target_painter"
@@ -416,16 +446,18 @@ function getNonWeaponMetricSpecs(module: ModuleDefinition) {
             : module.kind === "afterburner"
               ? `+${module.speedBonus ?? 0}`
               : module.kind === "mining_laser"
-                ? `${module.miningAmount ?? 0}`
-                : module.kind === "webifier"
-                  ? `-${Math.round((module.speedPenalty ?? 0) * 100)}%`
-                  : module.kind === "target_painter"
-                    ? `+${Math.round((module.signatureBonus ?? 0) * 100)}%`
-                    : module.kind === "tracking_disruptor"
-                      ? `-${Math.round((module.trackingPenalty ?? 0) * 100)}%`
-                      : module.kind === "sensor_dampener"
-                        ? `-${Math.round((module.lockRangePenalty ?? 0) * 100)}%`
-                        : `${Math.round(Math.abs(special))}`,
+                ? `${module.autoMine ? "Auto-mine" : "Manual"}`
+                : module.kind === "salvager"
+                  ? `${module.autoSalvage ? "Auto-salvage" : "Manual"}`
+                  : module.kind === "webifier"
+                    ? `-${Math.round((module.speedPenalty ?? 0) * 100)}%`
+                    : module.kind === "target_painter"
+                      ? `+${Math.round((module.signatureBonus ?? 0) * 100)}%`
+                      : module.kind === "tracking_disruptor"
+                        ? `-${Math.round((module.trackingPenalty ?? 0) * 100)}%`
+                        : module.kind === "sensor_dampener"
+                          ? `-${Math.round((module.lockRangePenalty ?? 0) * 100)}%`
+                          : `${Math.round(Math.abs(special))}`,
       tone: "shield"
     }
   ];
@@ -462,6 +494,239 @@ export function getModuleResistanceProfile(module: ModuleDefinition) {
     label: type === "em" ? "EM" : type === "thermal" ? "Thermal" : type === "kinetic" ? "Kinetic" : "Explosive",
     value: bonus
   })) as ResistanceProfileEntry[];
+}
+
+function formatSignedNumber(value: number, digits = 0) {
+  const rounded = Number.isInteger(value) ? value : Number(value.toFixed(digits));
+  return `${rounded >= 0 ? "+" : "-"}${Math.abs(rounded)}`;
+}
+
+function formatPercent(value: number) {
+  const rounded = Math.round(value);
+  return `${rounded >= 0 ? "+" : ""}${rounded}%`;
+}
+
+function formatRatio(value: number, digits = 2) {
+  return `x${value.toFixed(digits)}`;
+}
+
+function formatCapUse(module: ModuleDefinition) {
+  if (module.capacitorDrain !== undefined) return `${module.capacitorDrain.toFixed(1)}/s`;
+  if (module.capacitorUse !== undefined) return `${module.capacitorUse.toFixed(0)}/cycle`;
+  return "Cap-free";
+}
+
+function pushFact(facts: UtilityDisplayFact[], label: string, value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") return;
+  facts.push({ label, value: String(value) });
+}
+
+function pushChip(chips: UtilityDisplayChip[], label: string, value: string | number, tone: string) {
+  chips.push({ label, value: String(value), tone });
+}
+
+function getUtilityPurposeLabel(module: ModuleDefinition) {
+  if (module.kind === "mining_laser") return "Mining";
+  if (module.kind === "salvager") return "Salvage";
+  if (module.kind === "afterburner") return "Mobility";
+  if (module.kind === "webifier") return "Tackle";
+  if (module.kind === "warp_disruptor") return "Interdiction";
+  if (module.kind === "target_painter") return "Targeting";
+  if (module.kind === "tracking_disruptor") return "Jamming";
+  if (module.kind === "sensor_dampener") return "Dampening";
+  if (module.kind === "energy_neutralizer") return "Cap Pressure";
+  if (module.modifiers.miningYieldMultiplier || module.activeModifiers?.miningYieldMultiplier) return "Mining Support";
+  if (module.modifiers.cargoCapacity || module.activeModifiers?.cargoCapacity) return "Cargo";
+  if (module.modifiers.capacitorCapacity || module.modifiers.capacitorRegen) return "Capacitor";
+  if (module.modifiers.turretTrackingMultiplier || module.modifiers.turretOptimalMultiplier || module.modifiers.turretFalloffMultiplier) {
+    return "Fire Control";
+  }
+  if (module.modifiers.maxSpeed || module.activeModifiers?.maxSpeed) return "Mobility";
+  return "Support";
+}
+
+export function getUtilityModuleDisplay(module: ModuleDefinition): UtilityModuleDisplay {
+  const purposeLabel = getUtilityPurposeLabel(module);
+  const activationLabel = module.activation === "passive" ? "Passive utility" : "Active utility";
+  const chips: UtilityDisplayChip[] = [];
+  const facts: UtilityDisplayFact[] = [];
+  const auditLines: string[] = [];
+
+  pushChip(chips, "Mode", activationLabel, "efficiency");
+
+  if (module.kind === "mining_laser") {
+    const yieldAmount = Math.max(1, Math.round((module.miningAmount ?? 0) * (module.miningYieldMultiplier ?? 1)));
+    pushChip(chips, "Yield", `${yieldAmount} ore/cycle`, "damage");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap use", formatCapUse(module), "efficiency");
+    if (module.autoMine || module.minesAllInRange) {
+      pushChip(chips, module.minesAllInRange ? "Sweep" : "Automation", module.minesAllInRange ? "All in range" : "Auto-mine", "application");
+    }
+    if (module.miningTargets?.length) pushChip(chips, "Targets", module.miningTargets.join(" · "), "application");
+
+    pushFact(facts, "Yield", `${yieldAmount} ore/cycle`);
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap use", formatCapUse(module));
+    pushFact(facts, "Targets", module.miningTargets?.length ? module.miningTargets.join(" · ") : null);
+
+    auditLines.push("Mining output uses miningAmount multiplied by miningYieldMultiplier.");
+    if (module.autoMine) auditLines.push("Auto-mine is wired to nearby asteroids when no target is selected.");
+    if (module.minesAllInRange) auditLines.push("Sweeps all eligible asteroids within range on each cycle.");
+  } else if (module.kind === "salvager") {
+    const salvageBonusPct = Math.max(0, ((module.salvageYieldMultiplier ?? 1) - 1) * 100);
+    pushChip(chips, "Recovery", salvageBonusPct > 0 ? `+${Math.round(salvageBonusPct)}% scrap` : "Standard salvage", "shield");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap use", formatCapUse(module), "efficiency");
+    if (module.autoSalvage) pushChip(chips, "Automation", "Auto-salvage", "application");
+
+    pushFact(facts, "Bonus", salvageBonusPct > 0 ? `+${Math.round(salvageBonusPct)}% salvage-scrap` : "None");
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap use", formatCapUse(module));
+    pushFact(facts, "Automation", module.autoSalvage ? "Auto-salvage" : "Manual");
+
+    auditLines.push("Salvage transfers wreck contents directly to the player.");
+    if ((module.salvageYieldMultiplier ?? 1) > 1) {
+      auditLines.push("Bonus salvage-scrap is added on top of the wreck's contents.");
+    }
+    if (module.autoSalvage) auditLines.push("Auto-salvage is wired to nearby wrecks when no target is selected.");
+  } else if (module.kind === "afterburner") {
+    pushChip(chips, "Speed", `+${module.speedBonus ?? 0}`, "damage");
+    pushChip(chips, "Drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Speed bonus", `+${module.speedBonus ?? 0}`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Raises sublight speed while active.");
+    auditLines.push("Consumes capacitor continuously.");
+  } else if (module.kind === "webifier") {
+    pushChip(chips, "Slow", module.speedPenalty ? formatPercent(-(module.speedPenalty * 100)) : "-0%", "tracking");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Slow", module.speedPenalty ? formatPercent(-(module.speedPenalty * 100)) : "-0%");
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Applies a speed multiplier penalty to the target while in range.");
+  } else if (module.kind === "warp_disruptor") {
+    pushChip(chips, "Strength", `${module.warpDisruptStrength ?? 0}`, "application");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Interdiction", `${module.warpDisruptStrength ?? 0}`);
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Warp blocking is currently enforced by hostile disruptor checks during warp commands.");
+  } else if (module.kind === "target_painter") {
+    pushChip(chips, "Signature", module.signatureBonus ? formatPercent(module.signatureBonus * 100) : "+0%", "application");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Signature", module.signatureBonus ? formatPercent(module.signatureBonus * 100) : "+0%");
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Raises target signature multiplier to improve weapon application.");
+  } else if (module.kind === "tracking_disruptor") {
+    pushChip(chips, "Tracking", module.trackingPenalty ? formatPercent(-(module.trackingPenalty * 100)) : "-0%", "tracking");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Tracking", module.trackingPenalty ? formatPercent(-(module.trackingPenalty * 100)) : "-0%");
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Reduces target turret tracking while in range.");
+  } else if (module.kind === "sensor_dampener") {
+    pushChip(chips, "Lock range", module.lockRangePenalty ? formatPercent(-(module.lockRangePenalty * 100)) : "-0%", "range");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap drain", formatCapUse(module), "efficiency");
+    pushFact(facts, "Lock range", module.lockRangePenalty ? formatPercent(-(module.lockRangePenalty * 100)) : "-0%");
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap drain", formatCapUse(module));
+    auditLines.push("Reduces target lock range while in range.");
+  } else if (module.kind === "energy_neutralizer") {
+    pushChip(chips, "Neutralize", `${module.capacitorNeutralizeAmount ?? 0} cap`, "shield");
+    pushChip(chips, "Cycle", module.cycleTime ? `${module.cycleTime.toFixed(1)} s` : "Cycle", "cycle");
+    if (module.range) pushChip(chips, "Range", `${Math.round(module.range)} m`, "range");
+    pushChip(chips, "Cap use", formatCapUse(module), "efficiency");
+    pushFact(facts, "Neutralize", `${module.capacitorNeutralizeAmount ?? 0} cap`);
+    pushFact(facts, "Cycle", module.cycleTime ? `${module.cycleTime.toFixed(1)} s` : null);
+    pushFact(facts, "Range", `${Math.round(module.range ?? 0)} m`);
+    pushFact(facts, "Cap use", formatCapUse(module));
+    auditLines.push("Drains enemy capacitor directly on cycle completion.");
+  } else {
+    const cargoCapacity = module.modifiers.cargoCapacity ?? module.activeModifiers?.cargoCapacity;
+    const capacitorCapacity = module.modifiers.capacitorCapacity ?? module.activeModifiers?.capacitorCapacity;
+    const capacitorRegen = module.modifiers.capacitorRegen ?? module.activeModifiers?.capacitorRegen;
+    const maxSpeed = module.modifiers.maxSpeed ?? module.activeModifiers?.maxSpeed;
+    const lockRange = module.modifiers.lockRange ?? module.activeModifiers?.lockRange;
+    const miningYieldMultiplier = module.modifiers.miningYieldMultiplier ?? module.activeModifiers?.miningYieldMultiplier;
+    const turretTrackingMultiplier = module.modifiers.turretTrackingMultiplier ?? module.activeModifiers?.turretTrackingMultiplier;
+    const turretOptimalMultiplier = module.modifiers.turretOptimalMultiplier ?? module.activeModifiers?.turretOptimalMultiplier;
+    const turretFalloffMultiplier = module.modifiers.turretFalloffMultiplier ?? module.activeModifiers?.turretFalloffMultiplier;
+    const active = module.activeModifiers;
+
+    if (cargoCapacity !== undefined) {
+      pushChip(chips, 'Cargo', formatSignedNumber(cargoCapacity), 'shield');
+      pushFact(facts, 'Cargo', formatSignedNumber(cargoCapacity));
+      auditLines.push('Adds cargo capacity.');
+    }
+    if (capacitorCapacity !== undefined) {
+      pushChip(chips, 'Capacitance', formatSignedNumber(capacitorCapacity), 'efficiency');
+      pushFact(facts, 'Capacitor', formatSignedNumber(capacitorCapacity));
+      auditLines.push('Adds capacitor reserve.');
+    }
+    if (capacitorRegen !== undefined) {
+      pushChip(chips, 'Regen', `${formatSignedNumber(capacitorRegen, 1)}/s`, 'efficiency');
+      pushFact(facts, 'Cap regen', `${formatSignedNumber(capacitorRegen, 1)}/s`);
+      auditLines.push('Adds capacitor regeneration.');
+    }
+    if (maxSpeed !== undefined) {
+      pushChip(chips, 'Speed', formatSignedNumber(maxSpeed), maxSpeed >= 0 ? 'damage' : 'armor');
+      pushFact(facts, 'Speed', formatSignedNumber(maxSpeed));
+      auditLines.push(maxSpeed >= 0 ? 'Improves sublight speed.' : 'Reduces sublight speed.');
+    }
+    if (lockRange !== undefined) {
+      pushChip(chips, 'Lock range', `${formatSignedNumber(lockRange)} m`, 'range');
+      pushFact(facts, 'Lock range', `${formatSignedNumber(lockRange)} m`);
+      auditLines.push('Extends sensor lock range.');
+    }
+    if (active?.lockRange !== undefined && active.lockRange !== lockRange) {
+      pushChip(chips, 'Overcharge', `Lock ${formatSignedNumber(active.lockRange)} m`, 'range');
+      pushFact(facts, 'Active lock range', `${formatSignedNumber(active.lockRange)} m`);
+      auditLines.push('Active mode extends lock range further.');
+    }
+    if (miningYieldMultiplier !== undefined) {
+      pushChip(chips, 'Mining', formatRatio(miningYieldMultiplier), 'damage');
+      pushFact(facts, 'Mining', formatRatio(miningYieldMultiplier));
+      auditLines.push('Multiplies mining yield.');
+    }
+    if (turretTrackingMultiplier !== undefined) {
+      pushChip(chips, 'Tracking', formatRatio(turretTrackingMultiplier), 'tracking');
+      pushFact(facts, 'Tracking', formatRatio(turretTrackingMultiplier));
+      auditLines.push('Improves turret tracking.');
+    }
+    if (turretOptimalMultiplier !== undefined) {
+      pushChip(chips, 'Optimal', formatRatio(turretOptimalMultiplier), 'range');
+      pushFact(facts, 'Optimal', formatRatio(turretOptimalMultiplier));
+      auditLines.push('Extends turret optimal range.');
+    }
+    if (active?.turretOptimalMultiplier !== undefined && active.turretOptimalMultiplier !== turretOptimalMultiplier) {
+      pushChip(chips, 'Overcharge', `Optimal ${formatRatio(active.turretOptimalMultiplier)}`, 'range');
+      pushFact(facts, 'Active optimal', formatRatio(active.turretOptimalMultiplier));
+      auditLines.push('Active mode extends turret optimal range further.');
+    }
+    if (turretFalloffMultiplier !== undefined) {
+      pushChip(chips, 'Falloff', formatRatio(turretFalloffMultiplier), 'range');
+      pushFact(facts, 'Falloff', formatRatio(turretFalloffMultiplier));
+      auditLines.push('Extends turret falloff range.');
+    }
+    if (active?.turretFalloffMultiplier !== undefined && active.turretFalloffMultiplier !== turretFalloffMultiplier) {
+      pushChip(chips, 'Overcharge', `Falloff ${formatRatio(active.turretFalloffMultiplier)}`, 'range');
+      pushFact(facts, 'Active falloff', formatRatio(active.turretFalloffMultiplier));
+      auditLines.push('Active mode extends turret falloff range further.');
+    }
+  }
+  return {
+    purposeLabel,
+    activationLabel,
+    summary: module.description,
+    chips: chips.slice(0, 5),
+    facts: facts.slice(0, 5),
+    auditLines
+  };
 }
 
 export function getModuleResistanceLabel(module: ModuleDefinition) {

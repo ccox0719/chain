@@ -24,6 +24,7 @@ import { getSystemStation, sectorCatalog, sectorById } from "../data/sectors";
 import { createInitialProcgenState, ensureProcgenState } from "../procgen/runtime";
 import { normalizePilotLicense } from "../utils/pilotLicense";
 import { createLocalSiteFromDestination, createTransitLocalSite } from "../world/sites";
+import { COMBAT_BALANCE } from "../config/balance";
 
 let nextId = 0;
 
@@ -275,8 +276,15 @@ function createEnemyPatrolTarget(
   };
 }
 
-export function createRuntimeSector(sectorId: string): SectorRuntime {
+function getEnemyDurabilityMultiplier(difficulty: DifficultyId) {
+  if (difficulty === "easy") return COMBAT_BALANCE.difficulty.easy.enemyDurabilityMultiplier ?? 1;
+  if (difficulty === "hard") return COMBAT_BALANCE.difficulty.hard.enemyDurabilityMultiplier ?? 1;
+  return COMBAT_BALANCE.difficulty.normal.enemyDurabilityMultiplier ?? 1;
+}
+
+export function createRuntimeSector(sectorId: string, difficulty: DifficultyId = "normal"): SectorRuntime {
   const sector = sectorById[sectorId];
+  const enemyDurabilityMultiplier = getEnemyDurabilityMultiplier(difficulty);
   const asteroids: AsteroidState[] = [];
   sector.asteroidFields.forEach((field) => {
     for (let index = 0; index < field.count; index += 1) {
@@ -305,9 +313,9 @@ export function createRuntimeSector(sectorId: string): SectorRuntime {
         position,
         velocity: { x: 0, y: 0 },
         rotation: 0,
-        shield: variant.shield,
-        armor: variant.armor,
-        hull: variant.hull,
+        shield: Math.max(1, Math.round(variant.shield * enemyDurabilityMultiplier)),
+        armor: Math.max(1, Math.round(variant.armor * enemyDurabilityMultiplier)),
+        hull: Math.max(1, Math.round(variant.hull * enemyDurabilityMultiplier)),
         capacitor: variant.capacitor,
         patrolBehavior,
         patrolAnchor: position,
@@ -379,7 +387,7 @@ export function createInitialWorld(
       ? createLocalSiteFromDestination(startSystemId, startStation)
       : createTransitLocalSite(startSystemId, { x: 0, y: 0 }),
     unlockedSectorIds: [startSystemId],
-    sectors: Object.fromEntries(sectorCatalog.map((sector) => [sector.id, createRuntimeSector(sector.id)])),
+    sectors: Object.fromEntries(sectorCatalog.map((sector) => [sector.id, createRuntimeSector(sector.id, difficulty)])),
     missions,
     transportMissions,
     dockedStationId: startStation?.id ?? null,

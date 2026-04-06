@@ -3,7 +3,7 @@ import { createBalanceConfig } from "./overrides";
 const COMBAT_BALANCE_DEFAULT = {
   // Master combat pressure dial. Lower values soften the fight; higher values make it harsher.
   pressure: {
-    dial: 1
+    dial: 0.92
   },
   // Core damage model defaults. Used when a weapon does not provide a typed profile.
   damage: {
@@ -27,10 +27,10 @@ const COMBAT_BALANCE_DEFAULT = {
     qualityGrazing: 0.14
   },
   difficulty: {
-    easy: { playerDamageMultiplier: 1.1, enemyDamageMultiplier: 0.9 },
-    normal: { playerDamageMultiplier: 1, enemyDamageMultiplier: 1 },
-    hard: { playerDamageMultiplier: 0.9, enemyDamageMultiplier: 1.28 },
-    extreme: { playerDamageMultiplier: 0.82, enemyDamageMultiplier: 1.42 }
+    easy: { playerDamageMultiplier: 1.14, enemyDamageMultiplier: 0.84, enemyDurabilityMultiplier: 0.86 },
+    normal: { playerDamageMultiplier: 1.04, enemyDamageMultiplier: 0.94, enemyDurabilityMultiplier: 0.92 },
+    hard: { playerDamageMultiplier: 0.94, enemyDamageMultiplier: 1.18, enemyDurabilityMultiplier: 0.96 },
+    extreme: { playerDamageMultiplier: 0.86, enemyDamageMultiplier: 1.32 }
   }
 } as const;
 

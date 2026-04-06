@@ -4937,6 +4937,80 @@ select {
   gap: 0.34rem 0.54rem;
 }
 
+.weapon-meta-grid.compact.utility-build-lite .weapon-meta-item:nth-child(n + 4) {
+  display: none;
+}
+
+.weapon-utility-hero {
+  margin-top: 0.55rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(127, 192, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(127, 192, 255, 0.14);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.weapon-utility-purpose {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.weapon-utility-kicker {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.weapon-utility-description {
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.weapon-utility-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.34rem 0.48rem;
+}
+
+.weapon-utility-fact {
+  padding: 0.34rem 0.42rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.7rem;
+}
+
+.weapon-utility-fact span {
+  display: block;
+  color: var(--text-dim);
+}
+
+.weapon-utility-fact strong {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.weapon-utility-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.weapon-utility-audit {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.18rem;
+  color: var(--text-dim);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
 .weapon-meta-item {
   padding: 0.34rem 0.42rem;
   border-radius: 8px;
@@ -5037,6 +5111,10 @@ select {
   margin-top: 0.48rem;
   border-top: 1px solid rgba(255,255,255,0.06);
   padding-top: 0.42rem;
+}
+
+.weapon-details-expander.utility-build-lite {
+  display: none;
 }
 
 .weapon-details-expander summary {
@@ -5761,6 +5839,18 @@ select {
   flex-shrink: 0;
 }
 
+.sel-target-warning {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 128, 110, 0.14);
+  border: 1px solid rgba(255, 128, 110, 0.28);
+  color: #ffd2ca;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  max-width: 220px;
+}
 /* Command button strip — horizontal icon buttons above travel dial */
 .cmd-strip {
   display: flex;

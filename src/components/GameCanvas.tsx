@@ -15,6 +15,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
   const touchLastRef = useRef<{ x: number; y: number } | null>(null);
   const touchMovedRef = useRef(false);
   const pinchDistanceRef = useRef(0);
+  const pinchZoomAccumulatorRef = useRef(0);
   const longPressTriggeredRef = useRef(false);
   const mouseDragRef = useRef<{
     startX: number;
@@ -91,6 +92,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
             touchLastRef.current = null;
             touchMovedRef.current = false;
             pinchDistanceRef.current = 0;
+            pinchZoomAccumulatorRef.current = 0;
             longPressTriggeredRef.current = false;
             const dx = event.touches[0].clientX - event.touches[1].clientX;
             const dy = event.touches[0].clientY - event.touches[1].clientY;
@@ -103,6 +105,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
             touchLastRef.current = null;
             touchMovedRef.current = false;
             pinchDistanceRef.current = 0;
+            pinchZoomAccumulatorRef.current = 0;
             longPressTriggeredRef.current = false;
             return;
           }
@@ -129,7 +132,13 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
             const dy = event.touches[0].clientY - event.touches[1].clientY;
             const dist = Math.hypot(dx, dy);
             if (pinchDistanceRef.current > 0) {
-              onWheelZoom(pinchDistanceRef.current - dist);
+              pinchZoomAccumulatorRef.current += pinchDistanceRef.current - dist;
+              const pinchStep = 28;
+              while (Math.abs(pinchZoomAccumulatorRef.current) >= pinchStep) {
+                onWheelZoom(pinchZoomAccumulatorRef.current > 0 ? 1 : -1);
+                pinchZoomAccumulatorRef.current +=
+                  pinchZoomAccumulatorRef.current > 0 ? -pinchStep : pinchStep;
+              }
             }
             pinchDistanceRef.current = dist;
             return;
@@ -138,6 +147,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
             clearTouchTimer();
             touchLastRef.current = null;
             pinchDistanceRef.current = 0;
+            pinchZoomAccumulatorRef.current = 0;
             return;
           }
           const touch = event.touches[0];
@@ -165,6 +175,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
           touchLastRef.current = null;
           touchMovedRef.current = false;
           pinchDistanceRef.current = 0;
+          pinchZoomAccumulatorRef.current = 0;
           longPressTriggeredRef.current = false;
           if (!start || wasLongPress || moved) return;
           onLeftClick(start.x, start.y);
@@ -175,6 +186,7 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
           touchLastRef.current = null;
           touchMovedRef.current = false;
           pinchDistanceRef.current = 0;
+          pinchZoomAccumulatorRef.current = 0;
           longPressTriggeredRef.current = false;
         }}
       />

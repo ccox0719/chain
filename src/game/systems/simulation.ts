@@ -21,6 +21,7 @@ import {
   CombatObjective,
   ResistProfile,
   ResourceId,
+  FactionId,
   SelectableRef,
   SystemDestination,
   SpaceObjectType,
@@ -398,9 +399,43 @@ function applyEnemyBoundaryContainment(
   velocity: Vec2,
   dt: number
 ) {
-  void world;
-  void dt;
-  return { position, velocity };
+  const sectorDef = getCurrentSectorDef(world);
+  const margin = 42;
+  const minX = margin;
+  const maxX = Math.max(minX + 1, sectorDef.width - margin);
+  const minY = margin;
+  const maxY = Math.max(minY + 1, sectorDef.height - margin);
+  const nextPosition = { ...position };
+  const nextVelocity = { ...velocity };
+  let corrected = false;
+
+  if (nextPosition.x < minX) {
+    nextPosition.x = minX;
+    if (nextVelocity.x < 0) nextVelocity.x = Math.max(0, -nextVelocity.x * 0.18);
+    corrected = true;
+  } else if (nextPosition.x > maxX) {
+    nextPosition.x = maxX;
+    if (nextVelocity.x > 0) nextVelocity.x = Math.min(0, -nextVelocity.x * 0.18);
+    corrected = true;
+  }
+
+  if (nextPosition.y < minY) {
+    nextPosition.y = minY;
+    if (nextVelocity.y < 0) nextVelocity.y = Math.max(0, -nextVelocity.y * 0.18);
+    corrected = true;
+  } else if (nextPosition.y > maxY) {
+    nextPosition.y = maxY;
+    if (nextVelocity.y > 0) nextVelocity.y = Math.min(0, -nextVelocity.y * 0.18);
+    corrected = true;
+  }
+
+  if (!corrected) return { position, velocity };
+
+  const edgeDamping = Math.max(0.55, 1 - dt * 1.4);
+  return {
+    position: nextPosition,
+    velocity: scale(nextVelocity, edgeDamping)
+  };
 }
 
 function applyPlayerBoundaryBehavior(world: GameWorld, dt: number) {
@@ -2537,6 +2572,33 @@ function canMineResource(module: { miningTargets?: ResourceId[] }, resource: Res
   return !module.miningTargets?.length || module.miningTargets.includes(resource);
 }
 
+function findAutoMiningTarget(
+  world: GameWorld,
+  module: { range?: number; miningTargets?: ResourceId[]; minesAllInRange?: boolean; autoMine?: boolean }
+) {
+  const sector = getCurrentSector(world);
+  const range = module.range ?? 0;
+  const eligible = sector.asteroids.filter(
+    (entry) =>
+      entry.oreRemaining > 0 &&
+      distance(world.player.position, entry.position) <= range &&
+      canMineResource(module, entry.resource)
+  );
+  if (eligible.length === 0) return null;
+  if (module.minesAllInRange || module.autoMine) {
+    return eligible.sort((left, right) => distance(world.player.position, left.position) - distance(world.player.position, right.position))[0];
+  }
+  return eligible.sort((left, right) => distance(world.player.position, left.position) - distance(world.player.position, right.position))[0];
+}
+
+function findAutoSalvageTarget(world: GameWorld, range?: number) {
+  const sector = getCurrentSector(world);
+  const resolvedRange = range ?? 0;
+  const wrecks = sector.wrecks.filter((entry) => distance(world.player.position, entry.position) <= resolvedRange);
+  if (wrecks.length === 0) return null;
+  return wrecks.sort((left, right) => distance(world.player.position, left.position) - distance(world.player.position, right.position))[0];
+}
+
 function hashString(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -2741,7 +2803,7 @@ function maybeSpawnSectorReinforcement(world: GameWorld, sectorId: string) {
 
   const pack = roles.map((role) => ({
     role,
-    variantId: pickEnemyVariantForHostileRole(role, preferredVariantIds, new Set<string>(), playerPowerTier)
+    variantId: pickEnemyVariantForHostileRole(sectorId, role, preferredVariantIds, new Set<string>(), playerPowerTier)
   }));
   spawnTriggeredHostiles(world, sectorId, { ...world.player.position }, pack);
   sector.reinforcementTimer = clamp(
@@ -2775,6 +2837,7 @@ function getEnemyVariantModuleKinds(variantId: string) {
 }
 
 function scoreEnemyVariantForHostileRole(
+  sectorId: string,
   variantId: string,
   role: HostilePackRole,
   preferredVariantIds: string[] | undefined,
@@ -2782,10 +2845,16 @@ function scoreEnemyVariantForHostileRole(
 ) {
   const variant = enemyVariantById[variantId];
   if (!variant) return Number.NEGATIVE_INFINITY;
+  const sectorDef = sectorById[sectorId];
+  if (!sectorDef) return Number.NEGATIVE_INFINITY;
   const archetype = getEnemyArchetypeDefinition(variant.archetype);
   const moduleKinds = getEnemyVariantModuleKinds(variantId);
   const totalBulk = variant.shield + variant.armor + variant.hull;
-  let score = preferredVariantIds?.includes(variantId) ? 1.5 : 0;
+  const localFactions = new Set<FactionId>([sectorDef.controllingFaction, ...(sectorDef.contestedFactionIds ?? [])]);
+  const threatCap = Math.max(1, Math.min(6, sectorDef.danger + 1 + Math.floor(playerPowerTier / 2)));
+  if (!localFactions.has(variant.faction)) return Number.NEGATIVE_INFINITY;
+  if (variant.threatLevel > threatCap) return Number.NEGATIVE_INFINITY;
+  let score = preferredVariantIds?.includes(variantId) ? 2.5 : 0;
   const techPressure = Math.max(0, playerPowerTier - 1);
   if (variant.elite) {
     score += playerPowerTier >= 3 ? 1.8 + techPressure * 0.35 : 0.5;
@@ -2877,17 +2946,26 @@ function scoreEnemyVariantForHostileRole(
 }
 
 function pickEnemyVariantForHostileRole(
+  sectorId: string,
   role: HostilePackRole,
   preferredVariantIds: string[] | undefined,
   usedVariantIds: Set<string>,
   playerPowerTier: number
 ) {
+  const sectorDef = sectorById[sectorId];
+  const preferredPool =
+    preferredVariantIds?.length
+      ? preferredVariantIds
+      : enemyVariants
+          .filter((variant) => variant.faction === sectorDef?.controllingFaction || sectorDef?.contestedFactionIds?.includes(variant.faction))
+          .map((variant) => variant.id);
   const scored = enemyVariants
     .filter((variant) => !variant.boss)
+    .filter((variant) => preferredPool.length === 0 || preferredPool.includes(variant.id))
     .map((variant) => ({
       variant,
       score:
-        scoreEnemyVariantForHostileRole(variant.id, role, preferredVariantIds, playerPowerTier) -
+        scoreEnemyVariantForHostileRole(sectorId, variant.id, role, preferredPool, playerPowerTier) -
         (usedVariantIds.has(variant.id) ? 0.4 : 0)
     }))
     .sort((left, right) => right.score - left.score);
@@ -2935,7 +3013,7 @@ function buildTriggeredHostilePack(
     roles.unshift(context === "gate" ? "tackle" : "swarm");
   }
   return roles.map((role) => {
-    const variantId = pickEnemyVariantForHostileRole(role, preferredVariantIds, usedVariantIds, playerPowerTier);
+    const variantId = pickEnemyVariantForHostileRole(sectorId, role, preferredVariantIds, usedVariantIds, playerPowerTier);
     usedVariantIds.add(variantId);
     return { role, variantId };
   });
@@ -3163,6 +3241,7 @@ function updateCombatMissionPressure(world: GameWorld, dt: number) {
       const pack: TriggeredHostileSpawn[] = roles.map((role) => ({
         role,
         variantId: pickEnemyVariantForHostileRole(
+          world.currentSectorId,
           role,
           activeMission.reinforcementVariantIds,
           new Set<string>(),
@@ -3190,6 +3269,7 @@ function updateCombatMissionPressure(world: GameWorld, dt: number) {
       const pack: TriggeredHostileSpawn[] = roles.map((role) => ({
         role,
         variantId: pickEnemyVariantForHostileRole(
+          world.currentSectorId,
           role,
           activeMission.reinforcementVariantIds,
           new Set<string>(),
@@ -3626,7 +3706,15 @@ function runPlayerModules(world: GameWorld, dt: number) {
         return;
       }
 
-      const target = resolveModuleTarget(world, module.requiresTarget);
+      let target = resolveModuleTarget(world, module.requiresTarget);
+      if ((!target || target.type !== "asteroid") && module.kind === "mining_laser" && module.autoMine) {
+        const autoTarget = findAutoMiningTarget(world, module);
+        if (autoTarget) target = { id: autoTarget.id, type: "asteroid" };
+      }
+      if ((!target || target.type !== "wreck") && module.kind === "salvager" && module.autoSalvage) {
+        const autoTarget = findAutoSalvageTarget(world, module.range);
+        if (autoTarget) target = { id: autoTarget.id, type: "wreck" };
+      }
       const targetPosition = target ? getObjectPosition(world, target) : null;
       const targetDistance = targetPosition ? distance(player.position, targetPosition) : 0;
       const inRange = !module.range || (targetPosition && targetDistance <= module.range);
@@ -3742,7 +3830,10 @@ function runPlayerModules(world: GameWorld, dt: number) {
           eligibleAsteroids.forEach((entry) => {
             if (remainingSpace <= 0 || entry.oreRemaining <= 0) return;
             const mined = Math.min(
-              Math.max(1, Math.round((module.miningAmount ?? 0) * derived.miningYieldMultiplier)),
+              Math.max(
+                1,
+                Math.round((module.miningAmount ?? 0) * derived.miningYieldMultiplier * (module.miningYieldMultiplier ?? 1))
+              ),
               entry.oreRemaining,
               remainingSpace
             );
@@ -3797,6 +3888,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
           sector.wrecks = sector.wrecks.filter((entry) => entry.id !== wreck.id);
           return;
         }
+        const salvageScore =
+          (wreck.shipId ? 3 : 0) +
+          wreck.modules.length * 1.5 +
+          Math.max(0, Math.round(wreck.credits / 120)) +
+          resourceEntries.reduce((total, [, amount]) => total + Math.max(0, amount), 0) +
+          commodityEntries.reduce((total, [, amount]) => total + Math.max(0, amount), 0);
         let transferredAny = false;
         if (wreck.shipId) {
           if (!player.ownedShips.includes(wreck.shipId)) {
@@ -3859,6 +3956,12 @@ function runPlayerModules(world: GameWorld, dt: number) {
           Object.values(wreck.commodities ?? {}).every((amount) => (amount ?? 0) <= 0)
         ) {
           sector.wrecks = sector.wrecks.filter((entry) => entry.id !== wreck.id);
+        }
+        if (transferredAny && (module.salvageYieldMultiplier ?? 1) > 1) {
+          const salvageBonus = Math.max(1, Math.round(salvageScore * ((module.salvageYieldMultiplier ?? 1) - 1)));
+          player.commodities["salvage-scrap"] = (player.commodities["salvage-scrap"] ?? 0) + salvageBonus;
+          addFloatingText(world, wreck.position, `+${salvageBonus} salvage`, "#9fe3b6");
+          transferredAny = true;
         }
       } else if (module.kind === "shield_booster") {
         player.shield = clamp(

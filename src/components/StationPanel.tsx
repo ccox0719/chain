@@ -857,9 +857,10 @@ export function StationPanel({
 
   function moduleMiningSummary(module: (typeof moduleCatalog)[number]) {
     if (module.kind !== "mining_laser") return null;
-    if (module.minesAllInRange) return "Sweeps all asteroids in range.";
+    const yieldAmount = Math.max(1, Math.round((module.miningAmount ?? 0) * (module.miningYieldMultiplier ?? 1)));
+    if (module.minesAllInRange) return `Sweeps all asteroids in range for ${yieldAmount} ore/cycle.`;
     const targets = module.miningTargets?.length ? module.miningTargets.join(", ") : "any ore";
-    return `Mines ${targets}.`;
+    return `Mines ${targets} for ${yieldAmount} ore/cycle${module.autoMine ? " and auto-locks nearby ore." : "."}`;
   }
 
   function handleSlotDrop(slotType: ModuleSlot, index: number) {

@@ -352,8 +352,12 @@ export interface ModuleDefinition {
   damageProfile?: DamageProfile;
   repairAmount?: number;
   miningAmount?: number;
+  miningYieldMultiplier?: number;
+  salvageYieldMultiplier?: number;
   miningTargets?: ResourceId[];
   minesAllInRange?: boolean;
+  autoMine?: boolean;
+  autoSalvage?: boolean;
   speedBonus?: number;
   resistBonus?: number;
   resistLayer?: "shield" | "armor" | "hull";
@@ -398,6 +402,7 @@ export interface ModuleDefinition {
     armorResistProfile?: Partial<ResistProfile>;
     hullResistProfile?: Partial<ResistProfile>;
     miningYieldMultiplier?: number;
+    salvageYieldMultiplier?: number;
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
     missileDamageMultiplier?: number;
@@ -435,6 +440,7 @@ export interface ModuleDefinition {
     armorResistProfile?: Partial<ResistProfile>;
     hullResistProfile?: Partial<ResistProfile>;
     miningYieldMultiplier?: number;
+    salvageYieldMultiplier?: number;
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
     missileDamageMultiplier?: number;

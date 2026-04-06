@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useMemo, useState } from "react";
 import { moduleById } from "../game/data/modules";
 import { getSystemDestination, sectorById } from "../game/data/sectors";
-import { playerShipById } from "../game/data/ships";
+import { enemyVariantById, playerShipById } from "../game/data/ships";
 import { planRoute } from "../game/universe/routePlanning";
 import { getCargoUsed } from "../game/utils/stats";
 import { CommandAction, GameSnapshot, ModuleSlot, ObjectInfo, SelectableRef } from "../types/game";
@@ -79,6 +79,29 @@ function getOverviewTypeSymbol(type: SelectableRef["type"]) {
   return "·";
 }
 
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getHostileWarpBlocker(world: GameSnapshot["world"]) {
+  const sector = world.sectors[world.currentSectorId];
+  if (!sector) return null;
+  return (
+    sector.enemies.find((enemy) => {
+      const variant = enemyVariantById[enemy.variantId];
+      if (!variant || enemy.hull <= 0) return false;
+      const playerDistance = distance(enemy.position, world.player.position);
+      const seesPlayer = playerDistance <= variant.lockRange * enemy.effects.lockRangeMultiplier;
+      if (!seesPlayer) return false;
+      return enemy.modules.some((runtime) => {
+        if (!runtime.active || !runtime.moduleId) return false;
+        const module = moduleById[runtime.moduleId];
+        if (!module || module.kind !== "warp_disruptor") return false;
+        return !module.range || playerDistance <= module.range;
+      });
+    }) ?? null
+  );
+}
 function moduleCapUsePerSecond(module: (typeof moduleById)[string]) {
   if (module.capacitorDrain) return module.capacitorDrain;
   if (module.capacitorUse && module.cycleTime && module.cycleTime > 0)
@@ -415,6 +438,7 @@ export function GameHud({
       activeTargetInfo.ref.id === selectedInfo.ref.id &&
       activeTargetInfo.ref.type === selectedInfo.ref.type
   );
+  const hostileWarpBlocker = getHostileWarpBlocker(world);
 
   // ── Capacitor status
   const capacitorStatus = useMemo(() => {
@@ -520,7 +544,17 @@ export function GameHud({
     if (m.kind === "mining_laser") {
       const miningTargets = m.miningTargets?.length ? m.miningTargets.join(", ") : "any ore";
       parts.push(m.minesAllInRange ? "Sweeps all in range" : `Mines ${miningTargets}`);
-      if (m.miningAmount) parts.push(`Yield ${m.miningAmount}/cycle`);
+      if (m.miningAmount) {
+        const boostedYield = Math.max(1, Math.round(m.miningAmount * (m.miningYieldMultiplier ?? 1)));
+        parts.push(`Yield ${boostedYield}/cycle${m.miningYieldMultiplier && m.miningYieldMultiplier !== 1 ? ` x${m.miningYieldMultiplier.toFixed(2)}` : ""}`);
+      }
+      if (m.autoMine) parts.push("Auto-mine");
+    }
+    if (m.kind === "salvager") {
+      if (m.salvageYieldMultiplier && m.salvageYieldMultiplier > 1) {
+        parts.push(`Bonus salvage +${Math.round((m.salvageYieldMultiplier - 1) * 100)}%`);
+      }
+      if (m.autoSalvage) parts.push("Auto-salvage");
     }
     return parts.join(" · ");
   }
@@ -1032,6 +1066,11 @@ export function GameHud({
             <span className="sel-target-dist">
               {Math.round(selectedInfo.distance)}m
             </span>
+          </div>
+        )}
+        {selectedInfo && hostileWarpBlocker && (selectedInfo.type === "station" || selectedInfo.type === "gate") && (
+          <div className="sel-target-warning">
+            Warp blocked by {enemyVariantById[hostileWarpBlocker.variantId]?.name ?? "hostile disruptor"}.
           </div>
         )}
 
