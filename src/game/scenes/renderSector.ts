@@ -180,6 +180,12 @@ function seededRand(seed: number) {
 }
 
 function buildBackdropCache(width: number, height: number) {
+  if (width <= 0 || height <= 0 || !Number.isFinite(width) || !Number.isFinite(height)) {
+    const fallback = document.createElement("canvas");
+    fallback.width = 1;
+    fallback.height = 1;
+    return fallback;
+  }
   if (backdropCache && backdropCache.width === width && backdropCache.height === height) {
     return backdropCache.canvas;
   }
@@ -187,6 +193,12 @@ function buildBackdropCache(width: number, height: number) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
+  if (canvas.width <= 0 || canvas.height <= 0) {
+    const fallback = document.createElement("canvas");
+    fallback.width = 1;
+    fallback.height = 1;
+    return fallback;
+  }
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -387,7 +399,10 @@ function drawArenaBackdrop(
   cameraX: number,
   cameraY: number
 ) {
-  ctx.drawImage(buildBackdropCache(viewportWidth, viewportHeight), 0, 0);
+  if (viewportWidth <= 0 || viewportHeight <= 0) return;
+  const backdrop = buildBackdropCache(viewportWidth, viewportHeight);
+  if (backdrop.width <= 0 || backdrop.height <= 0) return;
+  ctx.drawImage(backdrop, 0, 0);
 }
 
 function drawEnergyArc(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, rotation: number) {
@@ -602,6 +617,9 @@ export function renderSector(
   lowQuality = false
 ) {
   _lowQuality = lowQuality;
+  if (canvas.clientWidth <= 0 || canvas.clientHeight <= 0 || canvas.width <= 0 || canvas.height <= 0) {
+    return;
+  }
   const frame = getCameraFrame(world, canvas, zoom, cameraOffset);
   const { viewportWidth, viewportHeight, cameraX, cameraY, viewWidth, viewHeight } = frame;
   const sectorDef = sectorById[world.currentSectorId];

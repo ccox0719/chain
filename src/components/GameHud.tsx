@@ -709,9 +709,22 @@ export function GameHud({
             )}
           </div>
 
-          {snapshot.nearbyPrompt && (
-            <div className="status-nav">{snapshot.nearbyPrompt}</div>
-          )}
+          <div className="speed-nano" title="Current speed">
+            <span className="speed-nano-label">SPD</span>
+            <span className="speed-nano-value">{speed}</span>
+          </div>
+
+          <div className={`travel-hud${speed > 10 ? " moving" : ""}`}>
+            <div className="travel-dial-outer">
+              <div className="travel-dial-inner">
+                <span className="travel-speed">{speed}</span>
+                <span className="travel-state" title={snapshot.navLabel ?? ""}>
+                  {(snapshot.navLabel ?? "IDLE").slice(0, 8)}
+                </span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* Route nano strip */}
@@ -1013,21 +1026,6 @@ export function GameHud({
             ⧖
           </button>
         </div>
-
-        {/* Time scale mini buttons */}
-        <div className="timescale-strip">
-          {[0.5, 1, 2, 3].map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={`ts-btn${Math.abs(timeScale - v) < 0.01 ? " active" : ""}`}
-              title={`Set time ×${v}`}
-              onClick={() => onSetTimeScale(v)}
-            >
-              ×{v % 1 === 0 ? v : v.toFixed(1)}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* ════════════════════════════════════════
@@ -1075,16 +1073,6 @@ export function GameHud({
         )}
 
         {/* Travel instrument — octagonal dial */}
-        <div className={`travel-hud${speed > 10 ? " moving" : ""}`}>
-          <div className="travel-dial-outer">
-            <div className="travel-dial-inner">
-              <span className="travel-speed">{speed}</span>
-              <span className="travel-state" title={snapshot.navLabel ?? ""}>
-                {(snapshot.navLabel ?? "IDLE").slice(0, 8)}
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ════════════════════════════════════════
@@ -1217,3 +1205,5 @@ export function GameHud({
     </div>
   );
 }
+
+

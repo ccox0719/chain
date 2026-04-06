@@ -3374,6 +3374,57 @@ select {
   .station-tab-icon { font-size: 1rem; }
   .station-tab-label { font-size: 0.58rem; }
   .station-content { padding: 0.85rem 0.75rem; }
+
+  .missions-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .missions-filter-bar {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .filter-toggle-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.32rem 0.7rem;
+  }
+
+  .mission-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .mission-card-badges {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .mission-route {
+    gap: 0.28rem;
+    font-size: 0.72rem;
+  }
+
+  .mission-details {
+    gap: 0.28rem;
+  }
+
+  .mission-route-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mission-route-meta {
+    justify-content: flex-start;
+  }
+
+  .market-actions,
+  .action-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ============================================
@@ -4389,6 +4440,104 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+}
+
+@media (max-width: 480px) {
+  .mod-slot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+  }
+
+  /* Horizontal layout: icon | info | buy+sell */
+  .mod-tile {
+    display: grid;
+    grid-template-columns: 1.6rem 1fr auto;
+    grid-template-rows: auto;
+    align-items: center;
+    padding: 0.38rem 0.45rem;
+    gap: 0.4rem;
+  }
+
+  .mod-tile .mod-kind-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.78rem;
+    align-self: center;
+  }
+
+  .mod-tile .mod-row-info {
+    min-width: 0;
+    gap: 0.1rem;
+  }
+
+  /* Name smaller, no wrapping */
+  .mod-tile .weapon-details-title-row strong {
+    font-size: 0.72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  /* Hide slot chip next to name — saves width */
+  .mod-tile .weapon-details-title-row .status-chip {
+    display: none;
+  }
+
+  /* Keep role tag, hide context label */
+  .mod-tile .weapon-tag-row {
+    gap: 0.2rem;
+  }
+  .mod-tile .weapon-role-tag {
+    font-size: 0.6rem;
+    padding: 0.06rem 0.3rem;
+  }
+
+  /* Stat rows: hide progress bars, tighten text */
+  .mod-tile .weapon-stat-bar {
+    display: none;
+  }
+  .mod-tile .weapon-stat-topline {
+    font-size: 0.64rem;
+    gap: 0.3rem;
+  }
+  .mod-tile .weapon-stat-row {
+    gap: 0.08rem;
+  }
+  .mod-tile .weapon-stat-value-wrap strong {
+    font-size: 0.64rem;
+  }
+  .mod-tile .weapon-delta {
+    display: none;
+  }
+
+  /* Hide the Details expander entirely */
+  .mod-tile .weapon-details-expander {
+    display: none;
+  }
+
+  /* Stack buy/sell buttons vertically in right column */
+  .mod-row-trade {
+    grid-template-columns: 1fr;
+    gap: 0.18rem;
+    align-self: center;
+  }
+
+  .mod-trade-btn {
+    padding: 0.22rem 0.38rem;
+    font-size: 0.64rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.05rem;
+  }
+
+  .mod-trade-label {
+    font-size: 0.55rem;
+  }
+
+  .mod-trade-price {
+    font-size: 0.65rem;
+  }
 }
 
 /* ============================================
@@ -5439,6 +5588,33 @@ select {
   white-space: nowrap;
 }
 
+.status-stats span[title="Speed"] {
+  display: none;
+}
+
+.speed-nano {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.15rem 0.1rem 0;
+}
+
+.speed-nano-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.speed-nano-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.06em;
+  color: var(--neon-b);
+  text-shadow: 0 0 14px rgba(127, 192, 255, 0.16);
+}
+
 .status-nav {
   font-size: 0.63rem;
   color: var(--text-dim);
@@ -5776,33 +5952,6 @@ select {
 @keyframes tac-pulse {
   0%, 100% { box-shadow: 0 0 8px rgba(127, 192, 255, 0.2); }
   50% { box-shadow: 0 0 20px rgba(127, 192, 255, 0.45); }
-}
-
-/* Time scale strip */
-.timescale-strip {
-  display: flex;
-  gap: 2px;
-}
-
-.ts-btn {
-  height: 22px;
-  padding: 0 6px;
-  display: grid;
-  place-items: center;
-  background: rgba(4, 8, 18, 0.82);
-  border: 1px solid var(--hud-border);
-  color: var(--text-dim);
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  transition: all 0.12s ease;
-}
-.ts-btn:hover { color: var(--text); border-color: var(--hud-border-bright); }
-.ts-btn.active {
-  background: rgba(22, 52, 108, 0.55);
-  border-color: rgba(127, 192, 255, 0.38);
-  color: var(--neon-b);
 }
 
 /* ================================================================
