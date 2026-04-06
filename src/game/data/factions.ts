@@ -33,7 +33,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["security line ship", "escort skirmisher", "shield support"],
     prepAdvice: "Prepare for EM/Thermal shield fleets, orderly focus fire, and solid mid-range coverage.",
     regions: ["aurelian-core"],
-    threatSummary: "EM/Thermal shield pressure with disciplined mid-range formations."
+    threatSummary: "EM/Thermal shield pressure with disciplined mid-range formations.",
+    homeRegions: ["aurelian-core"],
+    civilianCulture: "Convoy law, civic service, secure trade, and orderly market behavior.",
+    stationTone: "Clean, formal, procedural, and visibly supervised.",
+    marketBias: ["trade", "repair", "logistics", "research"],
+    legalStyle: "strict",
+    shipFamilies: ["civic", "escort", "shield", "logistics"],
+    allies: ["helion-cabal", "ironbound-syndicate"],
+    rivals: ["veilborn", "blackwake-clans"],
+    warAims: ["Hold core routes", "Protect convoy lanes", "Stabilize border traffic"],
+    recruitmentStyle: "Licensed service and convoy contracts",
+    fleetIdentity: "Convoy screen and defensive fleet command",
+    serviceBranches: ["escort", "patrol", "logistics", "repair"]
   },
   "cinder-union": {
     id: "cinder-union",
@@ -53,7 +65,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["heavy bruiser", "missile skirmisher", "convoy artillery"],
     prepAdvice: "Expect thicker armor, kinetic-heavy pressure, and opponents that are slow until they pin the fight.",
     regions: ["industrial-fringe"],
-    threatSummary: "Kinetic/Thermal armor fleets built to grind through convoy lanes."
+    threatSummary: "Kinetic/Thermal armor fleets built to grind through convoy lanes.",
+    homeRegions: ["industrial-fringe"],
+    civilianCulture: "Labor-first extraction, hard quotas, and pride in surviving the shift.",
+    stationTone: "Sooted, loud, heavy, and shaped by production schedules.",
+    marketBias: ["industrial", "mining", "materials", "fuel"],
+    legalStyle: "contractual",
+    shipFamilies: ["armor", "mining", "convoy", "rail"],
+    allies: ["aurelian-league", "ironbound-syndicate"],
+    rivals: ["veilborn", "blackwake-clans"],
+    warAims: ["Secure refinery flow", "Break blockades", "Hold industrial border lanes"],
+    recruitmentStyle: "Industrial contract service",
+    fleetIdentity: "Siege logistics and heavy line warfare",
+    serviceBranches: ["mining", "escort", "freight", "siege"]
   },
   veilborn: {
     id: "veilborn",
@@ -73,7 +97,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["hunter", "control support", "missile skirmisher"],
     prepAdvice: "Bring answers to tackle and range control. Veilborn fights are won by geometry before raw damage.",
     regions: ["frontier-march"],
-    threatSummary: "Mixed burst damage, control tools, and fast skirmishing pressure."
+    threatSummary: "Mixed burst damage, control tools, and fast skirmishing pressure.",
+    homeRegions: ["frontier-march"],
+    civilianCulture: "Crew loyalty, quiet routes, opportunism, and survival by improvisation.",
+    stationTone: "Low-light docks, hidden berths, and deniable commerce.",
+    marketBias: ["frontier", "salvage", "smuggling", "black-market"],
+    legalStyle: "loose",
+    shipFamilies: ["skirmish", "control", "salvage", "missile"],
+    allies: ["blackwake-clans"],
+    rivals: ["aurelian-league", "helion-cabal"],
+    warAims: ["Deny routes", "Harass supply lines", "Exploit border instability"],
+    recruitmentStyle: "Crew trust and deniable work",
+    fleetIdentity: "Raiding screens and denial warfare",
+    serviceBranches: ["recon", "skirmish", "salvage", "interdiction"]
   },
   "helion-cabal": {
     id: "helion-cabal",
@@ -93,7 +129,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["siege sniper", "precision line ship", "sensor support"],
     prepAdvice: "Use terrain, close distance deliberately, and do not give Cabal snipers a stable firing lane.",
     regions: ["aurelian-core"],
-    threatSummary: "EM/Thermal shield fleets that fight at range with precise laser pressure."
+    threatSummary: "EM/Thermal shield fleets that fight at range with precise laser pressure.",
+    homeRegions: ["aurelian-core"],
+    civilianCulture: "Competence as status, technical restraint, and prestige through precision.",
+    stationTone: "Sterile, prismatic, and calibrated around data and optics.",
+    marketBias: ["research", "high-tech", "electronics", "precision"],
+    legalStyle: "technical",
+    shipFamilies: ["sensor", "laser", "precision", "support"],
+    allies: ["aurelian-league"],
+    rivals: ["veilborn", "blackwake-clans"],
+    warAims: ["Preserve telemetry advantage", "Secure sensor corridors", "Undercut enemy targeting"],
+    recruitmentStyle: "Technical certification and research service",
+    fleetIdentity: "Overwatch fleets and target designation",
+    serviceBranches: ["survey", "support", "overwatch", "research"]
   },
   "ironbound-syndicate": {
     id: "ironbound-syndicate",
@@ -113,7 +161,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["heavy bruiser", "artillery gunship", "armor command hull"],
     prepAdvice: "Bring tools to break armor and enough mobility to avoid feeding their preferred short-to-mid range brawl.",
     regions: ["industrial-fringe"],
-    threatSummary: "Kinetic/Explosive armor hulls that hit hard and hold the line."
+    threatSummary: "Kinetic/Explosive armor hulls that hit hard and hold the line.",
+    homeRegions: ["industrial-fringe"],
+    civilianCulture: "Contracts, freight discipline, customs power, and practical strength.",
+    stationTone: "Heavy docks, customs checkpoints, and freight-first service lanes.",
+    marketBias: ["logistics", "industrial", "repair", "cargo"],
+    legalStyle: "customs",
+    shipFamilies: ["brick", "freight", "security", "artillery"],
+    allies: ["aurelian-league", "cinder-union"],
+    rivals: ["veilborn", "blackwake-clans"],
+    warAims: ["Control freight lanes", "Hold customs crossings", "Protect industrial throughput"],
+    recruitmentStyle: "Contract service and freight security",
+    fleetIdentity: "Armored battlegroups and lane control",
+    serviceBranches: ["freight", "security", "artillery", "logistics"]
   },
   "blackwake-clans": {
     id: "blackwake-clans",
@@ -133,7 +193,19 @@ export const factionData: Record<FactionId, FactionDefinition> = {
     enemyArchetypePreferences: ["swarm raider", "interceptor", "reaver bruiser"],
     prepAdvice: "Kill tackle early, respect disruption, and assume a Blackwake lane gets worse if you linger.",
     regions: ["frontier-march"],
-    threatSummary: "Mixed pirate raids with control modules, ambush pressure, and erratic burst damage."
+    threatSummary: "Mixed pirate raids with control modules, ambush pressure, and erratic burst damage.",
+    homeRegions: ["frontier-march"],
+    civilianCulture: "Clan loyalty, salvage economics, and raids as a normal trade language.",
+    stationTone: "Patchwork salvage docks, threat-first commerce, and ugly repairs.",
+    marketBias: ["salvage", "illegal", "contraband", "frontier"],
+    legalStyle: "criminal",
+    shipFamilies: ["raider", "interceptor", "swarm", "salvage"],
+    allies: ["veilborn"],
+    rivals: ["aurelian-league", "ironbound-syndicate"],
+    warAims: ["Disrupt supply", "Convert salvage into war stock", "Make border lanes expensive"],
+    recruitmentStyle: "Clan ties and opportunistic contracts",
+    fleetIdentity: "Pirate warbands and salvage fleets",
+    serviceBranches: ["raiding", "salvage", "interdiction", "contraband"]
   }
 };
 

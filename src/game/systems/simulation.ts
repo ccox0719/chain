@@ -31,6 +31,7 @@ import {
   Vec2
 } from "../../types/game";
 import { bossByMissionId } from "../data/bosses";
+import { factionData } from "../data/factions";
 import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { missionById, missionCatalog } from "../data/missions";
 import { moduleById } from "../data/modules";
@@ -46,7 +47,7 @@ import {
   normalizePilotLicense
 } from "../utils/pilotLicense";
 import { advanceRouteAfterJump, estimateRouteRisk, getNextRouteStep, planRoute } from "../universe/routePlanning";
-import { getCargoUsed, computeDerivedStats } from "../utils/stats";
+import { getCargoUsed, getCachedDerivedStats, getStationaryCapacitorRegenMultiplier } from "../utils/stats";
 import { transportMissionById, transportMissionCatalog } from "../missions/data/transportMissions";
 import { commodityById, commodityCatalog } from "../economy/data/commodities";
 import { isCommodityStockedAtStation } from "../economy/commodityAvailability";
@@ -343,6 +344,12 @@ export function addCredits(world: GameWorld, amount: number) {
   pushStory(world, `DEV: added ${Math.round(amount)} credits.`);
 }
 
+function adjustFactionStanding(world: GameWorld, factionId: FactionId, amount: number) {
+  if (!Number.isFinite(amount) || amount === 0) return;
+  const current = world.player.factionStandings[factionId] ?? 0;
+  world.player.factionStandings[factionId] = Number(clamp(current + amount, 0, 3).toFixed(2));
+}
+
 function ensurePilotLicense(world: GameWorld) {
   world.player.pilotLicense = normalizePilotLicense(world.player.pilotLicense);
 }
@@ -598,7 +605,7 @@ function getActiveHardenerBonus(modules: Array<{ active: boolean; moduleId: stri
 }
 
 function getPlayerLayerResists(world: GameWorld) {
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   const bonus = getActiveHardenerBonus(world.player.modules.defense);
   return {
     shield: clampResists(derived.shieldResists, bonus),
@@ -762,7 +769,7 @@ function getHostileWarpDisruptor(world: GameWorld) {
 
 function getWeaponDamageMultiplier(
   kind: string | undefined,
-  derived: ReturnType<typeof computeDerivedStats>
+  derived: ReturnType<typeof getCachedDerivedStats>
 ) {
   if (kind === "laser") return derived.laserDamageMultiplier;
   if (kind === "railgun") return derived.railgunDamageMultiplier;
@@ -772,7 +779,7 @@ function getWeaponDamageMultiplier(
 
 function getWeaponCycleMultiplier(
   kind: string | undefined,
-  derived: ReturnType<typeof computeDerivedStats>
+  derived: ReturnType<typeof getCachedDerivedStats>
 ) {
   if (kind === "laser") return derived.laserCycleMultiplier;
   if (kind === "railgun") return derived.railgunCycleMultiplier;
@@ -977,7 +984,7 @@ function applyBuildLoadout(world: GameWorld, loadout: EquippedLoadout) {
     defense: nextLoadout.defense
   };
   rebuildPlayerRuntime(world.player);
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   world.player.hull = clamp(world.player.hull, 0, derived.maxHull);
   world.player.armor = clamp(world.player.armor, 0, derived.maxArmor);
   world.player.shield = clamp(world.player.shield, 0, derived.maxShield);
@@ -1086,7 +1093,7 @@ function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
   const station = world.dockedStationId ? getCurrentStation(world) : getCurrentStation(world);
   const system = getCurrentSectorDef(world);
   const security = system.security;
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   const scalePrice = (value: number, multiplier: number) => Math.max(1, Math.round(value * multiplier));
   const commodityBuyPrices = Object.fromEntries(
     commodityCatalog.map((commodity) => [
@@ -1270,6 +1277,7 @@ function completeTransportMission(world: GameWorld, mission: TransportMissionDef
     const payout = getTransportMissionPayout(world, mission);
     world.player.credits += payout;
     awardPilotLicenseProgress(world, payout / 16);
+    adjustFactionStanding(world, mission.clientFaction, 0.14);
     state.rewardClaimed = true;
     pushStory(
       world,
@@ -1337,6 +1345,11 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
     }
     world.player.credits += payout;
     awardPilotLicenseProgress(world, payout / 10);
+    adjustFactionStanding(
+      world,
+      sectorById[activeProcedural.issuerSystemId]?.controllingFaction ?? getCurrentSectorDef(world).controllingFaction,
+      0.12
+    );
     activeProceduralState.status = "completed";
     activeProceduralState.rewardClaimed = true;
     world.procgen.activeContract = null;
@@ -1359,6 +1372,7 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
   const rewardCredits = mission.rewardCredits + (mission.bossEncounter?.rewardCreditsBonus ?? 0);
   world.player.credits += rewardCredits;
   awardPilotLicenseProgress(world, rewardCredits / 8);
+  adjustFactionStanding(world, mission.issuerFaction ?? getCurrentSectorDef(world).controllingFaction, 0.16);
   state.status = "completed";
   if (mission.unlockSystemId && !world.unlockedSectorIds.includes(mission.unlockSystemId)) {
     world.unlockedSectorIds.push(mission.unlockSystemId);
@@ -1373,13 +1387,18 @@ export function acceptMission(world: GameWorld, missionId: string) {
   if (missionId.startsWith("proc:")) {
     const contract = getBoardContractById(world, missionId);
     if (!contract) return false;
+    const contractStanding = world.player.factionStandings[contract.issuerFaction] ?? 0;
+    if (contract.requiredStanding !== undefined && contractStanding < contract.requiredStanding) {
+      pushStory(world, `${contract.title} requires ${factionData[contract.issuerFaction].name} standing ${contract.requiredStanding.toFixed(2)}.`);
+      return false;
+    }
     const hasActiveClassic = missionCatalog.some((entry) => world.missions[entry.id]?.status === "active");
     const hasActiveTransport = Object.values(world.transportMissions).some((entry) => entry.status === "active");
     if (hasActiveClassic || hasActiveTransport || world.procgen.activeContractState?.status === "active") {
       return false;
     }
     if (contract.type === "transport") {
-      const cargoCapacity = computeDerivedStats(world.player).cargoCapacity;
+      const cargoCapacity = getCachedDerivedStats(world.player).cargoCapacity;
       if ((contract.cargoVolume ?? 0) > cargoCapacity) {
         pushStory(world, `${contract.title} needs a larger cargo hold.`);
         return false;
@@ -1404,6 +1423,12 @@ export function acceptMission(world: GameWorld, missionId: string) {
   const mission = missionById[missionId];
   const state = world.missions[missionId];
   if (mission && state) {
+    const missionFaction = mission.issuerFaction ?? getCurrentSectorDef(world).controllingFaction;
+    const missionStanding = world.player.factionStandings[missionFaction] ?? 0;
+    if (mission.requiredStanding !== undefined && missionStanding < mission.requiredStanding) {
+      pushStory(world, `${mission.title} requires ${factionData[missionFaction].name} standing ${mission.requiredStanding.toFixed(2)}.`);
+      return false;
+    }
     const hasActiveClassic = missionCatalog.some((entry) => world.missions[entry.id]?.status === "active");
     const hasActiveTransport = Object.values(world.transportMissions).some((entry) => entry.status === "active");
     if (hasActiveClassic || hasActiveTransport) {
@@ -1429,6 +1454,11 @@ export function acceptMission(world: GameWorld, missionId: string) {
   const transport = transportMissionById[missionId];
   const transportState = world.transportMissions[missionId];
   if (!transport || !transportState) return false;
+  const transportStanding = world.player.factionStandings[transport.clientFaction] ?? 0;
+  if (transport.requiredStanding !== undefined && transportStanding < transport.requiredStanding) {
+    pushStory(world, `${transport.title} requires ${factionData[transport.clientFaction].name} standing ${transport.requiredStanding.toFixed(2)}.`);
+    return false;
+  }
   if (
     transportState.status === "completed" ||
     transportState.status === "active" ||
@@ -1436,7 +1466,7 @@ export function acceptMission(world: GameWorld, missionId: string) {
   ) {
     return false;
   }
-  const cargoCapacity = computeDerivedStats(world.player).cargoCapacity;
+  const cargoCapacity = getCachedDerivedStats(world.player).cargoCapacity;
   if (transport.cargoVolume > cargoCapacity) {
     pushStory(world, `${transport.title} needs a larger cargo hold.`);
     return false;
@@ -1599,14 +1629,14 @@ function canDock(world: GameWorld) {
   const station = getCurrentStation(world);
   if (!station) return false;
   const stationRef: SelectableRef = { id: station.id, type: "station" };
-  return objectInRange(world, stationRef, computeDerivedStats(world.player).interactionRange);
+  return objectInRange(world, stationRef, getCachedDerivedStats(world.player).interactionRange);
 }
 
 export function dock(world: GameWorld) {
   const station = getCurrentStation(world);
   if (!station) return false;
   if (!canDock(world)) return false;
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   world.dockedStationId = station.id;
   enterDestinationSite(world, station.id);
   world.player.velocity = { x: 0, y: 0 };
@@ -1638,7 +1668,7 @@ export function dock(world: GameWorld) {
     if (!state || state.status !== "active") return;
 
     if (!state.pickedUp && station.id === mission.pickupStationId) {
-      const derived = computeDerivedStats(world.player);
+      const derived = getCachedDerivedStats(world.player);
       if (getCargoUsed(world.player) + mission.cargoVolume <= derived.cargoCapacity) {
         world.player.missionCargo.push({
           missionId: mission.id,
@@ -1684,7 +1714,7 @@ export function undock(world: GameWorld) {
 }
 
 export function repairShip(world: GameWorld) {
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   const cost = Math.ceil(
     (derived.maxHull - world.player.hull) * 2 +
       (derived.maxArmor - world.player.armor) * 1.7 +
@@ -1739,7 +1769,7 @@ export function buyCommodity(world: GameWorld, commodityId: CommodityId, quantit
     return false;
   }
 
-  const freeCargo = computeDerivedStats(world.player).cargoCapacity - getCargoUsed(world.player);
+  const freeCargo = getCachedDerivedStats(world.player).cargoCapacity - getCargoUsed(world.player);
   const requiredVolume = commodity.volume * quantity;
   if (requiredVolume > freeCargo) {
     const missionCargoUsed = world.player.missionCargo.reduce((total, entry) => total + entry.volume, 0);
@@ -1999,7 +2029,7 @@ export function equipModuleToSlot(
   }
   slots[slotIndex] = moduleId;
   rebuildPlayerRuntime(world.player);
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   world.player.hull = Math.min(world.player.hull, derived.maxHull);
   world.player.armor = Math.min(world.player.armor, derived.maxArmor);
   world.player.shield = Math.min(world.player.shield, derived.maxShield);
@@ -2199,7 +2229,7 @@ function setAutopilotEnabled(world: GameWorld, enabled: boolean) {
 }
 
 function getMaxEngagementRange(world: GameWorld) {
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   const weaponRanges = world.player.equipped.weapon
     .filter((moduleId): moduleId is string => Boolean(moduleId))
     .map((moduleId) => {
@@ -2554,7 +2584,7 @@ function getTurretAdjustedModule(
     signatureResolution?: number;
     kind?: string;
   },
-  derived?: ReturnType<typeof computeDerivedStats>,
+  derived?: ReturnType<typeof getCachedDerivedStats>,
   trackingEffectMultiplier = 1
 ) {
   if (!derived || (module.kind !== "laser" && module.kind !== "railgun")) {
@@ -3343,7 +3373,7 @@ function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, 
 
 function updateRouteAutopilot(world: GameWorld) {
   if (!world.routePlan?.autoFollow || world.dockedStationId) return;
-  const interactionRange = computeDerivedStats(world.player).interactionRange;
+  const interactionRange = getCachedDerivedStats(world.player).interactionRange;
   if (world.currentSectorId === world.routePlan.destinationSystemId && world.routePlan.destinationDestinationId) {
     const destination = getSystemDestination(world.currentSectorId, world.routePlan.destinationDestinationId);
     if (!destination) return;
@@ -3398,7 +3428,7 @@ function updateRouteAutopilot(world: GameWorld) {
 function updatePlayerNavigation(world: GameWorld, dt: number) {
   const player = world.player;
   const sectorDef = getCurrentSectorDef(world);
-  const derived = computeDerivedStats(player);
+  const derived = getCachedDerivedStats(player);
   const playerShip = playerShipById[player.hullId];
   const bodyRadius = Math.max(14, playerShip.signatureRadius * player.effects.signatureMultiplier * 0.46);
   const terrainBias = playerShip.shipClass === "industrial" ? 1.08 : 0.92;
@@ -3406,8 +3436,9 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   player.recentDamageTimer = Math.max(0, player.recentDamageTimer - dt);
   const passiveShieldFactor = player.recentDamageTimer > 0 ? 0.02 : 0.18;
   player.shield = clamp(player.shield + derived.shieldRegen * passiveShieldFactor * dt, 0, derived.maxShield);
+  const stationaryCapacitorBonus = getStationaryCapacitorRegenMultiplier(player, derived);
   player.capacitor = clamp(
-    player.capacitor + derived.capacitorRegen * player.effects.capacitorRegenMultiplier * dt,
+    player.capacitor + derived.capacitorRegen * stationaryCapacitorBonus * player.effects.capacitorRegenMultiplier * dt,
     0,
     derived.capacitorCapacity
   );
@@ -3673,7 +3704,7 @@ function resolveModuleTarget(world: GameWorld, requiresTarget: SpaceObjectType[]
 function runPlayerModules(world: GameWorld, dt: number) {
   const sector = getCurrentSector(world);
   const player = world.player;
-  const derived = computeDerivedStats(player);
+  const derived = getCachedDerivedStats(player);
   const difficulty = getDifficultyModifiers(world);
   const combatPressure = getCombatPressureModifiers();
 
@@ -4430,7 +4461,7 @@ function applyAnomalyFields(world: GameWorld, dt: number) {
   };
 
   if (world.player.navigation.mode !== "warping" && world.player.navigation.mode !== "jumping") {
-    const derived = computeDerivedStats(world.player);
+    const derived = getCachedDerivedStats(world.player);
     world.player.velocity = applyForce(world.player.position, world.player.velocity, derived.maxSpeed * 1.22, 0.42);
   }
 
@@ -4668,7 +4699,7 @@ function evaluateWorldInteractions(world: GameWorld) {
   const currentMission = getActiveMission(world);
 
   getSystemBeacons(world.currentSectorId).forEach((beacon) => {
-    if (distance(world.player.position, beacon.position) <= computeDerivedStats(world.player).interactionRange) {
+    if (distance(world.player.position, beacon.position) <= getCachedDerivedStats(world.player).interactionRange) {
       missionCatalog
         .filter((mission) => mission.targetDestinationId === beacon.id)
         .forEach((mission) => completeTravelMission(world, mission.id));
@@ -4899,7 +4930,7 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
       : boardContracts;
   return {
     world,
-    derived: computeDerivedStats(world.player),
+    derived: getCachedDerivedStats(world.player),
     sector: getCurrentSectorDef(world),
     currentRegion: regionById[getCurrentSectorDef(world).regionId],
     currentSite: world.localSite.destinationId

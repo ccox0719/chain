@@ -4,7 +4,7 @@ import { moduleById } from "../game/data/modules";
 import { getSystemDestination, sectorById } from "../game/data/sectors";
 import { enemyVariantById, playerShipById } from "../game/data/ships";
 import { planRoute } from "../game/universe/routePlanning";
-import { getCargoUsed } from "../game/utils/stats";
+import { getCargoUsed, getStationaryCapacitorRegenMultiplier } from "../game/utils/stats";
 import { CommandAction, GameSnapshot, ModuleSlot, ObjectInfo, SelectableRef } from "../types/game";
 import { contractProgressFraction } from "../game/procgen/runtime";
 
@@ -441,6 +441,8 @@ export function GameHud({
   const hostileWarpBlocker = getHostileWarpBlocker(world);
 
   // ── Capacitor status
+  const stationaryCapacitorBonus = getStationaryCapacitorRegenMultiplier(world.player, derived);
+  const effectiveCapacitorRegen = derived.capacitorRegen * stationaryCapacitorBonus;
   const capacitorStatus = useMemo(() => {
     const activeLoad = (["weapon", "utility", "defense"] as ModuleSlot[]).reduce(
       (total, slotType) =>
@@ -452,7 +454,7 @@ export function GameHud({
         }, 0),
       0
     );
-    const net = derived.capacitorRegen - activeLoad;
+    const net = effectiveCapacitorRegen - activeLoad;
     const pressure =
       activeLoad <= 0.2
         ? "idle"
@@ -463,7 +465,7 @@ export function GameHud({
             : "draining";
     const collapseTime = net < -0.05 ? world.player.capacitor / Math.abs(net) : null;
     return { activeLoad, net, pressure, collapseTime };
-  }, [derived.capacitorRegen, world.player.capacitor, world.player.modules]);
+  }, [effectiveCapacitorRegen, world.player.capacitor, world.player.modules]);
 
   const capLabel =
     capacitorStatus.pressure === "idle"
@@ -665,7 +667,7 @@ export function GameHud({
             <span className="status-ship-name">{ship.name}</span>
             <span
               className={`cap-badge cap-${capacitorStatus.pressure}`}
-              title={`Cap regen ${derived.capacitorRegen.toFixed(1)}/s · load ${capacitorStatus.activeLoad.toFixed(1)}/s`}
+              title={`Cap regen ${effectiveCapacitorRegen.toFixed(1)}/s · load ${capacitorStatus.activeLoad.toFixed(1)}/s`}
             >
               ⚡{capLabel}
             </span>
@@ -1205,5 +1207,4 @@ export function GameHud({
     </div>
   );
 }
-
 

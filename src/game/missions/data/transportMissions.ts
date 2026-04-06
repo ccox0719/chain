@@ -34,6 +34,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     bonusTimeLimitSec: 720,
     riskLevel: "medium",
     clientFaction: "aurelian-league",
+    requiredStanding: 0.45,
     routePreference: "shortest",
     variant: "urgent"
   },
@@ -51,6 +52,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     baseReward: 2640,
     riskLevel: "high",
     clientFaction: "cinder-union",
+    requiredStanding: 1.1,
     routePreference: "shortest",
     variant: "bulk"
   },
@@ -70,6 +72,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     bonusTimeLimitSec: 640,
     riskLevel: "high",
     clientFaction: "aurelian-league",
+    requiredStanding: 1.1,
     routePreference: "shortest",
     variant: "urgent"
   },
@@ -87,6 +90,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     baseReward: 3520,
     riskLevel: "high",
     clientFaction: "cinder-union",
+    requiredStanding: 1.1,
     routePreference: "safer",
     variant: "frontier"
   },
@@ -106,6 +110,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     bonusTimeLimitSec: 880,
     riskLevel: "extreme",
     clientFaction: "veilborn",
+    requiredStanding: 1.9,
     routePreference: "shortest",
     variant: "frontier"
   },
@@ -123,6 +128,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     baseReward: 4360,
     riskLevel: "extreme",
     clientFaction: "veilborn",
+    requiredStanding: 1.9,
     routePreference: "safer",
     variant: "frontier"
   },
@@ -197,6 +203,7 @@ export const transportMissionCatalog: TransportMissionDefinition[] = [
     bonusTimeLimitSec: 760,
     riskLevel: "high",
     clientFaction: "cinder-union",
+    requiredStanding: 1.1,
     routePreference: "shortest",
     requiredMissionId: "slag-arc-sweep",
     variant: "urgent"

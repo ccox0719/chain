@@ -1,6 +1,8 @@
 import { GameWorld, RoutePlan, RoutePreference, RouteStep, SecurityBand, TransportRisk } from "../../types/game";
 import { getSystemGates, sectorById } from "./data/universe";
 
+const routePlanCache = new WeakMap<GameWorld, Map<string, RoutePlan | null>>();
+
 function securityWeight(security: SecurityBand) {
   if (security === "high") return 0;
   if (security === "medium") return 1.5;
@@ -28,6 +30,22 @@ function buildSteps(previous: Record<string, RouteStep | null>, destinationSyste
   return reversed.reverse();
 }
 
+function getRouteCacheKey(
+  world: GameWorld,
+  startSystemId: string,
+  destinationSystemId: string,
+  preference: RoutePreference,
+  autoFollow: boolean
+) {
+  const unlockedKey = [...world.unlockedSectorIds].sort().join(",");
+  const completedMissionKey = Object.entries(world.missions)
+    .filter(([, state]) => state.status === "completed")
+    .map(([missionId]) => missionId)
+    .sort()
+    .join(",");
+  return [startSystemId, destinationSystemId, preference, autoFollow ? "1" : "0", unlockedKey, completedMissionKey].join("|");
+}
+
 export function planRoute(
   world: GameWorld,
   startSystemId: string,
@@ -35,13 +53,25 @@ export function planRoute(
   preference: RoutePreference,
   autoFollow = false
 ): RoutePlan | null {
+  const cacheKey = getRouteCacheKey(world, startSystemId, destinationSystemId, preference, autoFollow);
+  let worldCache = routePlanCache.get(world);
+  if (!worldCache) {
+    worldCache = new Map();
+    routePlanCache.set(world, worldCache);
+  } else {
+    const cached = worldCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
+
   if (startSystemId === destinationSystemId) {
-    return {
+    const route = {
       destinationSystemId,
       preference,
       autoFollow,
       steps: []
     };
+    worldCache.set(cacheKey, route);
+    return route;
   }
 
   const queue = new Set(Object.keys(sectorById));
@@ -89,13 +119,18 @@ export function planRoute(
     });
   }
 
-  if (!previous[destinationSystemId]) return null;
-  return {
+  if (!previous[destinationSystemId]) {
+    worldCache.set(cacheKey, null);
+    return null;
+  }
+  const route = {
     destinationSystemId,
     preference,
     autoFollow,
     steps: buildSteps(previous, destinationSystemId)
   };
+  worldCache.set(cacheKey, route);
+  return route;
 }
 
 export function getNextRouteStep(world: GameWorld) {

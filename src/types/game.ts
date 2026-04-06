@@ -204,12 +204,23 @@ export interface RegionDefinition {
   description: string;
   security: SecurityBand;
   dominantFaction: FactionId;
+  secondaryFactions?: FactionId[];
+  shipAccessPolicy?: "native" | "mixed" | "restricted" | "smuggler-friendly";
   resourceProfile: ResourceId[];
   gameplayRole: string;
   identitySummary: string;
   prepAdvice: string;
   color: string;
   threatSummary?: string;
+  marketIdentity?: string[];
+  missionIdentity?: string[];
+  enemyIdentity?: string[];
+  stationIdentity?: string[];
+  localShipFamilies?: string[];
+  wartimeRole?: "rear-core" | "staging" | "border-corridor" | "frontline" | "raid-march" | "deep-wild" | "relic-zone";
+  frontlineStatus?: "rear" | "staging" | "contested" | "frontline" | "raided" | "deep-wild" | "relic";
+  mobilizationPriority?: "low" | "medium" | "high";
+  occupationRisk?: "low" | "medium" | "high";
 }
 
 export interface SystemDestination {
@@ -325,6 +336,18 @@ export interface FactionDefinition {
   prepAdvice: string;
   regions: string[];
   threatSummary: string;
+  homeRegions?: string[];
+  civilianCulture?: string;
+  stationTone?: string;
+  marketBias?: string[];
+  legalStyle?: "strict" | "contractual" | "loose" | "technical" | "customs" | "criminal";
+  shipFamilies?: string[];
+  allies?: FactionId[];
+  rivals?: FactionId[];
+  warAims?: string[];
+  recruitmentStyle?: string;
+  fleetIdentity?: string;
+  serviceBranches?: string[];
 }
 
 export interface ModuleDefinition {
@@ -592,6 +615,10 @@ export interface SolarSystemDefinition {
   factionInfluence?: number;
   contestedFactionIds?: FactionId[];
   threatSummary?: string;
+  theaterTag?: "rear" | "staging" | "border" | "frontline" | "raid" | "deep-wild" | "relic";
+  frontlinePressure?: "low" | "medium" | "high" | "extreme";
+  supplyLineImportance?: "low" | "medium" | "high";
+  chartStatus?: "charted" | "partial" | "restricted" | "rumored";
   visualTheme: string;
   economyTags: string[];
   missionTags: string[];
@@ -616,6 +643,8 @@ export interface MissionDefinition {
   type: MissionType;
   briefing: string;
   rewardCredits: number;
+  issuerFaction?: FactionId;
+  requiredStanding?: number;
   requiredMissionId?: string;
   minPowerTier?: number;
   unlockSystemId?: string;
@@ -659,6 +688,7 @@ export interface TransportMissionDefinition {
   bonusTimeLimitSec?: number;
   riskLevel: TransportRisk;
   clientFaction: FactionId;
+  requiredStanding?: number;
   routePreference: RoutePreference;
   requiredMissionId?: string;
   variant: "standard" | "urgent" | "frontier" | "short-hop" | "bulk" | "pickup-return";
@@ -684,6 +714,15 @@ export interface StationMarketProfile {
   buyMultiplier: number;
   sellMultiplier: number;
   inventoryBias: number;
+  factionControl?: FactionId;
+  shipAccessTier?: "native" | "allied" | "neutral" | "export" | "black";
+  legalStatus?: "lawful" | "licensed" | "gray" | "black";
+  shipFamilyBias?: string[];
+  standingRequirement?: number;
+  blackMarketAllowed?: boolean;
+  fleetSupportLevel?: "rear" | "staging" | "frontline" | "black";
+  recruitmentNode?: boolean;
+  recruitmentBranch?: string;
 }
 
 export interface Inventory {
@@ -793,9 +832,12 @@ export interface PilotLicenseState {
   progress: number;
 }
 
+export type FactionStandingState = Record<FactionId, number>;
+
 export interface PlayerState {
   starterConfigId: StarterShipConfigId;
   pilotLicense: PilotLicenseState;
+  factionStandings: FactionStandingState;
   hullId: string;
   ownedShips: string[];
   position: Vec2;
@@ -963,6 +1005,8 @@ export interface ProceduralContractDefinition {
   issuerStationId: string;
   issuerSystemId: string;
   issuerRegionId: string;
+  issuerFaction: FactionId;
+  requiredStanding?: number;
   riskLevel: TransportRisk;
   rewardCredits: number;
   bonusReward?: number;

@@ -3,7 +3,7 @@ import { MOVEMENT_BALANCE } from "../config/balance";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { moduleById } from "../data/modules";
 import { sectorById } from "../data/sectors";
-import { computeDerivedStats } from "../utils/stats";
+import { getCachedDerivedStats } from "../utils/stats";
 import { distance } from "../utils/vector";
 import { getObjectInfo } from "../world/spaceObjects";
 import { getVisibleSystemDestinations } from "../world/sites";
@@ -625,7 +625,7 @@ export function renderSector(
   const sectorDef = sectorById[world.currentSectorId];
   const sector = world.sectors[world.currentSectorId];
   const playerHull = playerShipById[world.player.hullId];
-  const derived = computeDerivedStats(world.player);
+  const derived = getCachedDerivedStats(world.player);
   const destinations = getVisibleSystemDestinations(world);
 
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);

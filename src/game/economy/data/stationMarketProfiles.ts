@@ -10,7 +10,14 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["luxury", "high-tech"],
     buyMultiplier: 0.96,
     sellMultiplier: 0.88,
-    inventoryBias: 1.18
+    inventoryBias: 1.18,
+    factionControl: "aurelian-league",
+    shipAccessTier: "native",
+    legalStatus: "lawful",
+    shipFamilyBias: ["civic", "escort", "logistics"],
+    fleetSupportLevel: "rear",
+    recruitmentNode: true,
+    recruitmentBranch: "League Civic Service"
   },
   {
     stationId: "farpoint-exchange",
@@ -21,7 +28,12 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["industrial", "frontier", "military"],
     buyMultiplier: 1.01,
     sellMultiplier: 0.94,
-    inventoryBias: 1.32
+    inventoryBias: 1.32,
+    factionControl: "aurelian-league",
+    shipAccessTier: "neutral",
+    legalStatus: "licensed",
+    shipFamilyBias: ["civic", "escort", "sensor", "logistics"],
+    fleetSupportLevel: "rear"
   },
   {
     stationId: "forge-anchor",
@@ -32,7 +44,14 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "frontier", "fuel"],
     buyMultiplier: 0.93,
     sellMultiplier: 0.96,
-    inventoryBias: 1.12
+    inventoryBias: 1.12,
+    factionControl: "cinder-union",
+    shipAccessTier: "native",
+    legalStatus: "licensed",
+    shipFamilyBias: ["armor", "mining", "convoy"],
+    fleetSupportLevel: "staging",
+    recruitmentNode: true,
+    recruitmentBranch: "Union Foundry Auxilia"
   },
   {
     stationId: "ironway-depot",
@@ -43,7 +62,12 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["luxury", "medical"],
     buyMultiplier: 0.95,
     sellMultiplier: 0.92,
-    inventoryBias: 1.08
+    inventoryBias: 1.08,
+    factionControl: "ironbound-syndicate",
+    shipAccessTier: "allied",
+    legalStatus: "licensed",
+    shipFamilyBias: ["freight", "security", "brick"],
+    fleetSupportLevel: "staging"
   },
   {
     stationId: "shade-hub",
@@ -54,7 +78,15 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "fuel", "essentials", "trade"],
     buyMultiplier: 1.08,
     sellMultiplier: 1.01,
-    inventoryBias: 0.82
+    inventoryBias: 0.82,
+    factionControl: "veilborn",
+    shipAccessTier: "export",
+    legalStatus: "gray",
+    shipFamilyBias: ["skirmish", "control", "salvage"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "frontline",
+    recruitmentNode: true,
+    recruitmentBranch: "Veil Crew Exchange"
   },
   {
     stationId: "blackwake-den",
@@ -65,7 +97,15 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["fuel", "industrial", "medical"],
     buyMultiplier: 1.12,
     sellMultiplier: 1.03,
-    inventoryBias: 0.78
+    inventoryBias: 0.78,
+    factionControl: "blackwake-clans",
+    shipAccessTier: "black",
+    legalStatus: "black",
+    shipFamilyBias: ["raider", "swarm", "salvage"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "black",
+    recruitmentNode: true,
+    recruitmentBranch: "Blackwake Clan Dock"
   },
   {
     stationId: "ghostlight-haven",
@@ -76,7 +116,13 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "food", "fuel", "electronics"],
     buyMultiplier: 1.14,
     sellMultiplier: 1.05,
-    inventoryBias: 0.72
+    inventoryBias: 0.72,
+    factionControl: "veilborn",
+    shipAccessTier: "export",
+    legalStatus: "gray",
+    shipFamilyBias: ["salvage", "skirmish", "mining"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "frontline"
   },
   {
     stationId: "glass-quay",
@@ -87,7 +133,14 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["mining", "materials", "high-tech"],
     buyMultiplier: 0.98,
     sellMultiplier: 0.93,
-    inventoryBias: 1.2
+    inventoryBias: 1.2,
+    factionControl: "helion-cabal",
+    shipAccessTier: "native",
+    legalStatus: "licensed",
+    shipFamilyBias: ["sensor", "laser", "support"],
+    fleetSupportLevel: "rear",
+    recruitmentNode: true,
+    recruitmentBranch: "Cabal Survey Corps"
   },
   {
     stationId: "crown-dais",
@@ -98,7 +151,12 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["industrial", "frontier", "military"],
     buyMultiplier: 1.04,
     sellMultiplier: 0.95,
-    inventoryBias: 1.28
+    inventoryBias: 1.28,
+    factionControl: "aurelian-league",
+    shipAccessTier: "native",
+    legalStatus: "lawful",
+    shipFamilyBias: ["civic", "escort", "sensor", "logistics"],
+    fleetSupportLevel: "rear"
   },
   {
     stationId: "slag-yard",
@@ -109,7 +167,12 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "luxury", "trade"],
     buyMultiplier: 0.94,
     sellMultiplier: 0.97,
-    inventoryBias: 1.1
+    inventoryBias: 1.1,
+    factionControl: "cinder-union",
+    shipAccessTier: "native",
+    legalStatus: "licensed",
+    shipFamilyBias: ["armor", "mining", "freight"],
+    fleetSupportLevel: "staging"
   },
   {
     stationId: "brass-quay",
@@ -120,7 +183,14 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["frontier", "fuel", "medical"],
     buyMultiplier: 0.97,
     sellMultiplier: 0.94,
-    inventoryBias: 1.14
+    inventoryBias: 1.14,
+    factionControl: "ironbound-syndicate",
+    shipAccessTier: "allied",
+    legalStatus: "licensed",
+    shipFamilyBias: ["freight", "security", "brick"],
+    fleetSupportLevel: "staging",
+    recruitmentNode: true,
+    recruitmentBranch: "Ironbound Contract Office"
   },
   {
     stationId: "ashen-anchor",
@@ -131,7 +201,13 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "fuel", "essentials", "technology"],
     buyMultiplier: 1.1,
     sellMultiplier: 1.02,
-    inventoryBias: 0.8
+    inventoryBias: 0.8,
+    factionControl: "veilborn",
+    shipAccessTier: "export",
+    legalStatus: "gray",
+    shipFamilyBias: ["skirmish", "salvage", "control"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "frontline"
   },
   {
     stationId: "hush-hold",
@@ -142,7 +218,13 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "food", "fuel", "industrial"],
     buyMultiplier: 1.08,
     sellMultiplier: 1.01,
-    inventoryBias: 0.82
+    inventoryBias: 0.82,
+    factionControl: "veilborn",
+    shipAccessTier: "export",
+    legalStatus: "gray",
+    shipFamilyBias: ["mining", "salvage", "sensor"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "frontline"
   },
   {
     stationId: "revenant-haven",
@@ -153,7 +235,13 @@ export const stationMarketProfiles: StationMarketProfile[] = [
     demandTags: ["medical", "fuel", "industrial", "essentials"],
     buyMultiplier: 1.16,
     sellMultiplier: 1.06,
-    inventoryBias: 0.7
+    inventoryBias: 0.7,
+    factionControl: "blackwake-clans",
+    shipAccessTier: "black",
+    legalStatus: "black",
+    shipFamilyBias: ["raider", "swarm", "salvage"],
+    blackMarketAllowed: true,
+    fleetSupportLevel: "black"
   }
 ];
 

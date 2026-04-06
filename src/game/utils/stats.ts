@@ -127,6 +127,27 @@ function computeBaseDerivedStats(player: PlayerState) {
   };
 }
 
+type DerivedStatsCacheEntry = {
+  key: string;
+  derived: ReturnType<typeof computeDerivedStats>;
+};
+
+const derivedStatsCache = new WeakMap<PlayerState, DerivedStatsCacheEntry>();
+
+function getDerivedStatsCacheKey(player: PlayerState) {
+  const equippedKey = (["weapon", "utility", "defense"] as ModuleSlot[])
+    .map((slot) => player.equipped[slot].join(","))
+    .join("|");
+  const runtimeKey = (["weapon", "utility", "defense"] as ModuleSlot[])
+    .map((slot) =>
+      player.modules[slot]
+        .map((runtime) => `${runtime.moduleId ?? ""}:${runtime.active ? 1 : 0}`)
+        .join(",")
+    )
+    .join("|");
+  return `${player.hullId}|${equippedKey}|${runtimeKey}`;
+}
+
 export function getCargoUsed(player: PlayerState) {
   const resourceCargo = Object.values(player.cargo).reduce((total, amount) => total + amount, 0);
   const commodityCargo = Object.entries(player.commodities).reduce((total, [commodityId, amount]) => {
@@ -230,8 +251,27 @@ export function computeDerivedStats(player: PlayerState) {
   return derived;
 }
 
-export function getRepairCost(player: PlayerState) {
+export function getCachedDerivedStats(player: PlayerState) {
+  const key = getDerivedStatsCacheKey(player);
+  const cached = derivedStatsCache.get(player);
+  if (cached && cached.key === key) return cached.derived;
   const derived = computeDerivedStats(player);
+  derivedStatsCache.set(player, { key, derived });
+  return derived;
+}
+
+export function getStationaryCapacitorRegenMultiplier(
+  player: PlayerState,
+  derived: Pick<ReturnType<typeof computeDerivedStats>, "maxSpeed">
+) {
+  const speed = Math.hypot(player.velocity.x, player.velocity.y);
+  const threshold = Math.max(1, derived.maxSpeed * CAPACITOR_BALANCE.stationarySpeedThresholdFraction);
+  const stillness = Math.max(0, 1 - Math.min(1, speed / threshold));
+  return 1 + (CAPACITOR_BALANCE.stationaryRegenBonusMultiplier - 1) * stillness;
+}
+
+export function getRepairCost(player: PlayerState) {
+  const derived = getCachedDerivedStats(player);
   const missingHull = derived.maxHull - player.hull;
   const missingArmor = derived.maxArmor - player.armor;
   const missingShield = derived.maxShield - player.shield;

@@ -39,7 +39,8 @@ import { transportMissionCatalog } from "../game/missions/data/transportMissions
 import { contractProgressFraction } from "../game/procgen/runtime";
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
-import { computeDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
+import { getFactionStandingLabel, getStandingRequirementForAccessTier } from "../game/utils/factionStanding";
+import { getCachedDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
 import { findComparableEquippedWeapon, getWeaponSummaryStats } from "../game/utils/weaponStats";
 import { CommodityId, GameSnapshot, ModuleSlot, ResourceId, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
@@ -442,6 +443,28 @@ const SHIP_ARCHETYPE_LABELS: Record<string, string> = {
   miner: "Miner"
 };
 
+const SHIP_ACCESS_TIER_LABELS: Record<string, string> = {
+  native: "Native stock",
+  allied: "Allied stock",
+  neutral: "Neutral stock",
+  export: "Export stock",
+  black: "Black market"
+};
+
+const LEGAL_STATUS_LABELS: Record<string, string> = {
+  lawful: "Lawful",
+  licensed: "Licensed",
+  gray: "Gray market",
+  black: "Black market"
+};
+
+const FLEET_SUPPORT_LABELS: Record<string, string> = {
+  rear: "Rear support",
+  staging: "Staging point",
+  frontline: "Frontline support",
+  black: "Black market"
+};
+
 // Fixed max values for ship stat bars (covers full ship catalog range)
 const MAX_SHIP_SPEED = Math.max(...playerShips.map(s => s.maxSpeed));
 const MAX_SHIP_CARGO = Math.max(...playerShips.map(s => s.cargoCapacity));
@@ -574,6 +597,19 @@ export function StationPanel({
   const security = snapshot.sector.security;
   const systemFaction = factionData[snapshot.sector.controllingFaction];
   const regionFaction = factionData[snapshot.currentRegion.dominantFaction];
+  const stationFactionId = stationProfile?.factionControl ?? snapshot.sector.controllingFaction;
+  const stationFaction = factionData[stationFactionId];
+  const stationStanding = world.player.factionStandings[stationFactionId] ?? 0;
+  const stationStandingLabel = getFactionStandingLabel(stationStanding);
+  const alliedFactionSet = useMemo<Set<string>>(
+    () =>
+      new Set([
+        ...(stationFaction.allies ?? []),
+        ...(snapshot.currentRegion.secondaryFactions ?? []),
+        snapshot.currentRegion.dominantFaction
+      ]),
+    [snapshot.currentRegion.dominantFaction, snapshot.currentRegion.secondaryFactions, stationFaction.allies]
+  );
   function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
     if (Number.isNaN(nextValue)) return;
     setBalanceOverride(root, path, nextValue);
@@ -684,9 +720,53 @@ export function StationPanel({
     );
   }
 
+  function shipFactionAccess(shipFaction: string) {
+    if (shipFaction === stationFactionId) return true;
+    if (alliedFactionSet.has(shipFaction)) return true;
+    return false;
+  }
+
+  function shipVisibleAtStation(ship: (typeof playerShips)[number]) {
+    if (ship.id === world.player.hullId) return true;
+    if (ship.availabilityTags.includes("common")) return true;
+
+    const baseAllowed = inventoryAllows(ship.availabilityTags);
+    const factionAligned = shipFactionAccess(ship.faction);
+    const accessTier = stationProfile?.shipAccessTier ?? "neutral";
+    const shipStanding = world.player.factionStandings[ship.faction] ?? 0;
+    const standingRequirement = getStandingRequirementForAccessTier(accessTier, ship.faction, stationProfile);
+
+    if (accessTier === "native") return (factionAligned && baseAllowed) || (shipStanding >= standingRequirement && baseAllowed);
+    if (accessTier === "allied") return (factionAligned && baseAllowed) || ((ship.faction === stationFactionId || shipStanding >= standingRequirement) && baseAllowed);
+    if (accessTier === "export") return factionAligned && (baseAllowed || ship.availabilityTags.includes("frontier") || ship.availabilityTags.includes("military"));
+    if (accessTier === "black") {
+      return (
+        stationProfile?.blackMarketAllowed === true &&
+        (baseAllowed ||
+          factionAligned ||
+          shipStanding >= 0.5 ||
+          ship.availabilityTags.includes("frontier") ||
+          ship.availabilityTags.includes("salvage") ||
+          ship.availabilityTags.includes("military"))
+      );
+    }
+    return baseAllowed && (factionAligned || ship.faction === stationFactionId || shipStanding >= standingRequirement);
+  }
+
   const availableShips = useMemo(
-    () => playerShips.filter((ship) => ship.id === world.player.hullId || inventoryAllows(ship.availabilityTags)),
-    [security, stationTradeTagSet, world.player.hullId]
+    () => playerShips.filter((ship) => shipVisibleAtStation(ship)),
+    [
+      world.player.hullId,
+      stationProfile?.shipAccessTier,
+      stationProfile?.blackMarketAllowed,
+      stationFactionId,
+      alliedFactionSet,
+      security,
+      stationTradeTagSet,
+      snapshot.currentRegion.dominantFaction,
+      snapshot.currentRegion.secondaryFactions,
+      stationProfile?.factionControl
+    ]
   );
   const availableModules = useMemo(
     () => moduleCatalog.filter((module) => isModuleAvailableAtStation(module, security, currentStation)),
@@ -694,7 +774,7 @@ export function StationPanel({
   );
   const currentHull = playerShipById[world.player.hullId];
   const previewHull = playerShipById[shipPreviewId] ?? currentHull;
-  const currentStats = computeDerivedStats(world.player);
+  const currentStats = getCachedDerivedStats(world.player);
   const currentBonuses = currentHull.bonuses ?? null;
   const roundedShieldMax = Math.round(currentStats.maxShield);
   const roundedArmorMax = Math.round(currentStats.maxArmor);
@@ -1089,6 +1169,35 @@ export function StationPanel({
                     </div>
                   </div>
                 </div>
+                <div className="map-meta-grid" style={{ marginTop: "0.65rem" }}>
+                  <span className="status-chip">
+                    Access {SHIP_ACCESS_TIER_LABELS[stationProfile?.shipAccessTier ?? "neutral"] ?? stationProfile?.shipAccessTier ?? "Neutral"}
+                  </span>
+                  <span className="status-chip">
+                    Law {LEGAL_STATUS_LABELS[stationProfile?.legalStatus ?? "licensed"] ?? stationProfile?.legalStatus ?? "Licensed"}
+                  </span>
+                  <span className="status-chip">
+                    Control {stationFaction.icon} {stationFaction.name}
+                  </span>
+                  <span className="status-chip">
+                    Standing {stationStanding.toFixed(2)} · {stationStandingLabel}
+                  </span>
+                  <span className="status-chip">
+                    {FLEET_SUPPORT_LABELS[stationProfile?.fleetSupportLevel ?? "rear"] ?? stationProfile?.fleetSupportLevel ?? "Rear support"}
+                  </span>
+                  {stationProfile?.recruitmentNode ? (
+                    <span className="status-chip">
+                      Recruit {stationProfile.recruitmentBranch ?? "Faction Office"}
+                    </span>
+                  ) : null}
+                </div>
+                {stationProfile?.shipFamilyBias?.length ? (
+                  <div className="tag-row" style={{ marginTop: "0.5rem" }}>
+                    {stationProfile.shipFamilyBias.map((family) => (
+                      <span key={family} className="status-chip">{family}</span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="panel-lite faction-intel-banner" style={{ margin: 0, borderColor: systemFaction.color }}>
                 <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
@@ -1099,6 +1208,7 @@ export function StationPanel({
                   <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
                     Region · {regionFaction.icon} {regionFaction.name}
                   </span>
+                  <span className="status-chip">Theater {snapshot.sector.theaterTag ?? snapshot.currentRegion.wartimeRole ?? "rear"}</span>
                 </div>
                 <div className="map-meta-grid">
                   <span className="status-chip">Damage {factionDamageLabel(systemFaction.id)}</span>
@@ -1112,6 +1222,9 @@ export function StationPanel({
                 </p>
                 <div className="tag-row" style={{ marginTop: "0.45rem" }}>
                   {systemFaction.enemyArchetypePreferences.map((entry) => (
+                    <span key={entry} className="status-chip">{entry}</span>
+                  ))}
+                  {snapshot.currentRegion.localShipFamilies?.map((entry) => (
                     <span key={entry} className="status-chip">{entry}</span>
                   ))}
                 </div>
@@ -1946,6 +2059,10 @@ export function StationPanel({
                     const state = world.missions[mission.id];
                     const isLocked = state.status === "locked";
                     const isCompleted = state.status === "completed";
+                    const missionFactionId = mission.issuerFaction ?? snapshot.sector.controllingFaction;
+                    const missionStanding = world.player.factionStandings[missionFactionId] ?? 0;
+                    const standingLocked =
+                      mission.requiredStanding !== undefined && missionStanding < mission.requiredStanding;
                     const cardClass = `market-item${isLocked || isCompleted ? " mission-card-dim" : ""} mission-status-${state.status}`;
                     return (
                       <div key={mission.id} className={cardClass}>
@@ -1954,13 +2071,34 @@ export function StationPanel({
                           <div className="mission-card-badges">
                             <span className={`status-chip mission-type-${mission.type}`}>{missionTypeLabel(mission.type)}</span>
                             <span className={`status-chip mission-status-chip-${state.status}`}>{state.status}</span>
+                            {mission.issuerFaction ? (
+                              <span
+                                className="status-chip"
+                                style={{
+                                  borderColor: factionData[missionFactionId].color,
+                                  color: factionData[missionFactionId].color
+                                }}
+                              >
+                                {factionData[missionFactionId].icon} {getFactionStandingLabel(missionStanding)}
+                              </span>
+                            ) : null}
+                            {mission.requiredStanding !== undefined ? (
+                              <span className={`status-chip${standingLocked ? " mkt-risk-chip" : ""}`}>
+                                Req {mission.requiredStanding.toFixed(2)}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         {!isLocked && <p>{mission.briefing}</p>}
+                        {!isLocked && standingLocked ? (
+                          <p style={{ color: "var(--text-dim)" }}>
+                            Requires {factionData[missionFactionId].name} standing {mission.requiredStanding?.toFixed(2)}.
+                          </p>
+                        ) : null}
                         {(state.status === "available" || state.status === "readyToTurnIn") && (
                           <div className="market-actions">
                             {state.status === "available" && (
-                              <button type="button" onClick={() => onAcceptMission(mission.id)}>Accept</button>
+                              <button type="button" onClick={() => onAcceptMission(mission.id)} disabled={standingLocked}>Accept</button>
                             )}
                             {state.status === "readyToTurnIn" && (
                               <button type="button" className="primary-button" onClick={() => onTurnInMission(mission.id)}>
@@ -1983,6 +2121,9 @@ export function StationPanel({
                     const state = world.transportMissions[mission.id];
                     if (!state) return null;
                     const route = transportRouteMetrics(mission);
+                    const transportStanding = world.player.factionStandings[mission.clientFaction] ?? 0;
+                    const standingLocked =
+                      mission.requiredStanding !== undefined && transportStanding < mission.requiredStanding;
                     return (
                       <div key={mission.id} className={`market-item mission-status-${state.status}${state.status === "active" ? " mission-active-card" : ""}${state.status === "completed" ? " mission-card-dim" : ""}`}>
                         <div className="mission-card-header">
@@ -1990,6 +2131,20 @@ export function StationPanel({
                           <div className="mission-card-badges">
                             <span className="status-chip mission-type-haul">{missionTypeLabel("haul")}</span>
                             <span className={`status-chip mission-status-chip-${state.status}`}>{transportStatusLabel(state)}</span>
+                            <span
+                              className="status-chip"
+                              style={{
+                                borderColor: factionData[mission.clientFaction].color,
+                                color: factionData[mission.clientFaction].color
+                              }}
+                            >
+                              {factionData[mission.clientFaction].icon} {getFactionStandingLabel(transportStanding)}
+                            </span>
+                            {mission.requiredStanding !== undefined ? (
+                              <span className={`status-chip${standingLocked ? " mkt-risk-chip" : ""}`}>
+                                Req {mission.requiredStanding.toFixed(2)}
+                              </span>
+                            ) : null}
                             <RiskPips risk={route.risk} />
                             <span className="jump-badge">{route.deliveryJumps}J</span>
                             <span className="reward-badge">
@@ -2020,7 +2175,7 @@ export function StationPanel({
 
                         <div className="market-actions">
                           {state.status === "available" && (
-                            <button type="button" onClick={() => onAcceptMission(mission.id)}>
+                            <button type="button" onClick={() => onAcceptMission(mission.id)} disabled={standingLocked}>
                               Accept Haul
                             </button>
                           )}
@@ -2047,6 +2202,9 @@ export function StationPanel({
                     const progress = isActive
                       ? Math.round((contractProgressFraction(snapshot.activeProceduralContract!, world.procgen.activeContractState) || 0) * 100)
                       : 0;
+                    const contractStanding = world.player.factionStandings[contract.issuerFaction] ?? 0;
+                    const standingLocked =
+                      contract.requiredStanding !== undefined && contractStanding < contract.requiredStanding;
                     const cargoTooLarge =
                       contract.type === "transport" && freeCargo < (contract.cargoVolume ?? 0);
                     return (
@@ -2055,6 +2213,20 @@ export function StationPanel({
                           <strong>{contract.title}</strong>
                           <div className="mission-card-badges">
                             <span className={`status-chip mission-type-${contract.type === "transport" ? "haul" : contract.type}`}>{missionTypeLabel(contract.type === "transport" ? "haul" : contract.type)}</span>
+                            <span
+                              className="status-chip"
+                              style={{
+                                borderColor: factionData[contract.issuerFaction].color,
+                                color: factionData[contract.issuerFaction].color
+                              }}
+                            >
+                              {factionData[contract.issuerFaction].icon} {getFactionStandingLabel(contractStanding)}
+                            </span>
+                            {contract.requiredStanding !== undefined ? (
+                              <span className={`status-chip${standingLocked ? " mkt-risk-chip" : ""}`}>
+                                Req {contract.requiredStanding.toFixed(2)}
+                              </span>
+                            ) : null}
                             <RiskPips risk={contract.riskLevel} />
                             <span className="reward-badge">
                               {Math.round(contract.rewardCredits + ((contract.cargoVolume ?? 0) * (contract.cargoUnitValue ?? 0)) + (contract.bonusReward ?? 0))} cr
@@ -2063,6 +2235,7 @@ export function StationPanel({
                           </div>
                         </div>
                         <div className="mission-details">
+                          <span className="status-chip">{factionData[contract.issuerFaction].name}</span>
                           <span className="status-chip">{sectorById[contract.targetSystemId]?.name ?? contract.targetSystemId}</span>
                           {contract.targetCount && contract.targetResource && (
                             <span className="status-chip">{contract.targetCount} {contract.targetResource}</span>
@@ -2079,7 +2252,7 @@ export function StationPanel({
                         </div>
                         <div className="market-actions">
                           {!isActive && (
-                            <button type="button" onClick={() => onAcceptMission(contract.id)} disabled={isOtherActive || cargoTooLarge}>
+                            <button type="button" onClick={() => onAcceptMission(contract.id)} disabled={isOtherActive || cargoTooLarge || standingLocked}>
                               Accept Contract
                             </button>
                           )}

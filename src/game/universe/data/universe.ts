@@ -141,12 +141,23 @@ export const regionCatalog: RegionDefinition[] = [
     description: "Secure trade arteries, rookie contracts, and the densest station network in the cluster.",
     security: "high",
     dominantFaction: "aurelian-league",
+    secondaryFactions: ["helion-cabal"],
+    shipAccessPolicy: "mixed",
     resourceProfile: ["ferrite"],
     gameplayRole: "Starter hauling, repairs, basic combat, and safe route planning.",
     identitySummary: "Stable core territory built around polished trade lanes, civic security, and forgiving route structure.",
     prepAdvice: "Bring balanced fits, expect shield fleets and cleaner mid-range fights, and use it to learn routes and markets.",
     color: "#7fc0ff",
-    threatSummary: "EM/Thermal shield patrols, precision security, and disciplined trade defense."
+    threatSummary: "EM/Thermal shield patrols, precision security, and disciplined trade defense.",
+    marketIdentity: ["trade", "repair", "logistics", "research"],
+    missionIdentity: ["delivery", "escort", "patrol", "survey"],
+    enemyIdentity: ["raiders", "scrap", "smugglers"],
+    stationIdentity: ["clean", "formal", "supervised"],
+    localShipFamilies: ["civic", "escort", "shield", "sensor"],
+    wartimeRole: "rear-core",
+    frontlineStatus: "rear",
+    mobilizationPriority: "high",
+    occupationRisk: "low"
   },
   {
     id: "industrial-fringe",
@@ -154,12 +165,23 @@ export const regionCatalog: RegionDefinition[] = [
     description: "Burning refineries, convoy lanes, and mixed-security extraction systems under Union pressure.",
     security: "medium",
     dominantFaction: "cinder-union",
+    secondaryFactions: ["ironbound-syndicate"],
+    shipAccessPolicy: "restricted",
     resourceProfile: ["ferrite", "ember-crystal"],
     gameplayRole: "Mining, hauling, upgraded fitting markets, and mixed-risk travel.",
     identitySummary: "Working industrial border space where ore, convoys, and armor-heavy enforcement define the tempo.",
     prepAdvice: "Prep for armor fleets, freight ambushes, and the tradeoff between safer long routes and hotter shortcuts.",
     color: "#ffb36e",
-    threatSummary: "Kinetic/Thermal armor fleets, rail pressure, and convoy warfare."
+    threatSummary: "Kinetic/Thermal armor fleets, rail pressure, and convoy warfare.",
+    marketIdentity: ["industrial", "mining", "logistics", "materials"],
+    missionIdentity: ["hauling", "mining", "escort", "salvage"],
+    enemyIdentity: ["convoy raiders", "armor crews", "mercenaries"],
+    stationIdentity: ["foundry", "customs", "freight"],
+    localShipFamilies: ["armor", "mining", "convoy", "brick"],
+    wartimeRole: "staging",
+    frontlineStatus: "staging",
+    mobilizationPriority: "high",
+    occupationRisk: "medium"
   },
   {
     id: "frontier-march",
@@ -167,12 +189,23 @@ export const regionCatalog: RegionDefinition[] = [
     description: "Sparse stations, pirate anomalies, and rare salvage routes where geography decides survival.",
     security: "frontier",
     dominantFaction: "veilborn",
+    secondaryFactions: ["blackwake-clans"],
+    shipAccessPolicy: "smuggler-friendly",
     resourceProfile: ["ember-crystal", "ghost-alloy"],
     gameplayRole: "Hard combat, rare resources, lucrative dead ends, and campaign tension.",
     identitySummary: "Sparse frontier space where map position, hazard pockets, and hostile doctrine matter more than raw hull value.",
     prepAdvice: "Expect control pressure, mixed pirate damage, and fewer safe resets. Bring a build that can commit or escape cleanly.",
     color: "#c89bff",
-    threatSummary: "Mixed pirate doctrine, control warfare, and fast skirmish raids."
+    threatSummary: "Mixed pirate doctrine, control warfare, and fast skirmish raids.",
+    marketIdentity: ["frontier", "salvage", "smuggling", "black-market"],
+    missionIdentity: ["smuggle", "probe", "hunt", "recon"],
+    enemyIdentity: ["pirates", "hunters", "control ships", "swarm"],
+    stationIdentity: ["hidden", "rough", "survival"],
+    localShipFamilies: ["skirmish", "control", "salvage", "raider"],
+    wartimeRole: "frontline",
+    frontlineStatus: "frontline",
+    mobilizationPriority: "medium",
+    occupationRisk: "high"
   }
 ];
 
@@ -1058,101 +1091,181 @@ const destinationAdditions: Partial<Record<string, SystemDestination[]>> = {
   ]
 };
 
-const systemIdentityById: Record<string, Pick<SolarSystemDefinition, "identityLabel" | "gameplayPurpose" | "prepAdvice">> = {
+const systemIdentityById: Record<
+  string,
+  Pick<SolarSystemDefinition, "identityLabel" | "gameplayPurpose" | "prepAdvice"> &
+    Partial<Pick<SolarSystemDefinition, "theaterTag" | "frontlinePressure" | "supplyLineImportance" | "chartStatus">>
+> = {
   "lumen-rest": {
     identityLabel: "Safe core system",
     gameplayPurpose: "Starter dock, training routes, first mining, and low-stress fitting changes.",
-    prepAdvice: "Good place to learn the dock-plan-launch loop before taking riskier routes."
+    prepAdvice: "Good place to learn the dock-plan-launch loop before taking riskier routes.",
+    theaterTag: "rear",
+    frontlinePressure: "low",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "sunward-span": {
     identityLabel: "Trade corridor junction",
     gameplayPurpose: "Reliable route planning, safer hauling, and escort-style travel decisions.",
-    prepAdvice: "Expect clean lanes and logistics traffic more than serious chaos."
+    prepAdvice: "Expect clean lanes and logistics traffic more than serious chaos.",
+    theaterTag: "rear",
+    frontlinePressure: "low",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "farpoint-market": {
     identityLabel: "Regional trade hub",
     gameplayPurpose: "Best place to compare prices, set routes, and pivot between core and fringe economies.",
-    prepAdvice: "Use it as a planning stop. It rewards map awareness and route choice."
+    prepAdvice: "Use it as a planning stop. It rewards map awareness and route choice.",
+    theaterTag: "staging",
+    frontlinePressure: "low",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "auric-loop": {
     identityLabel: "Civilian mining loop",
     gameplayPurpose: "Early mining, hull progression, and short-haul route practice.",
-    prepAdvice: "Bring practical mining or light-haul fits and expect occasional opportunists."
+    prepAdvice: "Bring practical mining or light-haul fits and expect occasional opportunists.",
+    theaterTag: "rear",
+    frontlinePressure: "low",
+    supplyLineImportance: "medium",
+    chartStatus: "charted"
   },
   ironway: {
     identityLabel: "Convoy spine",
     gameplayPurpose: "Freight contracts, ore movement, and industrial traffic pressure.",
-    prepAdvice: "Prep for armor-heavy lane fighting and busy logistics traffic."
+    prepAdvice: "Prep for armor-heavy lane fighting and busy logistics traffic.",
+    theaterTag: "staging",
+    frontlinePressure: "medium",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "ember-reach": {
     identityLabel: "Risky shortcut basin",
     gameplayPurpose: "Hot extraction, shortcut routing, and higher-risk crystal runs.",
-    prepAdvice: "Use it when speed matters enough to justify pirate contact and heavier pressure."
+    prepAdvice: "Use it when speed matters enough to justify pirate contact and heavier pressure.",
+    theaterTag: "border",
+    frontlinePressure: "high",
+    supplyLineImportance: "medium",
+    chartStatus: "charted"
   },
   "forge-plains": {
     identityLabel: "Border checkpoint",
     gameplayPurpose: "Militia contracts, checkpoint combat, and industrial border prep.",
-    prepAdvice: "Expect tougher armor fleets and more deliberate, committed engagements."
+    prepAdvice: "Expect tougher armor fleets and more deliberate, committed engagements.",
+    theaterTag: "border",
+    frontlinePressure: "high",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "sable-haul": {
     identityLabel: "Long freight loop",
     gameplayPurpose: "Safer hauling, bulk cargo routes, and endurance-minded travel.",
-    prepAdvice: "Less explosive than Ember Reach, but routes are longer and mistakes still compound."
+    prepAdvice: "Less explosive than Ember Reach, but routes are longer and mistakes still compound.",
+    theaterTag: "staging",
+    frontlinePressure: "medium",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "outer-verge": {
     identityLabel: "Frontier border hub",
     gameplayPurpose: "Transition point from structured industry into unstable frontier space.",
-    prepAdvice: "Build for control pressure, mixed hostiles, and fights that punish lazy positioning."
+    prepAdvice: "Build for control pressure, mixed hostiles, and fights that punish lazy positioning.",
+    theaterTag: "frontline",
+    frontlinePressure: "high",
+    supplyLineImportance: "medium",
+    chartStatus: "charted"
   },
   blackwake: {
     identityLabel: "Pirate pipe",
     gameplayPurpose: "Fast dangerous transit, ambush fights, and pirate doctrine exposure.",
-    prepAdvice: "Kill tackle fast and assume any shortcut here is paying with safety."
+    prepAdvice: "Kill tackle fast and assume any shortcut here is paying with safety.",
+    theaterTag: "raid",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "restricted"
   },
   "vanta-expanse": {
     identityLabel: "Frontier dead-end",
     gameplayPurpose: "Rare resource runs, sparse-traffic exploration, and quiet high-risk mining.",
-    prepAdvice: "Bring a self-sufficient fit. Help is far away and the ore is worth fighting over."
+    prepAdvice: "Bring a self-sufficient fit. Help is far away and the ore is worth fighting over.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "partial"
   },
   "ghostlight-pocket": {
     identityLabel: "Hidden salvage pocket",
     gameplayPurpose: "High-end frontier profit, endgame salvage, and curated danger.",
-    prepAdvice: "Treat every undock as a committed operation. This is a profit pocket, not a casual stop."
+    prepAdvice: "Treat every undock as a committed operation. This is a profit pocket, not a casual stop.",
+    theaterTag: "relic",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
   },
   "glass-harbor": {
     identityLabel: "Research harbor",
     gameplayPurpose: "Tech-linked trade, cleaner mining support, and refined core logistics.",
-    prepAdvice: "Useful for precision fits and stable trade without leaving the core."
+    prepAdvice: "Useful for precision fits and stable trade without leaving the core.",
+    theaterTag: "rear",
+    frontlinePressure: "low",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "crown-exchange": {
     identityLabel: "Financial market node",
     gameplayPurpose: "Premium hauling, broker-heavy route planning, and high-value cargo choices.",
-    prepAdvice: "Come here to read margins and reroute profit, not to grind raw volume."
+    prepAdvice: "Come here to read margins and reroute profit, not to grind raw volume.",
+    theaterTag: "rear",
+    frontlinePressure: "low",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "slag-arc": {
     identityLabel: "Smelter war lane",
     gameplayPurpose: "Industrial combat, ore turnover, and rougher refinery contracts.",
-    prepAdvice: "Armor prep matters here. Expect hard ships, hard routes, and ugly follow-up pressure."
+    prepAdvice: "Armor prep matters here. Expect hard ships, hard routes, and ugly follow-up pressure.",
+    theaterTag: "border",
+    frontlinePressure: "high",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "brass-strait": {
     identityLabel: "Guarded freight crossing",
     gameplayPurpose: "Reliable hauling and border transit with steadier but still meaningful risk.",
-    prepAdvice: "A good lane for cautious trade players who still want industrial-region profit."
+    prepAdvice: "A good lane for cautious trade players who still want industrial-region profit.",
+    theaterTag: "staging",
+    frontlinePressure: "medium",
+    supplyLineImportance: "high",
+    chartStatus: "charted"
   },
   "ashen-deep": {
     identityLabel: "Raider corridor",
     gameplayPurpose: "Frontier combat runs, salvage tension, and dangerous transit choices.",
-    prepAdvice: "Bring control resistance and a plan for pirate pressure before you undock."
+    prepAdvice: "Bring control resistance and a plan for pirate pressure before you undock.",
+    theaterTag: "raid",
+    frontlinePressure: "high",
+    supplyLineImportance: "low",
+    chartStatus: "partial"
   },
   "hush-atlas": {
     identityLabel: "Survey frontier",
     gameplayPurpose: "Exploration-minded mining, route scouting, and quieter frontier operations.",
-    prepAdvice: "Looks calmer than it is. Build for long-range situational awareness and self-reliance."
+    prepAdvice: "Looks calmer than it is. Build for long-range situational awareness and self-reliance.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "medium",
+    supplyLineImportance: "low",
+    chartStatus: "partial"
   },
   "revenant-crossing": {
     identityLabel: "Deadspace crossing",
     gameplayPurpose: "Endgame salvage, heavy combat pockets, and hostile anomaly pressure.",
-    prepAdvice: "Expect the hardest local fights, unstable geometry, and enemies that punish indecision."
+    prepAdvice: "Expect the hardest local fights, unstable geometry, and enemies that punish indecision.",
+    theaterTag: "relic",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
   }
 };
 

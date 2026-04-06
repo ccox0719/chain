@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { factionData, factionDamageLabel, factionResistLabel } from "../game/data/factions";
 import { missionCatalog } from "../game/data/missions";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -6,7 +6,8 @@ import { WeaponDetailsCard } from "./WeaponDetailsCard";
 import { moduleById, moduleCatalog } from "../game/data/modules";
 import { playerShips } from "../game/data/ships";
 import { transportMissionCatalog } from "../game/missions/data/transportMissions";
-import { getSystemDestination, getSystemDestinations, regionById, regionCatalog, sectorById, sectorCatalog } from "../game/data/sectors";
+import { getSystemDestination, regionById, regionCatalog, sectorById, sectorCatalog } from "../game/data/sectors";
+import { getFactionStandingLabel } from "../game/utils/factionStanding";
 import { findComparableEquippedWeapon } from "../game/utils/weaponStats";
 import { planRoute } from "../game/universe/routePlanning";
 import { CommandAction, GameSnapshot, ModuleSlot, SelectableRef } from "../types/game";
@@ -38,8 +39,29 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
   haul: "Haul"
 };
 
-const mapWidth = 1120;
-const mapHeight = 560;
+const mapWidth = 2200;
+const mapHeight = 1200;
+const MAP_MIN_ZOOM = 0.55;
+const MAP_MAX_ZOOM = 2.4;
+const MAP_ZOOM_STEP = 0.12;
+
+type PinchState = {
+  distance: number;
+  zoom: number;
+  scrollLeft: number;
+  scrollTop: number;
+  focalX: number;
+  focalY: number;
+};
+
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  scrollLeft: number;
+  scrollTop: number;
+  dragging: boolean;
+};
 
 export function SidebarPanels({
   overlay,
@@ -52,29 +74,35 @@ export function SidebarPanels({
   onSelectOverview,
   onIssueCommand
 }: SidebarPanelsProps) {
-  const [selectedSystemId, setSelectedSystemId] = useState(snapshot.world.currentSectorId);
+  const [modalSystemId, setModalSystemId] = useState<string | null>(null);
+  const [mapZoom, setMapZoom] = useState(1);
+  const mapScrollRef = useRef<HTMLDivElement | null>(null);
+  const pinchStateRef = useRef<PinchState | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
 
-  // ESC closes this modal
+  // ESC closes modal popup first, then closes overlay
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (modalSystemId !== null) { setModalSystemId(null); return; }
+        onClose();
+      }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [onClose, modalSystemId]);
+
+  useEffect(() => {
+    if (overlay !== "map") return;
+    setMapZoom(1);
+    if (mapScrollRef.current) {
+      mapScrollRef.current.scrollTop = 0;
+      mapScrollRef.current.scrollLeft = 0;
+    }
+  }, [overlay]);
 
   const { world, sector, currentRegion, nextRouteStep, activeTransportMission, activeMission } = snapshot;
   const deathSummary = world.player.deathSummary;
-  const selectedSystem = sectorById[selectedSystemId] ?? sector;
-  const selectedRegion = regionById[selectedSystem.regionId];
-  const selectedFaction = factionData[selectedSystem.controllingFaction];
-  const regionFaction = factionData[selectedRegion.dominantFaction];
-  const localDestinations = getSystemDestinations(world.currentSectorId);
-  const objectiveInCurrentSystem =
-    activeTransportMission && activeTransportMission.objectiveSystemId === world.currentSectorId
-      ? activeTransportMission.objectiveStationId
-      : null;
-  const nextGateId = activeTransportMission?.nextGateId ?? nextRouteStep?.gateId ?? null;
   const activeMissionRoute = useMemo(() => {
     if (activeTransportMission) {
       const ids = activeTransportMission.routeSystemIds;
@@ -127,6 +155,172 @@ export function SidebarPanels({
   }
 
   const factionLegend = Object.values(factionData);
+
+  function clampMapZoom(value: number) {
+    return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Number(value.toFixed(3))));
+  }
+
+  function setMapZoomWithFocus(nextZoom: number, focalX?: number, focalY?: number) {
+    const container = mapScrollRef.current;
+    const clamped = clampMapZoom(nextZoom);
+    if (!container) {
+      setMapZoom(clamped);
+      return;
+    }
+
+    const focusX = focalX ?? container.clientWidth / 2;
+    const focusY = focalY ?? container.clientHeight / 2;
+    const focusMapX = (container.scrollLeft + focusX) / mapZoom;
+    const focusMapY = (container.scrollTop + focusY) / mapZoom;
+    setMapZoom(clamped);
+    requestAnimationFrame(() => {
+      const next = mapScrollRef.current;
+      if (!next) return;
+      next.scrollLeft = Math.max(0, focusMapX * clamped - focusX);
+      next.scrollTop = Math.max(0, focusMapY * clamped - focusY);
+    });
+  }
+
+  function zoomMap(delta: number, focalX?: number, focalY?: number) {
+    setMapZoomWithFocus(mapZoom + delta, focalX, focalY);
+  }
+
+  function handleMapWheel(event: React.WheelEvent<HTMLDivElement>) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    zoomMap(event.deltaY < 0 ? MAP_ZOOM_STEP : -MAP_ZOOM_STEP, event.clientX - rect.left, event.clientY - rect.top);
+  }
+
+  function handleMapTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    if (event.touches.length !== 2) return;
+    const left = event.touches[0];
+    const right = event.touches[1];
+    const dx = right.clientX - left.clientX;
+    const dy = right.clientY - left.clientY;
+    pinchStateRef.current = {
+      distance: Math.hypot(dx, dy),
+      zoom: mapZoom,
+      scrollLeft: mapScrollRef.current?.scrollLeft ?? 0,
+      scrollTop: mapScrollRef.current?.scrollTop ?? 0,
+      focalX: (left.clientX + right.clientX) * 0.5 - (mapScrollRef.current?.getBoundingClientRect().left ?? 0),
+      focalY: (left.clientY + right.clientY) * 0.5 - (mapScrollRef.current?.getBoundingClientRect().top ?? 0)
+    };
+  }
+
+  function handleMapTouchMove(event: React.TouchEvent<HTMLDivElement>) {
+    const pinch = pinchStateRef.current;
+    if (!pinch || event.touches.length !== 2) return;
+    event.preventDefault();
+    const left = event.touches[0];
+    const right = event.touches[1];
+    const dx = right.clientX - left.clientX;
+    const dy = right.clientY - left.clientY;
+    const nextDistance = Math.hypot(dx, dy);
+    const nextZoom = clampMapZoom(pinch.zoom * (nextDistance / Math.max(1, pinch.distance)));
+    const focusMapX = (pinch.scrollLeft + pinch.focalX) / pinch.zoom;
+    const focusMapY = (pinch.scrollTop + pinch.focalY) / pinch.zoom;
+    setMapZoom(nextZoom);
+    requestAnimationFrame(() => {
+      const container = mapScrollRef.current;
+      if (!container) return;
+      container.scrollLeft = Math.max(0, focusMapX * nextZoom - pinch.focalX);
+      container.scrollTop = Math.max(0, focusMapY * nextZoom - pinch.focalY);
+    });
+  }
+
+  function handleMapTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    if (event.touches.length < 2) {
+      pinchStateRef.current = null;
+    }
+  }
+
+  function handleMapPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".map-node-group")) return;
+    const container = mapScrollRef.current;
+    if (!container) return;
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+      dragging: false
+    };
+    container.setPointerCapture(event.pointerId);
+  }
+
+  function handleMapPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const container = mapScrollRef.current;
+    if (!container) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.dragging && Math.hypot(deltaX, deltaY) < 5) return;
+    drag.dragging = true;
+    event.preventDefault();
+    container.scrollLeft = Math.max(0, drag.scrollLeft - deltaX);
+    container.scrollTop = Math.max(0, drag.scrollTop - deltaY);
+  }
+
+  function handleMapPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const container = mapScrollRef.current;
+    if (container?.hasPointerCapture(event.pointerId)) {
+      container.releasePointerCapture(event.pointerId);
+    }
+    dragStateRef.current = null;
+  }
+
+  function handleSystemNodeClick(systemId: string) {
+    setModalSystemId(systemId);
+  }
+
+  const regionHulls = useMemo(() => {
+    function convexHull(pts: { x: number; y: number }[]): { x: number; y: number }[] {
+      if (pts.length < 3) return pts;
+      const sorted = [...pts].sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
+      const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
+        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const lower: typeof pts = [];
+      for (const p of sorted) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      }
+      const upper: typeof pts = [];
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const p = sorted[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      lower.pop();
+      upper.pop();
+      return [...lower, ...upper];
+    }
+    const HULL_PAD = 72;
+    function expandHull(hull: { x: number; y: number }[]) {
+      if (hull.length === 0) return hull;
+      const cx = hull.reduce((s, p) => s + p.x, 0) / hull.length;
+      const cy = hull.reduce((s, p) => s + p.y, 0) / hull.length;
+      return hull.map((p) => {
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        return { x: p.x + (dx / len) * HULL_PAD, y: p.y + (dy / len) * HULL_PAD };
+      });
+    }
+    return regionCatalog.map((region) => {
+      const positions = sectorCatalog.filter((s) => s.regionId === region.id).map((s) => s.mapPosition);
+      const centroid = positions.length
+        ? { x: positions.reduce((s, p) => s + p.x, 0) / positions.length, y: positions.reduce((s, p) => s + p.y, 0) / positions.length }
+        : { x: 0, y: 0 };
+      return { region, hull: expandHull(convexHull(positions)), centroid };
+    });
+  }, []);
 
   const connectionLines = useMemo(() => {
     const seen = new Set<string>();
@@ -314,318 +508,255 @@ export function SidebarPanels({
             </div>
           )}
 
-          {overlay === "map" && (
-            <div className="map-overlay-grid">
-              <section className="panel-lite map-primary-panel">
-                <h3>Universe</h3>
-                <div className="map-meta-row">
-                  <span className="status-chip">{sector.name}</span>
-                  <span className="status-chip">{currentRegion.name}</span>
-                  {deathSummary && (
-                    <span className="status-chip status-chip-danger">
-                      Last death · {deathSummary.wreckSystemName}
-                    </span>
-                  )}
-                  {world.routePlan && (
-                    <span className="status-chip">
-                      Route {world.routePlan.steps.length} jumps{world.routePlan.autoFollow ? " · auto" : ""}
-                    </span>
-                  )}
-                  {activeTransportMission && (
-                    <span className="status-chip">
-                      {activeTransportMission.objective === "pickup" ? "Pickup" : "Delivery"} ·
-                      {" "}{activeTransportMission.jumpsRemaining} jumps ·
-                      {" "}{activeTransportMission.routeRisk} risk
-                    </span>
-                  )}
-                </div>
-                {(activeTransportMission || activeMissionRoute.routeSteps > 0 || activeMissionRoute.targetLabel) && (
-                  <div className="mission-route-banner">
-                    <div>
-                      <strong>
-                        {activeTransportMission?.title ?? activeMission?.title ?? "Mission route"}
-                      </strong>
-                      <p>
-                        {activeTransportMission
-                          ? activeTransportMission.objectiveText
-                          : `Target: ${activeMissionRoute.targetLabel ?? activeMission?.targetSystemId ?? "Unknown"}`}
-                      </p>
-                    </div>
-                    <div className="mission-route-meta">
+          {overlay === "map" && (() => {
+            const modalSys = modalSystemId ? sectorById[modalSystemId] ?? null : null;
+            const modalFaction = modalSys ? factionData[modalSys.controllingFaction] : null;
+            const modalRegion = modalSys ? regionById[modalSys.regionId] : null;
+            const modalRegionFaction = modalRegion ? factionData[modalRegion.dominantFaction] : null;
+            const modalFactionStanding = modalFaction ? (world.player.factionStandings[modalFaction.id] ?? 0) : 0;
+            return (
+              <div className="map-fullscreen-view">
+                <div className="map-top-bar">
+                  <div className="map-status-chips">
+                    <span className="status-chip">{sector.name}</span>
+                    <span className="status-chip">{currentRegion.name}</span>
+                    {deathSummary && (
+                      <span className="status-chip status-chip-danger">Last death · {deathSummary.wreckSystemName}</span>
+                    )}
+                    {world.routePlan && (
+                      <span className="status-chip">Route · {world.routePlan.steps.length} jumps{world.routePlan.autoFollow ? " · auto" : ""}</span>
+                    )}
+                    {activeTransportMission && (
                       <span className="status-chip">
-                        {activeTransportMission
-                          ? `${activeTransportMission.jumpsRemaining} jumps`
-                          : `${activeMissionRoute.routeSteps} jumps`}
+                        {activeTransportMission.objective === "pickup" ? "Pickup" : "Delivery"} · {activeTransportMission.jumpsRemaining} jumps · {activeTransportMission.routeRisk} risk
                       </span>
-                      <span className="status-chip">
-                        {activeTransportMission
-                          ? activeTransportMission.nextGateName ?? "Route planned"
-                          : activeMissionRoute.nextGateName ?? "In-system"}
+                    )}
+                    {(activeTransportMission || activeMissionRoute.routeSteps > 0) && (
+                      <span className="status-chip status-chip-mission">
+                        {activeTransportMission?.title ?? activeMission?.title ?? "Mission"} · {activeTransportMission ? activeTransportMission.nextGateName ?? "En route" : activeMissionRoute.nextGateName ?? "In-system"}
                       </span>
-                    </div>
-                  </div>
-                )}
-                <div className="faction-legend-row">
-                  {factionLegend.map((faction) => (
-                    <span
-                      key={faction.id}
-                      className="status-chip faction-legend-chip"
-                      style={{ borderColor: faction.color, color: faction.color }}
-                    >
-                      <span className="faction-legend-dot" style={{ background: faction.color }} />
-                      {faction.icon} {faction.name}
-                    </span>
-                  ))}
-                </div>
-                <svg viewBox={`0 0 ${mapWidth} ${mapHeight}`} className="universe-map">
-                  {connectionLines.map(([from, to]) => (
-                    <line
-                      key={`${from.id}-${to.id}`}
-                      x1={from.mapPosition.x}
-                      y1={from.mapPosition.y}
-                      x2={to.mapPosition.x}
-                      y2={to.mapPosition.y}
-                      className={`map-edge${
-                        world.routePlan?.steps.some(
-                          (step) =>
-                            (step.fromSystemId === from.id && step.toSystemId === to.id) ||
-                            (step.fromSystemId === to.id && step.toSystemId === from.id)
-                        ) ? " active" : ""
-                      }${activeMissionRoute.edgeKeys.has([from.id, to.id].sort().join(":")) ? " mission-route" : ""}`}
-                    />
-                  ))}
-                  {regionCatalog.map((region) => (
-                    <text
-                      key={region.id}
-                      x={Math.min(...sectorCatalog.filter((s) => s.regionId === region.id).map((s) => s.mapPosition.x))}
-                      y={Math.min(...sectorCatalog.filter((s) => s.regionId === region.id).map((s) => s.mapPosition.y)) - 22}
-                      className="map-region-label"
-                      style={{ fill: factionData[region.dominantFaction].color }}
-                    >
-                      {region.name}
-                    </text>
-                  ))}
-                  {sectorCatalog.map((system) => {
-                    const faction = factionData[system.controllingFaction];
-                    const influence = system.factionInfluence ?? 68;
-                    const ringOpacity = Math.min(0.9, Math.max(0.4, influence / 110));
-                    return (
-                      <g
-                        key={system.id}
-                        transform={`translate(${system.mapPosition.x} ${system.mapPosition.y})`}
-                        className="map-node-group"
-                        onClick={() => setSelectedSystemId(system.id)}
-                      >
-                        <circle
-                          r={system.id === world.currentSectorId ? 24 : 18}
-                          className={`map-node faction-ring${selectedSystemId === system.id ? " selected" : ""}`}
-                          style={{
-                            stroke: faction.color,
-                            fill: `rgba(0, 0, 0, ${system.id === world.currentSectorId ? 0.18 : 0.12})`,
-                            opacity: ringOpacity
-                          }}
-                        />
-                        <circle
-                          r={system.id === world.currentSectorId ? 16 : 12}
-                          className={`map-node security-${system.security}${
-                            selectedSystemId === system.id ? " selected" : ""
-                          }${activeTransportMission?.pickupSystemId === system.id ? " map-pickup" : ""}${
-                            activeTransportMission?.destinationSystemId === system.id ? " map-destination" : ""
-                          }${activeTransportMission?.routeSystemIds.includes(system.id) ? " map-route-node" : ""}${
-                            activeMissionRoute.systemIds.has(system.id) ? " mission-route-node" : ""
-                          }`}
-                          style={{ fill: `${faction.color}22` }}
-                        />
-                        <text x={20} y={5} className="map-node-label">
-                          {system.name}
-                        </text>
-                        {deathSummary?.wreckSystemId === system.id && (
-                          <>
-                            <circle r={20} className="map-node last-death-node" />
-                            <text x={20} y={18} className="map-node-label last-death-label">
-                              Last death
-                            </text>
-                          </>
-                        )}
-                      </g>
-                    );
-                  })}
-                </svg>
-              </section>
-
-              <section className="panel-lite map-sidebar-panel">
-                <h3>{selectedSystem.name}</h3>
-                <p>{selectedSystem.description}</p>
-                <div className="map-meta-grid">
-                  <span className="status-chip">{selectedSystem.identityLabel}</span>
-                  <span className="status-chip">{regionById[selectedSystem.regionId].name}</span>
-                  <span className="status-chip">{selectedSystem.security.toUpperCase()}</span>
-                  <span className="status-chip">{selectedSystem.traffic} traffic</span>
-                  <span className="status-chip">{selectedSystem.population}</span>
-                  {deathSummary?.wreckSystemId === selectedSystem.id && (
-                    <span className="status-chip status-chip-danger">Last death here</span>
-                  )}
-                </div>
-                <div className="faction-intel-card" style={{ borderColor: selectedFaction.color }}>
-                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-                    <strong>Faction Intel</strong>
-                    <span className="status-chip faction-name-chip" style={{ borderColor: selectedFaction.color, color: selectedFaction.color }}>
-                      {selectedFaction.icon} {selectedFaction.name}
-                    </span>
-                  </div>
-                  <p style={{ margin: "0 0 0.45rem" }}>{selectedFaction.description}</p>
-                  <p style={{ margin: "0 0 0.45rem", color: "var(--text-dim)" }}>{selectedFaction.doctrineSummary}</p>
-                  <div className="map-meta-grid">
-                    <span className="status-chip">Damage {factionDamageLabel(selectedFaction.id)}</span>
-                    <span className="status-chip">Defense {selectedFaction.tankStyle}</span>
-                    <span className="status-chip">Resists {factionResistLabel(selectedFaction.id)}</span>
-                    {selectedSystem.factionInfluence !== undefined && (
-                      <span className="status-chip">Influence {selectedSystem.factionInfluence}%</span>
                     )}
                   </div>
-                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)" }}>
-                    {selectedSystem.threatSummary ?? selectedFaction.threatSummary}
-                  </p>
-                  <div className="tag-row" style={{ marginTop: "0.45rem" }}>
-                    {selectedFaction.enemyArchetypePreferences.map((entry) => (
-                      <span key={entry} className="status-chip">{entry}</span>
-                    ))}
-                  </div>
-                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
-                    Prep: {selectedFaction.prepAdvice}
-                  </p>
-                  {selectedSystem.contestedFactionIds?.length ? (
-                    <div className="tag-row" style={{ marginTop: "0.45rem" }}>
-                      {selectedSystem.contestedFactionIds.map((factionId) => (
-                        <span key={factionId} className="status-chip" style={{ borderColor: factionData[factionId].color, color: factionData[factionId].color }}>
-                          {factionData[factionId].icon} {factionData[factionId].name}
+                  <div className="map-top-bar-right">
+                    <div className="faction-legend-row">
+                      {factionLegend.map((faction) => (
+                        <span key={faction.id} className="status-chip faction-legend-chip" style={{ borderColor: faction.color, color: faction.color }}>
+                          <span className="faction-legend-dot" style={{ background: faction.color }} />
+                          {faction.icon} {faction.name}
                         </span>
                       ))}
                     </div>
-                  ) : null}
-                  <p style={{ margin: "0.45rem 0 0", color: "var(--text-dim)", fontSize: "0.8rem" }}>
-                    Region power: {regionFaction.icon} {regionFaction.name} · {selectedRegion.threatSummary ?? regionFaction.threatSummary}
-                  </p>
-                </div>
-                <div className="panel-lite" style={{ marginTop: "0.75rem", padding: "0.75rem 0.85rem" }}>
-                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-                    <strong>System Role</strong>
-                    <span className="status-chip">{selectedSystem.identityLabel}</span>
+                    <div className="map-zoom-controls">
+                      <button type="button" className="ghost-button mini" onClick={() => zoomMap(-MAP_ZOOM_STEP)}>−</button>
+                      <button type="button" className="ghost-button mini" onClick={() => setMapZoomWithFocus(1)}>fit</button>
+                      <button type="button" className="ghost-button mini" onClick={() => zoomMap(MAP_ZOOM_STEP)}>+</button>
+                    </div>
                   </div>
-                  <p style={{ margin: "0 0 0.35rem" }}>{selectedSystem.gameplayPurpose}</p>
-                  <p style={{ margin: 0, color: "var(--text-dim)", fontSize: "0.8rem" }}>
-                    Prep: {selectedSystem.prepAdvice}
-                  </p>
                 </div>
-                <div className="panel-lite" style={{ marginTop: "0.75rem", padding: "0.75rem 0.85rem" }}>
-                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
-                    <strong>Region Intel</strong>
-                    <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
-                      {regionFaction.icon} {selectedRegion.name}
-                    </span>
-                  </div>
-                  <p style={{ margin: "0 0 0.35rem" }}>{selectedRegion.identitySummary}</p>
-                  <p style={{ margin: 0, color: "var(--text-dim)", fontSize: "0.8rem" }}>
-                    Prep: {selectedRegion.prepAdvice}
-                  </p>
-                </div>
-                <div className="tag-row">
-                  {selectedSystem.economyTags.map((tag) => (
-                    <span key={tag} className="status-chip">{tag}</span>
-                  ))}
-                </div>
-                <div className="action-row">
-                  <button type="button" onClick={() => onPlanRoute(selectedSystem.id, "shortest", false)}>
-                    Shortest
-                  </button>
-                  <button type="button" onClick={() => onPlanRoute(selectedSystem.id, "safer", false)}>
-                    Safer
-                  </button>
-                  <button type="button" onClick={() => onPlanRoute(selectedSystem.id, "safer", true)}>
-                    Autopilot Route
-                  </button>
-                </div>
-                <div className="action-row" style={{ marginTop: "0.5rem" }}>
-                  <button type="button" className="ghost-button" onClick={onClearRoute}>
-                    Clear Route
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => onSetRouteAutoFollow(!Boolean(world.routePlan?.autoFollow))}
-                    disabled={!world.routePlan}
-                  >
-                    {world.routePlan?.autoFollow ? "Disable Autopilot" : "Enable Autopilot"}
-                  </button>
-                </div>
-                {nextRouteStep && (
-                  <p style={{ marginTop: "0.75rem" }}>
-                    Next gate: {nextRouteStep.gateName} → {sectorById[nextRouteStep.toSystemId].name}
-                  </p>
-                )}
-                {activeTransportMission && <p>{activeTransportMission.objectiveText}</p>}
-              </section>
 
-              <section className="panel-lite map-sidebar-panel">
-                <h3>System Destinations</h3>
-                <p>
-                  Current site: <strong>{world.localSite.label}</strong>
-                  {" · "}
-                  {world.localSite.subtitle}
-                </p>
-                <ul className="stack-list">
-                  {localDestinations.map((destination) => {
-                    const ref = { id: destination.id, type: destination.kind as SelectableRef["type"] };
-                    const isObjective = objectiveInCurrentSystem === destination.id;
-                    const isNextGate = nextGateId === destination.id;
-                    const isCurrentSite = world.localSite.destinationId === destination.id;
-                    return (
-                      <li
-                        key={destination.id}
-                        className={`${isObjective ? "objective-item" : ""}${isNextGate ? " waypoint-item" : ""}${
-                          destination.kind === "gate" && activeMissionRoute.systemIds.has(destination.id) ? " mission-route-item" : ""
-                        }`}
+                <div
+                  className="universe-map-scroll"
+                  ref={mapScrollRef}
+                  onWheel={handleMapWheel}
+                  onTouchStart={handleMapTouchStart}
+                  onTouchMove={handleMapTouchMove}
+                  onTouchEnd={handleMapTouchEnd}
+                  onPointerDown={handleMapPointerDown}
+                  onPointerMove={handleMapPointerMove}
+                  onPointerUp={handleMapPointerUp}
+                  onPointerCancel={handleMapPointerUp}
+                  onPointerLeave={handleMapPointerUp}
+                >
+                  <svg
+                    viewBox={`0 0 ${mapWidth} ${mapHeight}`}
+                    className="universe-map"
+                    style={{ width: `${mapWidth * mapZoom}px`, height: `${mapHeight * mapZoom}px` }}
+                  >
+                    {/* Faction region background polygons */}
+                    {regionHulls.map(({ region, hull }) => (
+                      <polygon
+                        key={`bg-${region.id}`}
+                        points={hull.map((p) => `${p.x},${p.y}`).join(" ")}
+                        className="map-region-bg"
+                        style={{
+                          fill: factionData[region.dominantFaction].color,
+                          stroke: factionData[region.dominantFaction].color,
+                        }}
+                      />
+                    ))}
+
+                    {/* Region name labels at centroid */}
+                    {regionHulls.map(({ region, centroid }) => (
+                      <text
+                        key={`label-${region.id}`}
+                        x={centroid.x}
+                        y={centroid.y - 30}
+                        textAnchor="middle"
+                        className="map-region-label"
+                        style={{ fill: factionData[region.dominantFaction].color }}
                       >
-                        <strong>{destination.name}</strong>
-                        <span className="status-chip">
-                          {destination.kind}
-                          {isCurrentSite ? " · current site" : ""}
-                          {isObjective ? " · objective" : ""}
-                          {isNextGate ? " · next gate" : ""}
-                        </span>
-                        <p>{destination.description}</p>
-                        <div className="action-row">
-                          <button type="button" onClick={() => onSelectOverview(ref)}>
-                            Select
-                          </button>
-                          {destination.warpable && (
+                        {region.name}
+                      </text>
+                    ))}
+
+                    {/* Connection lines */}
+                    {connectionLines.map(([from, to]) => (
+                      <line
+                        key={`${from.id}-${to.id}`}
+                        x1={from.mapPosition.x}
+                        y1={from.mapPosition.y}
+                        x2={to.mapPosition.x}
+                        y2={to.mapPosition.y}
+                        className={`map-edge${
+                          world.routePlan?.steps.some(
+                            (step) =>
+                              (step.fromSystemId === from.id && step.toSystemId === to.id) ||
+                              (step.fromSystemId === to.id && step.toSystemId === from.id)
+                          ) ? " active" : ""
+                        }${activeMissionRoute.edgeKeys.has([from.id, to.id].sort().join(":")) ? " mission-route" : ""}`}
+                      />
+                    ))}
+
+                    {/* System nodes */}
+                    {sectorCatalog.map((system) => {
+                      const faction = factionData[system.controllingFaction];
+                      const influence = system.factionInfluence ?? 68;
+                      const ringOpacity = Math.min(0.9, Math.max(0.4, influence / 110));
+                      const isSelected = modalSystemId === system.id;
+                      const isCurrent = system.id === world.currentSectorId;
+                      return (
+                        <g
+                          key={system.id}
+                          transform={`translate(${system.mapPosition.x} ${system.mapPosition.y})`}
+                          className="map-node-group"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSystemNodeClick(system.id);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            handleSystemNodeClick(system.id);
+                          }}
+                        >
+                          <circle
+                            r={isCurrent ? 24 : 18}
+                            className={`map-node faction-ring${isSelected ? " selected" : ""}`}
+                            style={{
+                              stroke: faction.color,
+                              fill: `rgba(0, 0, 0, ${isCurrent ? 0.18 : 0.12})`,
+                              opacity: ringOpacity,
+                            }}
+                          />
+                          <circle
+                            r={isCurrent ? 16 : 12}
+                            className={`map-node security-${system.security}${isSelected ? " selected" : ""}${
+                              activeTransportMission?.pickupSystemId === system.id ? " map-pickup" : ""}${
+                              activeTransportMission?.destinationSystemId === system.id ? " map-destination" : ""}${
+                              activeTransportMission?.routeSystemIds.includes(system.id) ? " map-route-node" : ""}${
+                              activeMissionRoute.systemIds.has(system.id) ? " mission-route-node" : ""}`}
+                            style={{ fill: `${faction.color}22` }}
+                          />
+                          <text x={20} y={5} className="map-node-label">{system.name}</text>
+                          {deathSummary?.wreckSystemId === system.id && (
                             <>
-                              <button type="button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: 0 })}>
-                                Warp 0
-                              </button>
-                              <button type="button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: 30 })}>
-                                Warp 30
-                              </button>
+                              <circle r={20} className="map-node last-death-node" />
+                              <text x={20} y={18} className="map-node-label last-death-label">Last death</text>
                             </>
                           )}
-                          {destination.kind === "station" && (
-                            <button type="button" onClick={() => onIssueCommand({ type: "dock", target: ref })}>
-                              Dock
-                            </button>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+
+                {/* System info modal — bottom sheet */}
+                {modalSys && modalFaction && modalRegion && modalRegionFaction && (
+                  <div className="map-system-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="map-system-modal-header">
+                      <div className="map-system-modal-title">
+                        <span className="map-system-modal-name">{modalSys.name}</span>
+                        <div className="map-meta-row" style={{ marginTop: "0.3rem" }}>
+                          <span className={`status-chip security-chip-${modalSys.security}`}>{modalSys.security.toUpperCase()}</span>
+                          <span className="status-chip faction-name-chip" style={{ borderColor: modalFaction.color, color: modalFaction.color }}>
+                            {modalFaction.icon} {modalFaction.name}
+                          </span>
+                          <span className="status-chip">{modalRegion.name}</span>
+                          <span className="status-chip">{modalSys.identityLabel}</span>
+                          {deathSummary?.wreckSystemId === modalSys.id && (
+                            <span className="status-chip status-chip-danger">Last death</span>
                           )}
-                          {isObjective && (
-                            <button type="button" className="primary-button" onClick={() => onIssueCommand({ type: "warp", target: ref, range: destination.kind === "station" ? 130 : 150 })}>
-                              Warp to Objective
-                            </button>
+                          {modalSys.factionInfluence !== undefined && (
+                            <span className="status-chip" style={{ color: modalFaction.color }}>Influence {modalSys.factionInfluence}%</span>
                           )}
+                          <span className="status-chip">{getFactionStandingLabel(modalFactionStanding)}</span>
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            </div>
-          )}
+                      </div>
+                      <button type="button" className="ghost-button mini map-modal-close" onClick={() => setModalSystemId(null)}>✕</button>
+                    </div>
+                    <p className="map-system-modal-desc">{modalSys.description}</p>
+                    <div className="map-system-modal-intel">
+                      <span className="map-intel-label">Damage</span>
+                      <span className="status-chip">{factionDamageLabel(modalFaction.id)}</span>
+                      <span className="map-intel-label">Defense</span>
+                      <span className="status-chip">{modalFaction.tankStyle}</span>
+                      <span className="map-intel-label">Resists</span>
+                      <span className="status-chip">{factionResistLabel(modalFaction.id)}</span>
+                      <span className="map-intel-label">Region</span>
+                      <span className="status-chip" style={{ color: modalRegionFaction.color, borderColor: modalRegionFaction.color }}>
+                        {modalRegionFaction.icon} {modalRegionFaction.name}
+                      </span>
+                    </div>
+                    {modalSys.contestedFactionIds?.length ? (
+                      <div className="map-meta-row" style={{ marginTop: "0.4rem" }}>
+                        <span style={{ fontSize: "0.78rem", color: "var(--text-dim)", marginRight: "0.3rem" }}>Contested:</span>
+                        {modalSys.contestedFactionIds.map((fid) => (
+                          <span key={fid} className="status-chip" style={{ borderColor: factionData[fid].color, color: factionData[fid].color }}>
+                            {factionData[fid].icon} {factionData[fid].name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="map-system-modal-actions">
+                      <button
+                        type="button"
+                        onClick={() => { onPlanRoute(modalSys.id, "safer", false); setModalSystemId(null); }}
+                      >
+                        Route (Safer)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { onPlanRoute(modalSys.id, "shortest", false); setModalSystemId(null); }}
+                      >
+                        Shortest
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { onPlanRoute(modalSys.id, "safer", true); setModalSystemId(null); }}
+                      >
+                        Autopilot
+                      </button>
+                      {world.routePlan && (
+                        <button type="button" className="ghost-button" onClick={() => { onClearRoute(); }}>
+                          Clear Route
+                        </button>
+                      )}
+                    </div>
+                    {nextRouteStep && (
+                      <p className="map-system-modal-hint">
+                        Active route: next gate {nextRouteStep.gateName} → {sectorById[nextRouteStep.toSystemId]?.name}
+                      </p>
+                    )}
+                    {activeTransportMission && (
+                      <p className="map-system-modal-hint">{activeTransportMission.objectiveText}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {overlay === "fitting" && (
             <div className="overlay-grid">

@@ -149,6 +149,17 @@ function createStarterInventory(starterFit: PlayerState["equipped"]) {
   return {};
 }
 
+function createStartingFactionStandings(): PlayerState["factionStandings"] {
+  return {
+    "aurelian-league": 1,
+    "cinder-union": 0.2,
+    veilborn: 0,
+    "helion-cabal": 0.4,
+    "ironbound-syndicate": 0.2,
+    "blackwake-clans": 0
+  };
+}
+
 export function rebuildPlayerRuntime(player: PlayerState) {
   player.modules = {
     weapon: createRuntimeSlots(player.equipped.weapon),
@@ -164,6 +175,7 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
   const player: PlayerState = {
     starterConfigId: starterConfig.id,
     pilotLicense: normalizePilotLicense({ progress: 0 }),
+    factionStandings: createStartingFactionStandings(),
     hullId: hull.id,
     ownedShips: [hull.id],
     position: { x: 1140, y: 1180 },

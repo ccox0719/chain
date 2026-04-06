@@ -1396,7 +1396,16 @@ select {
 }
 
 .modal-panel-map {
-  width: min(1520px, calc(100vw - 1.25rem));
+  width: min(1600px, calc(100vw - 1rem));
+  height: calc(100dvh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+}
+
+.modal-panel-map .modal-body {
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes modal-rise {
@@ -2845,12 +2854,37 @@ select {
 }
 
 .universe-map {
-  width: 100%;
-  height: auto;
-  min-height: min(72dvh, 820px);
+  display: block;
   border-radius: var(--radius-sm);
-  background: rgba(4, 7, 18, 0.88);
+  background: radial-gradient(ellipse at 40% 45%, rgba(10, 18, 40, 1) 0%, rgba(3, 5, 14, 1) 100%);
   border: 1px solid rgba(130, 158, 210, 0.09);
+}
+
+.universe-map-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  cursor: grab;
+  touch-action: pan-x pan-y;
+  border-radius: var(--radius-sm);
+}
+
+.universe-map-scroll:active {
+  cursor: grabbing;
+}
+
+.map-controls-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 0.55rem;
+}
+
+.map-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .map-edge { stroke: rgba(130, 158, 210, 0.16); stroke-width: 1.5; }
@@ -2933,19 +2967,133 @@ select {
   gap: 0.9rem;
 }
 
-.map-overlay-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.85fr) minmax(320px, 0.9fr);
-  gap: 0.9rem;
-  align-items: start;
+/* Map fullscreen layout */
+.map-fullscreen-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  padding: 0.6rem 0.85rem 0;
+  gap: 0.5rem;
 }
 
-.map-primary-panel {
+.map-fullscreen-view .universe-map-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.map-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.map-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.map-top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.map-top-bar-right .faction-legend-row {
+  margin: 0;
+}
+
+/* Faction region background polygons */
+.map-region-bg {
+  fill-opacity: 0.07;
+  stroke-opacity: 0.22;
+  stroke-width: 1.5;
+}
+
+/* System info bottom sheet */
+.map-system-modal {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(5, 9, 22, 0.96);
+  border-top: 1px solid rgba(100, 140, 220, 0.22);
+  padding: 0.85rem 1rem;
+  z-index: 10;
+  max-height: 52%;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+  animation: modal-rise 0.15s ease;
+}
+
+.map-system-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.map-system-modal-title {
+  flex: 1;
   min-width: 0;
 }
 
-.map-sidebar-panel {
-  min-width: 0;
+.map-system-modal-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.map-modal-close {
+  flex-shrink: 0;
+}
+
+.map-system-modal-desc {
+  margin: 0 0 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.map-system-modal-intel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.map-intel-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.map-system-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+}
+
+.map-system-modal-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.status-chip-mission {
+  border-color: rgba(141, 224, 174, 0.5);
+  color: rgba(141, 224, 174, 0.9);
 }
 
 /* ============================================
@@ -2963,7 +3111,6 @@ select {
 @media (max-width: 900px) {
   .starter-grid { grid-template-columns: 1fr; }
   .build-slot-grid { grid-template-columns: 1fr; }
-  .map-overlay-grid { grid-template-columns: 1fr; }
   .pilot-card   { width: min(220px, calc(100vw - 1.25rem)); }
   .target-panel { width: min(138px, calc(100vw - 1.25rem)); }
   .hud-window-overview {

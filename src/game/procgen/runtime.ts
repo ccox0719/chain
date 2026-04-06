@@ -8,6 +8,8 @@ import {
   SystemDestination
 } from "../../types/game";
 import { regionById, sectorById } from "../data/sectors";
+import { factionData } from "../data/factions";
+import { getContractStandingRequirement } from "../utils/factionStanding";
 import { commodityById } from "../economy/data/commodities";
 import { enemyVariantById, enemyVariants } from "../data/ships";
 import { estimateRouteRisk, planRoute } from "../universe/routePlanning";
@@ -25,6 +27,52 @@ import { SPAWN_BALANCE } from "../config/balance";
 
 export const PROCGEN_EVENT_CYCLE_SEC = 720;
 export const PROCGEN_BOARD_SIZE = 4;
+
+const FACTION_CONTRACT_STYLE: Record<
+  keyof typeof factionData,
+  { titlePrefix: string; transportVoice: string; miningVoice: string; bountyVoice: string }
+> = {
+  "aurelian-league": {
+    titlePrefix: "League",
+    transportVoice: "Civic logistics needs this lane kept on schedule.",
+    miningVoice: "League procurement wants the berth filled before the window closes.",
+    bountyVoice: "League patrol command wants the route cleared without delay."
+  },
+  "cinder-union": {
+    titlePrefix: "Union",
+    transportVoice: "Foundry dispatch is moving industrial freight under pressure.",
+    miningVoice: "Union extraction wants tonnage on the dock before the shift rotates.",
+    bountyVoice: "Union route control wants the attackers broken before the convoy slips."
+  },
+  veilborn: {
+    titlePrefix: "Veil",
+    transportVoice: "A quiet crew is moving deniable cargo along a live lane.",
+    miningVoice: "A Veil broker wants the pull made before anyone else reads the rock.",
+    bountyVoice: "A Veil handler wants local pressure cut before the lane collapses."
+  },
+  "helion-cabal": {
+    titlePrefix: "Cabal",
+    transportVoice: "Telemetry and sealed optics cargo need controlled handling.",
+    miningVoice: "Cabal survey teams need calibrated extraction samples from this site.",
+    bountyVoice: "Cabal overseers want the firing lane sanitized for precision work."
+  },
+  "ironbound-syndicate": {
+    titlePrefix: "Ironbound",
+    transportVoice: "Contract freight needs a secured handoff under customs discipline.",
+    miningVoice: "Ironbound procurement wants the feedstock chain kept intact.",
+    bountyVoice: "Ironbound security wants the lane held and the threat billed in wreckage."
+  },
+  "blackwake-clans": {
+    titlePrefix: "Blackwake",
+    transportVoice: "A clan broker is moving rough cargo through a dangerous cut.",
+    miningVoice: "A clan yard wants the haul stripped out before a cleaner crew arrives.",
+    bountyVoice: "A clan captain wants local rivals cut out of the route."
+  }
+};
+
+function getFactionContractStyle(factionId: keyof typeof factionData) {
+  return FACTION_CONTRACT_STYLE[factionId];
+}
 
 function stationTagSet(station: SystemDestination | null, system: SolarSystemDefinition) {
   return new Set([...(station?.tags ?? []), ...(system.economyTags ?? []), ...(system.missionTags ?? [])]);
@@ -206,6 +254,7 @@ function buildTransportContract(
   const jumps = destination.route.steps.length;
   const volume = randomInt(cargoTemplate.volumeRange[0], cargoTemplate.volumeRange[1], random);
   const unitValue = randomInt(cargoTemplate.unitValueRange[0], cargoTemplate.unitValueRange[1], random);
+  const style = getFactionContractStyle(system.controllingFaction);
   const rewardCredits = Math.round(
     volume * unitValue +
       jumps * 180 +
@@ -219,11 +268,13 @@ function buildTransportContract(
     id: `proc:${system.id}:${getProcgenCycle(world)}:${slot}:transport`,
     templateId: cargoTemplate.id,
     type: "transport" as const,
-    title: `${destination.station.name} ${pickOne(cargoTemplate.titleNouns, random)}`,
-    briefing: `${cargoTemplate.description} Deliver ${volume}u ${cargoTemplate.label} to ${destination.station.name} in ${destination.system.name}.`,
+    title: `${style.titlePrefix} ${pickOne(cargoTemplate.titleNouns, random)}`,
+    briefing: `${style.transportVoice} ${cargoTemplate.description} Deliver ${volume}u ${cargoTemplate.label} to ${destination.station.name} in ${destination.system.name}.`,
     issuerStationId: station.id,
     issuerSystemId: system.id,
     issuerRegionId: system.regionId,
+    issuerFaction: system.controllingFaction,
+    requiredStanding: getContractStandingRequirement(routeRisk),
     riskLevel: routeRisk,
     rewardCredits,
     bonusReward: routeRisk === "high" || routeRisk === "extreme" ? 260 + jumps * 70 : undefined,
@@ -260,6 +311,7 @@ function buildMiningContract(
 
   const count = randomInt(template.countRange[0], template.countRange[1], random) + Math.max(0, system.danger - 2);
   const riskLevel = system.security === "frontier" ? "high" : system.security === "low" ? "medium" : "low";
+  const style = getFactionContractStyle(system.controllingFaction);
   const rewardCredits = Math.round(
     count *
       (belt.resource === "ghost-alloy" ? 126 : belt.resource === "ember-crystal" ? 92 : 64) *
@@ -271,11 +323,13 @@ function buildMiningContract(
     id: `proc:${system.id}:${getProcgenCycle(world)}:${slot}:mining`,
     templateId: template.id,
     type: "mining" as const,
-    title: `${belt.name} ${template.titleVerb}`,
-    briefing: `${template.description} Recover ${count} ${belt.resource} from ${belt.name} and return it to ${station.name}.`,
+    title: `${style.titlePrefix} ${template.titleVerb}`,
+    briefing: `${style.miningVoice} ${template.description} Recover ${count} ${belt.resource} from ${belt.name} and return it to ${station.name}.`,
     issuerStationId: station.id,
     issuerSystemId: system.id,
     issuerRegionId: system.regionId,
+    issuerFaction: system.controllingFaction,
+    requiredStanding: getContractStandingRequirement(riskLevel),
     riskLevel,
     rewardCredits,
     targetSystemId: system.id,
@@ -325,6 +379,7 @@ function buildBountyContract(
     null;
   const count = randomInt(template.countRange[0], template.countRange[1], random) + Math.max(0, targetSystem.danger - 3);
   const riskLevel = targetSystem.security === "frontier" ? "extreme" : targetSystem.security === "low" ? "high" : "medium";
+  const style = getFactionContractStyle(system.controllingFaction);
   const rewardCredits = Math.round(
     (560 + count * 190 + targetSystem.danger * 150) *
       (event?.rewardMultiplier ?? 1) *
@@ -335,11 +390,13 @@ function buildBountyContract(
     id: `proc:${system.id}:${getProcgenCycle(world)}:${slot}:bounty`,
     templateId: template.id,
     type: "bounty" as const,
-    title: `${targetSystem.name} ${template.titlePrefix}`,
-    briefing: `${template.description} Destroy ${count} hostile hulls in ${targetSystem.name}${targetDestination ? ` near ${targetDestination.name}` : ""} and report back to ${station.name}.`,
+    title: `${style.titlePrefix} ${template.titlePrefix}`,
+    briefing: `${style.bountyVoice} ${template.description} Destroy ${count} hostile hulls in ${targetSystem.name}${targetDestination ? ` near ${targetDestination.name}` : ""} and report back to ${station.name}.`,
     issuerStationId: station.id,
     issuerSystemId: system.id,
     issuerRegionId: system.regionId,
+    issuerFaction: system.controllingFaction,
+    requiredStanding: getContractStandingRequirement(riskLevel),
     riskLevel,
     rewardCredits,
     targetSystemId: targetSystem.id,
