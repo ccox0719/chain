@@ -1324,7 +1324,7 @@ export const enemyVariants: EnemyVariant[] = [
     silhouette: "claw",
     combatStyle: "shield",
     threatLevel: 2,
-    shield: 66,
+    shield: 52,
     armor: 70,
     hull: 76,
     capacitor: 100,
@@ -1337,7 +1337,7 @@ export const enemyVariants: EnemyVariant[] = [
     lootTable: { ferrite: 3, "ember-crystal": 2 },
     fittedModules: ["pulse-laser", "shield-booster"],
     signatureRadius: 30,
-    shieldResists: { em: 0.04, thermal: 0.12, kinetic: 0.24, explosive: 0.36 },
+    shieldResists: { em: 0.02, thermal: 0.08, kinetic: 0.2, explosive: 0.3 },
     armorResists: { em: 0.3, thermal: 0.2, kinetic: 0.12, explosive: 0.08 },
     hullResists: { em: 0.05, thermal: 0.05, kinetic: 0.05, explosive: 0.05 }
   },
