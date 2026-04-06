@@ -2532,12 +2532,13 @@ export function toggleModule(
   if (!runtime || !moduleId) return false;
   const module = moduleById[moduleId];
   if (!module || module.activation === "passive") return false;
-  if (slotType === "weapon" && !runtime.active) {
-    world.player.weaponHoldFire = false;
-  }
   runtime.active = !runtime.active;
   if (!runtime.active) {
     runtime.cycleRemaining = 0;
+    if (slotType === "weapon") {
+      world.player.weaponHoldFire = true;
+      pushStory(world, "Weapons set to manual fire.");
+    }
   }
   return true;
 }
