@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ShipFittingDiagram } from "./ShipFittingDiagram";
 import { ShipGeoIcon } from "./ShipGeoIcon";
 import { WeaponDetailsCard } from "./WeaponDetailsCard";
@@ -540,6 +540,9 @@ interface StationPanelProps {
   onUndock: () => void;
   onRepair: () => void;
   onSellCargo: () => void;
+  balanceModalOpen: boolean;
+  onOpenBalance: () => void;
+  onCloseBalance: () => void;
   onBuyModule: (moduleId: string) => void;
   onSellModule: (moduleId: string) => void;
   onBuyCommodity: (commodityId: CommodityId, quantity: number) => void;
@@ -559,6 +562,9 @@ export function StationPanel({
   onUndock,
   onRepair,
   onSellCargo,
+  balanceModalOpen,
+  onOpenBalance,
+  onCloseBalance,
   onBuyModule,
   onSellModule,
   onBuyCommodity,
@@ -587,7 +593,6 @@ export function StationPanel({
   const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
-  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
   const [, setBalanceRefresh] = useState(0);
   const stationTags = currentStation?.tags ?? [];
@@ -611,6 +616,13 @@ export function StationPanel({
       ]),
     [snapshot.currentRegion.dominantFaction, snapshot.currentRegion.secondaryFactions, stationFaction.allies]
   );
+
+  useEffect(() => {
+    if (!balanceModalOpen || !isDevBuild) return;
+    setBalanceBaseline(captureBalanceSnapshot());
+    setBalanceRefresh((value) => value + 1);
+  }, [balanceModalOpen]);
+
   function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
     if (Number.isNaN(nextValue)) return;
     setBalanceOverride(root, path, nextValue);
@@ -630,7 +642,7 @@ export function StationPanel({
       role="dialog"
       aria-modal="true"
       aria-label="Developer balance dials"
-      onClick={() => setBalanceModalOpen(false)}
+      onClick={onCloseBalance}
       style={{
         position: "fixed",
         inset: 0,
@@ -660,7 +672,7 @@ export function StationPanel({
             <button type="button" className="ghost-button mini" onClick={resetBalanceValues}>
               Reset
             </button>
-            <button type="button" className="ghost-button mini" onClick={() => setBalanceModalOpen(false)}>
+            <button type="button" className="ghost-button mini" onClick={onCloseBalance}>
               Close
             </button>
           </div>
@@ -1125,8 +1137,7 @@ export function StationPanel({
                 type="button"
                 className="ghost-button"
                 onClick={() => {
-                  setBalanceBaseline(captureBalanceSnapshot());
-                  setBalanceModalOpen(true);
+                  onOpenBalance();
                 }}
               >
                 Balance

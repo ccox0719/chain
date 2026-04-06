@@ -1,13 +1,16 @@
 import { DifficultyId } from "../types/game";
 
+const isDevBuild = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+
 interface GameMenuProps {
   difficulty: DifficultyId;
   onSetDifficulty: (difficulty: DifficultyId) => void;
   onResetGame: () => void;
+  onOpenBalance: () => void;
   onClose: () => void;
 }
 
-export function GameMenu({ difficulty, onSetDifficulty, onResetGame, onClose }: GameMenuProps) {
+export function GameMenu({ difficulty, onSetDifficulty, onResetGame, onOpenBalance, onClose }: GameMenuProps) {
   return (
     <div className="menu-backdrop" onClick={onClose}>
       <section className="menu-panel" onClick={(event) => event.stopPropagation()}>
@@ -44,6 +47,16 @@ export function GameMenu({ difficulty, onSetDifficulty, onResetGame, onClose }: 
             Pick Starter Ship
           </button>
         </div>
+
+        {isDevBuild && (
+          <div className="panel-lite">
+            <h3>Developer</h3>
+            <p>Adjust simulation balance values while testing.</p>
+            <button type="button" onClick={onOpenBalance}>
+              Open Balance Window
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );

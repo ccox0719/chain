@@ -14,6 +14,7 @@ export function GamePage() {
   const { canvasRef, snapshot, overlay, setOverlay, contextMenu, actions } = useSpaceGame();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hudVisible, setHudVisible] = useState(true);
+  const [balanceOpen, setBalanceOpen] = useState(false);
   const [starterPickerOpen, setStarterPickerOpen] = useState(
     () => window.localStorage.getItem("starfall-world") === null
   );
@@ -102,6 +103,7 @@ export function GamePage() {
               setMenuOpen(false);
               setStarterPickerOpen(true);
             }}
+            onOpenBalance={() => setBalanceOpen(true)}
             onClose={() => setMenuOpen(false)}
           />
         )}
@@ -122,6 +124,9 @@ export function GamePage() {
           onUndock={actions.undock}
           onRepair={actions.repair}
           onSellCargo={actions.sellCargo}
+          balanceModalOpen={balanceOpen}
+          onOpenBalance={() => setBalanceOpen(true)}
+          onCloseBalance={() => setBalanceOpen(false)}
           onBuyModule={actions.buyModule}
           onSellModule={actions.sellModule}
           onBuyCommodity={actions.buyCommodity}
