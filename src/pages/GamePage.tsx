@@ -6,7 +6,7 @@ import { GameHud } from "../components/GameHud";
 import { GameMenu } from "../components/GameMenu";
 import { SidebarPanels } from "../components/SidebarPanels";
 import { StarterShipPicker } from "../components/StarterShipPicker";
-import { StationPanel } from "../components/StationPanel";
+import { DeveloperBalanceModal, StationPanel } from "../components/StationPanel";
 import { getCombatControlRanges } from "../game/utils/combatRanges";
 import { useSpaceGame } from "../store/useSpaceGame";
 
@@ -108,6 +108,8 @@ export function GamePage() {
           />
         )}
 
+        <DeveloperBalanceModal open={balanceOpen} onClose={() => setBalanceOpen(false)} />
+
         {starterPickerOpen && (
           <StarterShipPicker
             allowClose={window.localStorage.getItem("starfall-world") !== null}
@@ -124,9 +126,7 @@ export function GamePage() {
           onUndock={actions.undock}
           onRepair={actions.repair}
           onSellCargo={actions.sellCargo}
-          balanceModalOpen={balanceOpen}
           onOpenBalance={() => setBalanceOpen(true)}
-          onCloseBalance={() => setBalanceOpen(false)}
           onBuyModule={actions.buyModule}
           onSellModule={actions.sellModule}
           onBuyCommodity={actions.buyCommodity}

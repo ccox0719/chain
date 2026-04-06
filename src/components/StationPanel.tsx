@@ -434,6 +434,113 @@ function BalanceSlider({
   );
 }
 
+export function DeveloperBalanceModal({
+  open,
+  onClose
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
+  const [, setBalanceRefresh] = useState(0);
+
+  useEffect(() => {
+    if (!open || !isDevBuild) return;
+    setBalanceBaseline(captureBalanceSnapshot());
+    setBalanceRefresh((value) => value + 1);
+  }, [open]);
+
+  function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
+    if (Number.isNaN(nextValue)) return;
+    setBalanceOverride(root, path, nextValue);
+    setBalanceBaseline(captureBalanceSnapshot());
+    setBalanceRefresh((value) => value + 1);
+  }
+
+  function resetBalanceValues() {
+    clearBalanceOverrides();
+    setBalanceBaseline(captureBalanceSnapshot());
+    setBalanceRefresh((value) => value + 1);
+  }
+
+  if (!isDevBuild || !open) return null;
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Developer balance dials"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 120,
+        background: "rgba(0, 0, 0, 0.55)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "5.5rem 1rem 1rem"
+      }}
+    >
+      <article
+        className="panel-lite"
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "min(44rem, 100%)",
+          maxHeight: "min(82vh, 52rem)",
+          display: "flex",
+          flexDirection: "column",
+          borderColor: "rgba(127, 220, 255, 0.28)",
+          boxShadow: "0 28px 80px rgba(0, 0, 0, 0.45)"
+        }}
+      >
+        <div className="mission-card-header" style={{ marginBottom: "0.5rem" }}>
+          <strong>Developer Balance</strong>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="ghost-button mini" onClick={resetBalanceValues}>
+              Reset
+            </button>
+            <button type="button" className="ghost-button mini" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+        <div
+          className="dev-balance-grid"
+          style={{
+            display: "grid",
+            gap: "0.75rem",
+            overflowY: "auto",
+            paddingRight: "0.25rem",
+            flex: "1 1 auto"
+          }}
+        >
+          {BALANCE_GROUPS.map((group) => (
+            <section key={group.title} className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem" }}>
+              <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+                <strong>{group.title}</strong>
+                <span className="status-chip">{group.note}</span>
+              </div>
+              <div style={{ display: "grid", gap: "0.7rem" }}>
+                {group.controls.map((spec) => (
+                  <BalanceSlider
+                    key={balanceKey(spec)}
+                    spec={spec}
+                    value={getBalanceValue(spec.root, spec.path)}
+                    baseline={balanceBaseline[balanceKey(spec)] ?? getBalanceValue(spec.root, spec.path)}
+                    onChange={(nextValue) => applyBalanceValue(spec.root, spec.path, nextValue)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </article>
+    </div>
+  );
+}
+
 const SHIP_ARCHETYPE_LABELS: Record<string, string> = {
   skirmisher: "Skirmisher",
   brawler: "Brawler",
@@ -540,9 +647,7 @@ interface StationPanelProps {
   onUndock: () => void;
   onRepair: () => void;
   onSellCargo: () => void;
-  balanceModalOpen: boolean;
   onOpenBalance: () => void;
-  onCloseBalance: () => void;
   onBuyModule: (moduleId: string) => void;
   onSellModule: (moduleId: string) => void;
   onBuyCommodity: (commodityId: CommodityId, quantity: number) => void;
@@ -562,9 +667,7 @@ export function StationPanel({
   onUndock,
   onRepair,
   onSellCargo,
-  balanceModalOpen,
   onOpenBalance,
-  onCloseBalance,
   onBuyModule,
   onSellModule,
   onBuyCommodity,
@@ -593,8 +696,6 @@ export function StationPanel({
   const [focusedSlot, setFocusedSlot] = useState<{ slotType: ModuleSlot; index: number } | null>(null);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
-  const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
-  const [, setBalanceRefresh] = useState(0);
   const stationTags = currentStation?.tags ?? [];
   const stationProfile = getStationMarketProfile(currentStation);
   const stationIdentity = getStationIdentityMeta(currentStation);
@@ -616,100 +717,6 @@ export function StationPanel({
       ]),
     [snapshot.currentRegion.dominantFaction, snapshot.currentRegion.secondaryFactions, stationFaction.allies]
   );
-
-  useEffect(() => {
-    if (!balanceModalOpen || !isDevBuild) return;
-    setBalanceBaseline(captureBalanceSnapshot());
-    setBalanceRefresh((value) => value + 1);
-  }, [balanceModalOpen]);
-
-  function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
-    if (Number.isNaN(nextValue)) return;
-    setBalanceOverride(root, path, nextValue);
-    setBalanceBaseline(captureBalanceSnapshot());
-    setBalanceRefresh((value) => value + 1);
-  }
-
-  function resetBalanceValues() {
-    clearBalanceOverrides();
-    setBalanceBaseline(captureBalanceSnapshot());
-    setBalanceRefresh((value) => value + 1);
-  }
-
-  const devBalanceModal = isDevBuild && balanceModalOpen ? (
-    <div
-      className="modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Developer balance dials"
-      onClick={onCloseBalance}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 120,
-        background: "rgba(0, 0, 0, 0.55)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "5.5rem 1rem 1rem"
-      }}
-    >
-      <article
-        className="panel-lite"
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: "min(44rem, 100%)",
-          maxHeight: "min(82vh, 52rem)",
-          display: "flex",
-          flexDirection: "column",
-          borderColor: "rgba(127, 220, 255, 0.28)",
-          boxShadow: "0 28px 80px rgba(0, 0, 0, 0.45)"
-        }}
-      >
-        <div className="mission-card-header" style={{ marginBottom: "0.5rem" }}>
-          <strong>Developer Balance</strong>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="ghost-button mini" onClick={resetBalanceValues}>
-              Reset
-            </button>
-            <button type="button" className="ghost-button mini" onClick={onCloseBalance}>
-              Close
-            </button>
-          </div>
-        </div>
-        <div
-          className="dev-balance-grid"
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            overflowY: "auto",
-            paddingRight: "0.25rem",
-            flex: "1 1 auto"
-          }}
-        >
-          {BALANCE_GROUPS.map((group) => (
-            <section key={group.title} className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem" }}>
-              <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
-                <strong>{group.title}</strong>
-                <span className="status-chip">{group.note}</span>
-              </div>
-              <div style={{ display: "grid", gap: "0.7rem" }}>
-                {group.controls.map((spec) => (
-                  <BalanceSlider
-                    key={balanceKey(spec)}
-                    spec={spec}
-                    value={getBalanceValue(spec.root, spec.path)}
-                    baseline={balanceBaseline[balanceKey(spec)] ?? getBalanceValue(spec.root, spec.path)}
-                    onChange={(nextValue) => applyBalanceValue(spec.root, spec.path, nextValue)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      </article>
-    </div>
-  ) : null;
 
   function inventoryAllows(tags: string[]) {
     if (tags.includes("common")) return true;
@@ -1146,7 +1153,6 @@ export function StationPanel({
           </div>
         </div>
       </div>
-      {devBalanceModal}
       {/* Tab navigation */}
       <div className="station-tabs">
         {(Object.keys(TAB_LABELS) as StationTab[]).map((t) => (
