@@ -59,6 +59,7 @@ export function GamePage() {
           onUnlockTarget={actions.unlockTarget}
           onToggleModule={actions.toggleModule}
           onSetWeaponHoldFire={actions.setWeaponHoldFire}
+          onDisengageCombat={actions.disengageCombat}
           onActivateBuild={actions.activateBuild}
           onActivateTacticalSlow={actions.activateTacticalSlow}
           onSetTimeScale={actions.setTimeScale}

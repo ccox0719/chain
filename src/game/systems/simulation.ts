@@ -2193,6 +2193,18 @@ export function setWeaponHoldFire(world: GameWorld, holdFire: boolean) {
   pushStory(world, "Weapons released to auto-engage.");
 }
 
+export function disengageCombat(world: GameWorld) {
+  const hostileLocks = world.lockedTargets.filter((entry) => entry.type === "enemy");
+  setWeaponHoldFire(world, true);
+  hostileLocks.forEach((ref) => unlockTarget(world, ref));
+  if (world.activeTarget?.type === "enemy") {
+    world.activeTarget = world.lockedTargets[0] ?? null;
+  }
+  if (world.selectedObject?.type === "enemy") {
+    world.selectedObject = null;
+  }
+}
+
 function disableAutopilot(world: GameWorld) {
   if (!world.routePlan?.autoFollow) return;
   world.routePlan.autoFollow = false;
@@ -2262,7 +2274,7 @@ function getMaxEngagementRange(world: GameWorld) {
 }
 
 function autoEngageNearbyHostile(world: GameWorld) {
-  if (world.dockedStationId || world.player.buildSwap.active) return;
+  if (world.dockedStationId || world.player.buildSwap.active || world.player.weaponHoldFire) return;
   const sector = getCurrentSector(world);
   const engagementRange = getMaxEngagementRange(world);
   if (engagementRange <= 0) return;
@@ -2291,7 +2303,7 @@ function autoEngageNearbyHostile(world: GameWorld) {
 }
 
 function maintainEnemyLockIntent(world: GameWorld) {
-  if (world.dockedStationId || world.player.buildSwap.active) return;
+  if (world.dockedStationId || world.player.buildSwap.active || world.player.weaponHoldFire) return;
   const candidate = world.selectedObject?.type === "enemy"
     ? world.selectedObject
     : world.activeTarget?.type === "enemy"
@@ -2421,20 +2433,24 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
   if (command.type === "dock") {
     if (isRemoteWarpableDestination(world, command.target)) {
       const destination = getDestinationIfSameSystem(world, command.target);
+      disengageCombat(world);
       const warped = tryExecuteCommand(world, { type: "warp", target: command.target, range: 130 }, skipDockedCheck);
       if (warped && destination?.kind === "station") {
         world.player.navigation.postWarpDock = true;
       }
       return warped;
     }
+    disengageCombat(world);
     disableAutopilot(world);
     issueNav(world, "docking", command.target, 0);
     return true;
   }
   if (command.type === "jump") {
     if (isRemoteWarpableDestination(world, command.target)) {
+      disengageCombat(world);
       return tryExecuteCommand(world, { type: "warp", target: command.target, range: 120 }, skipDockedCheck);
     }
+    disengageCombat(world);
     disableAutopilot(world);
     issueNav(world, "jumping", command.target, 0);
     return true;

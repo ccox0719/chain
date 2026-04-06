@@ -17,6 +17,7 @@ import {
   createSnapshot,
   dock,
   equipModuleToSlot,
+  disengageCombat,
   issueCommand,
   lockTarget,
   repairShip,
@@ -308,6 +309,10 @@ export function useSpaceGame() {
       },
       setWeaponHoldFire: (holdFire: boolean) => {
         setWeaponHoldFire(worldRef.current, holdFire);
+        refresh();
+      },
+      disengageCombat: () => {
+        disengageCombat(worldRef.current);
         refresh();
       },
       selectObject: (ref: SelectableRef | null) => {

@@ -58,6 +58,7 @@ interface GameHudProps {
   onUnlockTarget: (ref: SelectableRef) => void;
   onToggleModule: (slotType: ModuleSlot, slotIndex: number) => void;
   onSetWeaponHoldFire: (holdFire: boolean) => void;
+  onDisengageCombat: () => void;
   onActivateBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
   onActivateTacticalSlow: () => void;
   onSetTimeScale: (value: number) => void;
@@ -323,6 +324,7 @@ export function GameHud({
   onUnlockTarget: _onUnlockTarget,
   onToggleModule,
   onSetWeaponHoldFire,
+  onDisengageCombat,
   onActivateBuild,
   onActivateTacticalSlow,
   onSetTimeScale,
@@ -1129,18 +1131,14 @@ export function GameHud({
           >
             ◎
           </button>
-          {/* Hold Fire */}
+          {/* Disengage */}
           <button
             type="button"
             className={`util-btn${world.player.weaponHoldFire ? " active danger" : ""}`}
-            title={
-              world.player.weaponHoldFire
-                ? "Hold Fire: ON — tap to release"
-                : "Hold Fire: OFF — tap to hold"
-            }
-            onClick={() => onSetWeaponHoldFire(!world.player.weaponHoldFire)}
+            title="Cease fire, drop hostile locks, and stop auto-engaging enemies"
+            onClick={onDisengageCombat}
           >
-            ⌖
+            ✕
           </button>
           {/* Tactical Slow */}
           <button
@@ -1273,6 +1271,20 @@ export function GameHud({
         <div className="mod-cluster">
           {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType) => (
             <div key={slotType} className="mod-col">
+              {slotType === "weapon" && (
+                <button
+                  type="button"
+                  className={`mod-col-action${world.player.weaponHoldFire ? " active danger" : ""}`}
+                  title={
+                    world.player.weaponHoldFire
+                      ? "Weapons on hold fire — tap to release auto fire"
+                      : "Weapons on auto fire — tap to hold fire and fire single weapons manually"
+                  }
+                  onClick={() => onSetWeaponHoldFire(!world.player.weaponHoldFire)}
+                >
+                  ⌖
+                </button>
+              )}
               {/* Column icon header */}
               <div
                 className="mod-col-hd"
