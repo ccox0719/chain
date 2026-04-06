@@ -119,6 +119,19 @@ function setRootOverrides(rootKey: BalanceRootKey, next: BalanceOverrideTree) {
   saveOverrides(current);
 }
 
+export function getBalanceOverrides() {
+  const current = loadOverrides();
+  return {
+    combat: cloneOverrides(current.combat),
+    capacitor: cloneOverrides(current.capacitor),
+    economy: cloneOverrides(current.economy),
+    missions: cloneOverrides(current.missions),
+    movement: cloneOverrides(current.movement),
+    progression: cloneOverrides(current.progression),
+    spawns: cloneOverrides(current.spawns)
+  };
+}
+
 function createProxy<T extends Record<string, unknown>>(rootKey: BalanceRootKey, base: T, path: string[] = []): T {
   if (proxyCache.has(base)) return proxyCache.get(base) as T;
   const proxy = new Proxy(base, {

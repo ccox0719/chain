@@ -15,6 +15,7 @@ import {
   PROGRESSION_BALANCE,
   SPAWN_BALANCE,
   clearBalanceOverrides,
+  getBalanceOverrides,
   setBalanceOverride
 } from "../game/config/balance";
 import type { BalanceRootKey } from "../game/config/balance/overrides";
@@ -461,6 +462,11 @@ export function DeveloperBalanceModal({
     setBalanceRefresh((value) => value + 1);
   }
 
+  async function exportBalanceValues() {
+    const payload = JSON.stringify(getBalanceOverrides(), null, 2);
+    await navigator.clipboard.writeText(payload);
+  }
+
   if (!open) return null;
 
   return (
@@ -496,8 +502,11 @@ export function DeveloperBalanceModal({
         <div className="mission-card-header" style={{ marginBottom: "0.5rem" }}>
           <strong>Developer Balance</strong>
           <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="ghost-button mini" onClick={() => void exportBalanceValues()}>
+              Export
+            </button>
             <button type="button" className="ghost-button mini" onClick={resetBalanceValues}>
-              Reset
+              Clear Saved
             </button>
             <button type="button" className="ghost-button mini" onClick={onClose}>
               Close
