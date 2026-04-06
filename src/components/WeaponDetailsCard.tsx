@@ -179,9 +179,21 @@ export function WeaponDetailsCard({
                   <span>Cycle time</span>
                   <strong>{weaponStats?.cycleTime.toFixed(1)} s</strong>
                 </div>
+                {module.kind === "cannon" && (
+                  <>
+                    <div className="weapon-meta-item">
+                      <span>Magazine</span>
+                      <strong>{weaponStats?.magazineSize ?? module.magazineSize ?? 0}</strong>
+                    </div>
+                    <div className="weapon-meta-item">
+                      <span>Reload</span>
+                      <strong>{weaponStats?.reloadTime ? `${weaponStats.reloadTime.toFixed(1)} s` : "—"}</strong>
+                    </div>
+                  </>
+                )}
                 <div className="weapon-meta-item">
                   <span>Tracking</span>
-                  <strong>{module.kind === "missile" ? "Guided" : `${weaponStats?.tracking.toFixed(3)} rad/s`}</strong>
+                  <strong>{module.kind === "missile" ? "Guided" : module.kind === "cannon" ? "Ballistic" : `${weaponStats?.tracking.toFixed(3)} rad/s`}</strong>
                 </div>
                 <div className="weapon-meta-item">
                   <span>Shield pressure</span>
@@ -224,6 +236,12 @@ export function WeaponDetailsCard({
                   <span>Role</span>
                   <strong>{roleTag}</strong>
                 </div>
+                {module.kind === "cannon" && (
+                  <div className="weapon-meta-item">
+                    <span>Ammo</span>
+                    <strong>{module.ammoType ?? "Magazine-fed"}</strong>
+                  </div>
+                )}
                 <div className="weapon-meta-item">
                   <span>Price</span>
                   <strong>{module.price} cr</strong>

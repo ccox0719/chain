@@ -54,6 +54,7 @@ export interface ResistanceProfileEntry {
 }
 
 export interface WeaponSummaryStats {
+  burstCycleTime: number;
   damagePerCycle: number;
   dps: number;
   cycleTime: number;
@@ -67,6 +68,8 @@ export interface WeaponSummaryStats {
   efficiency: number;
   shieldPressure: number;
   armorPressure: number;
+  magazineSize: number;
+  reloadTime: number;
 }
 
 export interface WeaponComparisonHighlight {
@@ -146,12 +149,15 @@ export function getComparableModulePool(module: ModuleDefinition) {
 
 export function getWeaponSummaryStats(module: ModuleDefinition): WeaponSummaryStats {
   const damagePerCycle = module.damage ?? 0;
-  const cycleTime = Math.max(module.cycleTime ?? 0, 0.01);
+  const burstCycleTime = Math.max(module.cycleTime ?? 0, 0.01);
+  const magazineSize = module.kind === "cannon" ? Math.max(1, module.magazineSize ?? 1) : 0;
+  const reloadTime = module.kind === "cannon" ? Math.max(module.reloadTime ?? burstCycleTime, 0) : 0;
+  const cycleTime = magazineSize > 0 ? burstCycleTime + reloadTime / magazineSize : burstCycleTime;
   const optimal = module.optimal ?? module.range ?? 0;
   const falloff = module.falloff ?? Math.max(0, (module.range ?? optimal) - optimal);
   const effectiveRange = optimal + falloff;
   const tracking = module.kind === "missile" ? 0.16 : module.tracking ?? 0;
-  const signatureResolution = module.kind === "missile" ? 36 : Math.max(module.signatureResolution ?? 40, 1);
+  const signatureResolution = module.kind === "missile" ? 36 : module.kind === "cannon" ? Math.max(module.signatureResolution ?? 46, 1) : Math.max(module.signatureResolution ?? 40, 1);
   const application = module.kind === "missile" ? 1 : tracking * (40 / signatureResolution) * 12;
   const capacitorUse = module.capacitorUse ?? 0;
   const capacitorPerSecond =
@@ -161,6 +167,7 @@ export function getWeaponSummaryStats(module: ModuleDefinition): WeaponSummarySt
   const armorPressure = damagePerCycle * sumDamageWeight(module.damageProfile, ARMOR_WEIGHTS);
 
   return {
+    burstCycleTime,
     damagePerCycle,
     dps: damagePerCycle / cycleTime,
     cycleTime,
@@ -173,7 +180,9 @@ export function getWeaponSummaryStats(module: ModuleDefinition): WeaponSummarySt
     capacitorPerSecond,
     efficiency,
     shieldPressure,
-    armorPressure
+    armorPressure,
+    magazineSize,
+    reloadTime
   };
 }
 
@@ -224,7 +233,7 @@ function getMetricDisplay(module: ModuleDefinition, metricId: WeaponStatMetric["
     case "range":
       return `${Math.round(stats.effectiveRange)} m`;
     case "tracking":
-      return module.kind === "missile" ? "Guided" : `${stats.tracking.toFixed(3)} rad/s`;
+      return module.kind === "missile" ? "Guided" : module.kind === "cannon" ? "Ballistic" : `${stats.tracking.toFixed(3)} rad/s`;
     case "application":
       return module.kind === "missile" ? "High" : `${stats.application.toFixed(2)} score`;
     case "efficiency":
@@ -772,6 +781,8 @@ export function getCompactWeaponMetrics(module: ModuleDefinition) {
 
 export function getWeaponRoleDescription(module: ModuleDefinition) {
   const stats = getWeaponSummaryStats(module);
+  if (module.kind === "cannon" && stats.effectiveRange <= 380) return "Brawl Cannon";
+  if (module.kind === "cannon") return "Siege Cannon";
   if (stats.shieldPressure > stats.armorPressure * 1.18) return "Anti-Shield";
   if (stats.armorPressure > stats.shieldPressure * 1.18) return "Anti-Armor";
   if (stats.effectiveRange >= 560 || (stats.effectiveRange >= 430 && stats.tracking < 0.11)) {

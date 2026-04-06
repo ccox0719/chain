@@ -22,6 +22,7 @@ const MODULE_KIND_ICON: Record<string, string> = {
   laser: "◈",
   railgun: "▶▶",
   missile: "⧖",
+  cannon: "▥",
   mining_laser: "⛏",
   afterburner: "⟴",
   webifier: "⊕",
@@ -124,7 +125,7 @@ function moduleFitAdvice(module: (typeof moduleById)[string]) {
   const c = moduleCapUsePerSecond(module);
   if (c >= 8) return "Best paired with passive shield or armor.";
   if (c >= 4) return "Balanced tank or mixed utility fit.";
-  if (module.kind === "laser" || module.kind === "missile" || module.kind === "railgun")
+  if (module.kind === "laser" || module.kind === "missile" || module.kind === "railgun" || module.kind === "cannon")
     return "Leaves room for active defense or speed modules.";
   return "Low demand; flexible fit.";
 }

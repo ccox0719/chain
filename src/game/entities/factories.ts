@@ -1,5 +1,7 @@
 import {
   AsteroidState,
+  AsteroidFieldDefinition,
+  AsteroidFieldRuntimeState,
   BuildSwapState,
   DeathSummary,
   EnemyState,
@@ -10,6 +12,7 @@ import {
   NavigationState,
   PlayerState,
   ProjectileState,
+  SystemEcology,
   SectorRuntime,
   Vec2,
   DifficultyId
@@ -55,12 +58,16 @@ function idleNav(): NavigationState {
 }
 
 function createRuntimeSlots(ids: Array<string | null>): ModuleRuntimeState[] {
-  return ids.map((moduleId) => ({
-    moduleId,
-    active: false,
-    cycleRemaining: 0,
-    autoRepeat: true
-  }));
+  return ids.map((moduleId) => {
+    const module = moduleId ? moduleById[moduleId] : null;
+    return {
+      moduleId,
+      active: false,
+      cycleRemaining: 0,
+      autoRepeat: true,
+      ammoRemaining: module?.kind === "cannon" ? Math.max(1, module.magazineSize ?? 1) : undefined
+    };
+  });
 }
 
 function neutralEffects() {
@@ -117,6 +124,62 @@ function createBoundaryState() {
       pocketId: null,
       reason: null
     }
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function createSystemEcology(sectorId: string): SystemEcology {
+  const sector = sectorById[sectorId];
+  const asteroidRichness = sector.asteroidFields.reduce((sum, field) => sum + field.richness * field.count, 0);
+  const hostileCount = sector.enemySpawns.reduce((sum, spawn) => sum + spawn.count, 0);
+  const securityBias = sector.security === "high" ? 0.2 : sector.security === "medium" ? 0.45 : sector.security === "low" ? 0.62 : 0.78;
+  const tradeBias = sector.traffic === "high" ? 0.82 : sector.traffic === "medium" ? 0.6 : 0.38;
+  return {
+    state:
+      sector.asteroidFields.length > 0
+        ? "stable"
+        : sector.security === "frontier"
+          ? "frontier_rush"
+          : hostileCount > 0
+            ? "tense"
+            : "recovering",
+    asteroidReserve: clamp(asteroidRichness * 0.62, 10, 100),
+    hostilePressure: clamp(hostileCount * 7 + (sector.danger - 1) * 8, 0, 100),
+    patrolPressure: clamp((1 - securityBias) * 70, 5, 90),
+    scavengerPressure: sector.danger >= 3 ? 12 : 4,
+    tradeActivity: clamp(tradeBias * 100, 15, 95),
+    missionReserve: clamp(asteroidRichness * 0.16 + hostileCount * 2, 8, 80),
+    depletionPressure: 0,
+    reinforcementBudget: clamp(20 + hostileCount * 4 + sector.danger * 3, 12, 60),
+    recoveryProgress: 0,
+    lastIncidentAt: 0,
+    lastStateChangeAt: 0,
+    nearbyInfluence: {
+      pirateBias: sector.contestedFactionIds?.includes("blackwake-clans") ? 1.2 : 1,
+      militaryBias: sector.security === "high" ? 1.15 : sector.security === "frontier" ? 0.92 : 1,
+      miningBias: sector.asteroidFields.length > 0 ? 1.12 : 0.9,
+      salvageBias: sector.danger >= 3 ? 1.1 : 0.92,
+      tradeBias
+    },
+    ambientRespawnTimer: 24,
+    missionSpawnTimer: 0
+  };
+}
+
+function createFieldState(field: AsteroidFieldDefinition): AsteroidFieldRuntimeState {
+  return {
+    beltId: field.beltId,
+    reserve: clamp(field.richness * field.count * 1.4, 12, 100),
+    density: field.count,
+    richness: field.richness,
+    depletionPressure: 0,
+    recoveryTimer: 0,
+    desiredCount: Math.max(1, field.count),
+    maxCount: Math.max(field.count + Math.ceil(field.count * 0.5), field.count + 2),
+    hiddenPocketChance: field.hiddenPocketChance ?? clamp(0.05 + field.richness * 0.002, 0.04, 0.12)
   };
 }
 
@@ -244,7 +307,8 @@ function enemyModuleRuntime(moduleIds: string[]): ModuleRuntimeState[] {
     moduleId,
     active: true,
     cycleRemaining: (moduleById[moduleId]?.cycleTime ?? 0) * (0.25 + index * 0.2),
-    autoRepeat: true
+    autoRepeat: true,
+    ammoRemaining: moduleById[moduleId]?.kind === "cannon" ? Math.max(1, moduleById[moduleId]?.magazineSize ?? 1) : undefined
   }));
 }
 
@@ -311,6 +375,7 @@ export function createRuntimeSector(sectorId: string, difficulty: DifficultyId =
       });
     }
   });
+  const fieldStates = Object.fromEntries(sector.asteroidFields.map((field) => [field.beltId, createFieldState(field)]));
 
   const enemies: EnemyState[] = [];
   sector.enemySpawns.forEach((spawn) => {
@@ -354,7 +419,9 @@ export function createRuntimeSector(sectorId: string, difficulty: DifficultyId =
     particles: [],
     beltSpawnCooldowns: {},
     challengePressure: 0,
-    reinforcementTimer: 0
+    reinforcementTimer: 0,
+    ecology: createSystemEcology(sectorId),
+    fieldStates
   };
 }
 
@@ -432,15 +499,17 @@ export function createProjectile(
   impactPosition?: Vec2 | null,
   qualityLabel?: ProjectileState["qualityLabel"]
 ): ProjectileState {
+  const isMissile = moduleId.includes("missile");
+  const isCannon = moduleId.includes("cannon");
   return {
     id: uid("projectile"),
     owner,
     moduleId,
     position: { ...position },
     velocity,
-    radius: moduleId.includes("missile") ? 6 : 4,
+    radius: isMissile ? 6 : isCannon ? 5 : 4,
     damage,
-    ttl: moduleId.includes("missile") ? 3.6 : 1.6,
+    ttl: isMissile ? 3.6 : isCannon ? 2.4 : 1.6,
     target,
     impactPosition: impactPosition ? { ...impactPosition } : null,
     qualityLabel

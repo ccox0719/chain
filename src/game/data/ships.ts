@@ -321,7 +321,8 @@ export const playerShips: ShipHullDefinition[] = [
     hullResists: hullBase,
     bonuses: {
       moduleKinds: {
-        shield_booster: { repairAmountMultiplier: 1.12 }
+        shield_booster: { repairAmountMultiplier: 1.12 },
+        cannon: { damageMultiplier: 1.06, cycleMultiplier: 0.96, turretTrackingMultiplier: 1.05 }
       }
     }
   },
@@ -584,7 +585,8 @@ export const playerShips: ShipHullDefinition[] = [
     bonuses: {
       cargoCapacityMultiplier: 1.08,
       moduleKinds: {
-        missile: { damageMultiplier: 1.06 }
+        missile: { damageMultiplier: 1.06 },
+        cannon: { damageMultiplier: 1.08, cycleMultiplier: 0.95, turretTrackingMultiplier: 1.06 }
       }
     }
   },
@@ -595,7 +597,7 @@ export const playerShips: ShipHullDefinition[] = [
     archetype: "brawler",
     faction: "cinder-union",
     role: "Armor brawler destroyer",
-    roleTags: ["Brawler", "Armor", "Rail"],
+    roleTags: ["Brawler", "Armor", "Rail", "Cannon"],
     description: "An ugly knife-fight destroyer that soaks punishment and shoves heavier guns into close orbit.",
     price: 7600,
     color: "#ff9766",
@@ -734,7 +736,7 @@ export const playerShips: ShipHullDefinition[] = [
     archetype: "brawler",
     faction: "cinder-union",
     role: "Armor cruiser",
-    roleTags: ["Armor", "Brawler", "Rail"],
+    roleTags: ["Armor", "Brawler", "Rail", "Cannon"],
     description: "Dense cruiser plating wrapped around a core meant for brute-force line engagements.",
     price: 18000,
     color: "#ff9d6e",
@@ -761,6 +763,7 @@ export const playerShips: ShipHullDefinition[] = [
     bonuses: {
       moduleKinds: {
         railgun: { damageMultiplier: 1.08, turretOptimalMultiplier: 1.05 },
+        cannon: { damageMultiplier: 1.06, cycleMultiplier: 0.95, turretOptimalMultiplier: 1.04 },
         armor_repairer: { repairAmountMultiplier: 1.1 }
       }
     }
@@ -772,7 +775,7 @@ export const playerShips: ShipHullDefinition[] = [
     archetype: "sniper",
     faction: "cinder-union",
     role: "Rail sniper cruiser",
-    roleTags: ["Sniper", "Rail", "Armor"],
+    roleTags: ["Sniper", "Rail", "Armor", "Cannon"],
     description: "A long-range rail command hull with big locks, slow turns, and ruthless armor pressure.",
     price: 19600,
     color: "#ffb078",
@@ -798,7 +801,8 @@ export const playerShips: ShipHullDefinition[] = [
     hullResists: hullBase,
     bonuses: {
       moduleKinds: {
-        railgun: { damageMultiplier: 1.1, cycleMultiplier: 0.95, turretTrackingMultiplier: 1.08 }
+        railgun: { damageMultiplier: 1.1, cycleMultiplier: 0.95, turretTrackingMultiplier: 1.08 },
+        cannon: { damageMultiplier: 1.08, cycleMultiplier: 0.94, turretTrackingMultiplier: 1.05 }
       }
     }
   },
@@ -1013,7 +1017,7 @@ export const playerShips: ShipHullDefinition[] = [
     shieldResists: balancedShield,
     armorResists: { em: 0.34, thermal: 0.28, kinetic: 0.22, explosive: 0.14 },
     hullResists: hullBase,
-    bonuses: { moduleKinds: { railgun: { damageMultiplier: 1.1, cycleMultiplier: 0.96 } } }
+    bonuses: { moduleKinds: { railgun: { damageMultiplier: 1.1, cycleMultiplier: 0.96 }, cannon: { damageMultiplier: 1.08, cycleMultiplier: 0.95, turretTrackingMultiplier: 1.04 } } }
   },
   {
     id: "relay-jackal",
@@ -1373,7 +1377,7 @@ export const enemyVariants: EnemyVariant[] = [
     name: "Cinder Pike",
     faction: "cinder-union",
     archetype: "missile_skirmisher",
-    roleTags: ["Rail", "Missile"],
+    roleTags: ["Rail", "Missile", "Cannon"],
     color: "#ffb36e",
     silhouette: "needle",
     combatStyle: "armor",
@@ -1389,7 +1393,7 @@ export const enemyVariants: EnemyVariant[] = [
     preferredRange: 260,
     lootCredits: 180,
     lootTable: { "ember-crystal": 4 },
-    fittedModules: ["railgun-array", "armor-repairer"],
+    fittedModules: ["line-cannon", "armor-repairer"],
     signatureRadius: 42,
     shieldResists: { em: 0.12, thermal: 0.18, kinetic: 0.26, explosive: 0.32 },
     armorResists: { em: 0.26, thermal: 0.22, kinetic: 0.18, explosive: 0.1 },
@@ -1427,7 +1431,7 @@ export const enemyVariants: EnemyVariant[] = [
     name: "Reaver Gunship",
     faction: "cinder-union",
     archetype: "heavy_bruiser",
-    roleTags: ["Brawler", "Armor"],
+    roleTags: ["Brawler", "Armor", "Cannon"],
     color: "#ff8966",
     silhouette: "heavy",
     combatStyle: "shield",
@@ -1508,7 +1512,7 @@ export const enemyVariants: EnemyVariant[] = [
     name: "Blackwake Reaver",
     faction: "blackwake-clans",
     archetype: "interceptor",
-    roleTags: ["Control", "Skirmisher"],
+    roleTags: ["Control", "Skirmisher", "Cannon"],
     color: "#ff7e8c",
     silhouette: "kite",
     combatStyle: "speed",
@@ -1524,7 +1528,7 @@ export const enemyVariants: EnemyVariant[] = [
     preferredRange: 300,
     lootCredits: 240,
     lootTable: { "ghost-alloy": 2, "ember-crystal": 2 },
-    fittedModules: ["micro-missile-rack", "warp-disruptor", "stasis-webifier"],
+    fittedModules: ["light-rotary-cannon", "warp-disruptor", "stasis-webifier"],
     signatureRadius: 32,
     shieldResists: { em: 0.08, thermal: 0.14, kinetic: 0.24, explosive: 0.34 },
     armorResists: { em: 0.22, thermal: 0.18, kinetic: 0.14, explosive: 0.12 },
@@ -1562,7 +1566,7 @@ export const enemyVariants: EnemyVariant[] = [
     name: "Blackwake Interceptor",
     faction: "blackwake-clans",
     archetype: "interceptor",
-    roleTags: ["Control", "Skirmisher"],
+    roleTags: ["Control", "Skirmisher", "Cannon"],
     color: "#ff89b1",
     silhouette: "dart",
     combatStyle: "speed",
@@ -1865,7 +1869,7 @@ export const enemyVariants: EnemyVariant[] = [
     name: "Reaver Captain",
     faction: "blackwake-clans",
     archetype: "interceptor",
-    roleTags: ["Control", "Skirmisher"],
+    roleTags: ["Control", "Skirmisher", "Cannon"],
     color: "#ff9abc",
     silhouette: "dart",
     combatStyle: "speed",
@@ -1883,7 +1887,7 @@ export const enemyVariants: EnemyVariant[] = [
     preferredRange: 140,
     lootCredits: 260,
     lootTable: { ferrite: 3, "ghost-alloy": 2 },
-    fittedModules: ["warp-disruptor", "stasis-webifier", "micro-missile-rack"],
+    fittedModules: ["scatter-cannon", "warp-disruptor", "stasis-webifier"],
     signatureRadius: 26,
     shieldResists: { em: 0.06, thermal: 0.12, kinetic: 0.24, explosive: 0.34 },
     armorResists: { em: 0.22, thermal: 0.18, kinetic: 0.14, explosive: 0.12 },
@@ -1912,7 +1916,7 @@ export const enemyVariants: EnemyVariant[] = [
     preferredRange: 160,
     lootCredits: 1200,
     lootTable: { "ghost-alloy": 4, "ember-crystal": 4, ferrite: 6 },
-    fittedModules: ["pulse-laser", "warp-disruptor", "stasis-webifier", "energy-neutralizer"],
+    fittedModules: ["siege-cannon", "warp-disruptor", "stasis-webifier", "energy-neutralizer"],
     signatureRadius: 44,
     shieldResists: { em: 0.1, thermal: 0.14, kinetic: 0.24, explosive: 0.34 },
     armorResists: { em: 0.22, thermal: 0.18, kinetic: 0.14, explosive: 0.12 },

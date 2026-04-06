@@ -78,9 +78,11 @@ function applyModuleModifiers(
   derived.laserDamageMultiplier *= modifiers.laserDamageMultiplier ?? 1;
   derived.railgunDamageMultiplier *= modifiers.railgunDamageMultiplier ?? 1;
   derived.missileDamageMultiplier *= modifiers.missileDamageMultiplier ?? 1;
+  derived.cannonDamageMultiplier *= modifiers.cannonDamageMultiplier ?? 1;
   derived.laserCycleMultiplier *= modifiers.laserCycleMultiplier ?? 1;
   derived.railgunCycleMultiplier *= modifiers.railgunCycleMultiplier ?? 1;
   derived.missileCycleMultiplier *= modifiers.missileCycleMultiplier ?? 1;
+  derived.cannonCycleMultiplier *= modifiers.cannonCycleMultiplier ?? 1;
 }
 
 function computeBaseDerivedStats(player: PlayerState) {
@@ -118,9 +120,11 @@ function computeBaseDerivedStats(player: PlayerState) {
     laserDamageMultiplier: 1,
     railgunDamageMultiplier: 1,
     missileDamageMultiplier: 1,
+    cannonDamageMultiplier: 1,
     laserCycleMultiplier: 1,
     railgunCycleMultiplier: 1,
     missileCycleMultiplier: 1,
+    cannonCycleMultiplier: 1,
     shieldResists: { ...hull.shieldResists },
     armorResists: { ...hull.armorResists },
     hullResists: { ...hull.hullResists }
@@ -216,6 +220,12 @@ export function computeDerivedStats(player: PlayerState) {
     } else if (kind === "missile") {
       derived.missileDamageMultiplier *= bonus.damageMultiplier ?? 1;
       derived.missileCycleMultiplier *= bonus.cycleMultiplier ?? 1;
+    } else if (kind === "cannon") {
+      derived.cannonDamageMultiplier *= bonus.damageMultiplier ?? 1;
+      derived.cannonCycleMultiplier *= bonus.cycleMultiplier ?? 1;
+      derived.turretTrackingMultiplier *= bonus.turretTrackingMultiplier ?? 1;
+      derived.turretOptimalMultiplier *= bonus.turretOptimalMultiplier ?? 1;
+      derived.turretFalloffMultiplier *= bonus.turretFalloffMultiplier ?? 1;
     } else if (kind === "mining_laser") {
       derived.miningYieldMultiplier *= bonus.miningYieldMultiplier ?? 1;
     } else if (kind === "shield_booster") {

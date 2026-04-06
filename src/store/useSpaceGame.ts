@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { missionCatalog } from "../game/data/missions";
-import { moduleCatalog } from "../game/data/modules";
+import { moduleById, moduleCatalog } from "../game/data/modules";
 import { playerShips } from "../game/data/ships";
 import { getCameraFrame, renderSector } from "../game/scenes/renderSector";
 import { sectorById } from "../game/data/sectors";
@@ -453,6 +453,20 @@ function loadWorld() {
     const mergedSectors = Object.fromEntries(
       Object.entries(fallback.sectors).map(([sectorId, fallbackSector]) => {
         const parsedSector = parsed.sectors?.[sectorId];
+        const mergedFieldStates = {
+          ...fallbackSector.fieldStates,
+          ...(parsedSector?.fieldStates ?? {})
+        };
+        const mergedEcology = parsedSector?.ecology
+          ? {
+              ...fallbackSector.ecology,
+              ...parsedSector.ecology,
+              nearbyInfluence: {
+                ...fallbackSector.ecology.nearbyInfluence,
+                ...(parsedSector.ecology.nearbyInfluence ?? {})
+              }
+            }
+          : fallbackSector.ecology;
         return [
           sectorId,
           {
@@ -478,7 +492,9 @@ function loadWorld() {
             loot: parsedSector?.loot ?? fallbackSector.loot,
             wrecks: parsedSector?.wrecks ?? fallbackSector.wrecks,
             floatingText: parsedSector?.floatingText ?? fallbackSector.floatingText,
-            beltSpawnCooldowns: parsedSector?.beltSpawnCooldowns ?? fallbackSector.beltSpawnCooldowns
+            beltSpawnCooldowns: parsedSector?.beltSpawnCooldowns ?? fallbackSector.beltSpawnCooldowns,
+            ecology: mergedEcology,
+            fieldStates: mergedFieldStates
           }
         ];
       })
@@ -494,6 +510,16 @@ function loadWorld() {
           }
         : fallbackBuild;
     });
+
+    const normalizeRuntime = (runtime: NonNullable<GameWorld["player"]["modules"]["weapon"][number]>): typeof runtime => {
+      const module = runtime.moduleId ? moduleById[runtime.moduleId] : null;
+      return {
+        ...runtime,
+        ammoRemaining:
+          runtime.ammoRemaining ??
+          (module?.kind === "cannon" ? Math.max(1, module.magazineSize ?? 1) : undefined)
+      };
+    };
 
     return {
       ...fallback,
@@ -516,6 +542,11 @@ function loadWorld() {
         deathSummary: parsed.player?.deathSummary ?? fallback.player.deathSummary,
         pendingLocks: parsed.player?.pendingLocks ?? fallback.player.pendingLocks,
         savedBuilds: mergedBuilds,
+        modules: {
+          weapon: (parsed.player?.modules?.weapon ?? fallback.player.modules.weapon).map(normalizeRuntime),
+          utility: (parsed.player?.modules?.utility ?? fallback.player.modules.utility).map(normalizeRuntime),
+          defense: (parsed.player?.modules?.defense ?? fallback.player.modules.defense).map(normalizeRuntime)
+        },
         buildSwap: parsed.player?.buildSwap
           ? {
               ...fallback.player.buildSwap,

@@ -93,6 +93,7 @@ const MODULE_KIND_ICONS: Record<string, string> = {
   laser:               "◈",
   railgun:             "▣",
   missile:             "✦",
+  cannon:              "▥",
   mining_laser:        "⛏",
   afterburner:         "➤",
   webifier:            "⟲",
@@ -1370,6 +1371,7 @@ export function StationPanel({
                       currentBonuses.moduleKinds?.laser ? "laser bonus" : null,
                       currentBonuses.moduleKinds?.railgun ? "rail bonus" : null,
                       currentBonuses.moduleKinds?.missile ? "missile bonus" : null,
+                      currentBonuses.moduleKinds?.cannon ? "cannon bonus" : null,
                       currentBonuses.moduleKinds?.mining_laser ? "mining laser bonus" : null,
                       currentBonuses.moduleKinds?.shield_booster ? "shield booster bonus" : null,
                       currentBonuses.moduleKinds?.armor_repairer ? "armor repair bonus" : null
@@ -1505,6 +1507,7 @@ export function StationPanel({
                       previewBonuses.moduleKinds?.laser ? "laser bonus" : null,
                       previewBonuses.moduleKinds?.railgun ? "rail bonus" : null,
                       previewBonuses.moduleKinds?.missile ? "missile bonus" : null,
+                      previewBonuses.moduleKinds?.cannon ? "cannon bonus" : null,
                       previewBonuses.moduleKinds?.mining_laser ? "mining laser bonus" : null,
                       previewBonuses.moduleKinds?.shield_booster ? "shield booster bonus" : null,
                       previewBonuses.moduleKinds?.armor_repairer ? "armor repair bonus" : null

@@ -5,6 +5,7 @@ import {
   CommandAction,
   CommodityId,
   DamageProfile,
+  AsteroidFieldRuntimeState,
   EnemyState,
   EnemyVariant,
   EquippedLoadout,
@@ -25,6 +26,10 @@ import {
   SelectableRef,
   SystemDestination,
   SpaceObjectType,
+  AsteroidFieldDefinition,
+  SystemEcology,
+  SystemEcologyStateId,
+  SolarSystemDefinition,
   TransportMissionDefinition,
   TransportTracker,
   TransportRisk,
@@ -776,6 +781,7 @@ function getWeaponDamageMultiplier(
   if (kind === "laser") return derived.laserDamageMultiplier;
   if (kind === "railgun") return derived.railgunDamageMultiplier;
   if (kind === "missile") return derived.missileDamageMultiplier;
+  if (kind === "cannon") return derived.cannonDamageMultiplier;
   return 1;
 }
 
@@ -786,6 +792,7 @@ function getWeaponCycleMultiplier(
   if (kind === "laser") return derived.laserCycleMultiplier;
   if (kind === "railgun") return derived.railgunCycleMultiplier;
   if (kind === "missile") return derived.missileCycleMultiplier;
+  if (kind === "cannon") return derived.cannonCycleMultiplier;
   return 1;
 }
 
@@ -1094,15 +1101,19 @@ function getProceduralContractPayout(world: GameWorld) {
 function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
   const station = world.dockedStationId ? getCurrentStation(world) : getCurrentStation(world);
   const system = getCurrentSectorDef(world);
+  const ecology = getCurrentSector(world).ecology;
   const security = system.security;
   const derived = getCachedDerivedStats(world.player);
   const scalePrice = (value: number, multiplier: number) => Math.max(1, Math.round(value * multiplier));
+  const tradeHeat = clamp(1 + (ecology.tradeActivity - 50) * -0.0014 + ecology.depletionPressure * 0.001, 0.82, 1.22);
+  const scarcityHeat = clamp(1 + (100 - ecology.asteroidReserve) * 0.0012, 0.92, 1.22);
+  const securityHeat = clamp(1 + ecology.patrolPressure * 0.001, 0.92, 1.18);
   const commodityBuyPrices = Object.fromEntries(
     commodityCatalog.map((commodity) => [
       commodity.id,
       scalePrice(
         getCommodityBuyPrice(commodity, security, station, system) * getCommodityPriceModifier(world, system.id, commodity.id).buy,
-        derived.commodityBuyMultiplier
+        derived.commodityBuyMultiplier * tradeHeat * securityHeat
       )
     ])
   ) as Record<CommodityId, number>;
@@ -1111,27 +1122,27 @@ function getLocalEconomySnapshot(world: GameWorld): EconomySnapshot {
       commodity.id,
       scalePrice(
         getCommoditySellPrice(commodity, security, station, system) * getCommodityPriceModifier(world, system.id, commodity.id).sell,
-        derived.commoditySellMultiplier
+        derived.commoditySellMultiplier * tradeHeat
       )
     ])
   ) as Record<CommodityId, number>;
   const moduleBuyPrices = Object.fromEntries(
-    Object.values(moduleById).map((module) => [module.id, scalePrice(getModuleBuyPrice(module, security, station), derived.moduleBuyMultiplier)])
+    Object.values(moduleById).map((module) => [module.id, scalePrice(getModuleBuyPrice(module, security, station), derived.moduleBuyMultiplier * securityHeat)])
   ) as Record<string, number>;
   const moduleSellPrices = Object.fromEntries(
     Object.values(moduleById).map((module) => [module.id, scalePrice(getModuleSellPrice(module, security, station), derived.moduleSellMultiplier)])
   ) as Record<string, number>;
   const shipBuyPrices = Object.fromEntries(
-    Object.values(playerShipById).map((ship) => [ship.id, scalePrice(getShipBuyPrice(ship, security, station), derived.shipBuyMultiplier)])
+    Object.values(playerShipById).map((ship) => [ship.id, scalePrice(getShipBuyPrice(ship, security, station), derived.shipBuyMultiplier * securityHeat)])
   ) as Record<string, number>;
   const shipSellPrices = Object.fromEntries(
     Object.values(playerShipById).map((ship) => [ship.id, scalePrice(getShipSellPrice(ship, security, station), derived.shipSellMultiplier)])
   ) as Record<string, number>;
   return {
     resourceSellPrices: {
-      ferrite: scalePrice(getResourceSellPrice("ferrite", security, station), derived.resourceSellMultiplier),
-      "ember-crystal": scalePrice(getResourceSellPrice("ember-crystal", security, station), derived.resourceSellMultiplier),
-      "ghost-alloy": scalePrice(getResourceSellPrice("ghost-alloy", security, station), derived.resourceSellMultiplier)
+      ferrite: scalePrice(getResourceSellPrice("ferrite", security, station), derived.resourceSellMultiplier * scarcityHeat),
+      "ember-crystal": scalePrice(getResourceSellPrice("ember-crystal", security, station), derived.resourceSellMultiplier * scarcityHeat),
+      "ghost-alloy": scalePrice(getResourceSellPrice("ghost-alloy", security, station), derived.resourceSellMultiplier * scarcityHeat)
     },
     commodityBuyPrices,
     commoditySellPrices,
@@ -1414,6 +1425,13 @@ export function acceptMission(world: GameWorld, missionId: string) {
     }
     world.procgen.activeContract = contract;
     world.procgen.activeContractState = createContractState(world, contract);
+    {
+      const reserveSectorId = contract.targetSystemId ?? world.currentSectorId;
+      const ecology = world.sectors[reserveSectorId]?.ecology;
+      if (ecology) {
+        ecology.missionReserve = clamp(ecology.missionReserve + Math.max(3, contract.targetCount ?? 3), 0, 100);
+      }
+    }
     pushStory(world, `Contract accepted: ${contract.title}`);
     if (contract.type === "transport" && contract.targetSystemId !== world.currentSectorId) {
       const route = planRoute(world, world.currentSectorId, contract.targetSystemId, contract.routePreference ?? "safer", false);
@@ -1446,6 +1464,13 @@ export function acceptMission(world: GameWorld, missionId: string) {
     state.objectiveTimer = mission.objectiveDurationSec ?? 0;
     state.reinforcementTimer = mission.reinforcementIntervalSec ?? 0;
     state.challengePressure = 0;
+    {
+      const reserveSectorId = mission.targetSystemId ?? world.currentSectorId;
+      const ecology = world.sectors[reserveSectorId]?.ecology;
+      if (ecology) {
+        ecology.missionReserve = clamp(ecology.missionReserve + Math.max(2, mission.targetCount ?? 2), 0, 100);
+      }
+    }
     pushStory(world, `Mission accepted: ${mission.title}`);
     if (mission.bossEncounter && !world.dockedStationId && world.currentSectorId === mission.targetSystemId) {
       spawnMissionBossEncounter(world, mission);
@@ -2624,7 +2649,7 @@ function getTurretAdjustedModule(
   derived?: ReturnType<typeof getCachedDerivedStats>,
   trackingEffectMultiplier = 1
 ) {
-  if (!derived || (module.kind !== "laser" && module.kind !== "railgun")) {
+  if (!derived || (module.kind !== "laser" && module.kind !== "railgun" && module.kind !== "cannon")) {
     return module;
   }
   return {
@@ -2633,6 +2658,12 @@ function getTurretAdjustedModule(
     falloff: (module.falloff ?? 0) * derived.turretFalloffMultiplier,
     tracking: (module.tracking ?? 0) * derived.turretTrackingMultiplier * trackingEffectMultiplier
   };
+}
+
+function getProjectileSpeed(module: { kind?: string; projectileSpeed?: number }) {
+  if (module.kind === "missile") return module.projectileSpeed ?? 280;
+  if (module.kind === "cannon") return module.projectileSpeed ?? 500;
+  return module.projectileSpeed ?? 420;
 }
 
 function findAutoMiningTarget(
@@ -2699,6 +2730,7 @@ function getEnemyCombatMode(enemyVariantId: string) {
     return modules.some((module) =>
       module.kind === "missile" ||
       module.kind === "railgun" ||
+      module.kind === "cannon" ||
       module.kind === "warp_disruptor" ||
       module.kind === "target_painter" ||
       module.kind === "tracking_disruptor" ||
@@ -2708,7 +2740,7 @@ function getEnemyCombatMode(enemyVariantId: string) {
       : "orbit";
   }
   if (variant.combatStyle === "armor") {
-    return modules.some((module) => module.kind === "laser") ? "orbit" : "approach";
+    return modules.some((module) => module.kind === "laser" || module.kind === "cannon") ? "orbit" : "approach";
   }
   if (variant.combatStyle === "shield") {
     return modules.some((module) => module.kind === "missile") ? "keep_range" : "orbit";
@@ -2716,6 +2748,7 @@ function getEnemyCombatMode(enemyVariantId: string) {
   if (modules.some((module) => module.kind === "missile" || module.kind === "railgun")) {
     return "keep_range" as const;
   }
+  if (modules.some((module) => module.kind === "cannon")) return "orbit" as const;
   return "orbit" as const;
 }
 
@@ -2761,7 +2794,8 @@ function createEnemyFromVariant(
       moduleId,
       active: true,
       cycleRemaining: (moduleById[moduleId]?.cycleTime ?? 0) * (0.25 + index * 0.2),
-      autoRepeat: true
+      autoRepeat: true,
+      ammoRemaining: moduleById[moduleId]?.kind === "cannon" ? Math.max(1, moduleById[moduleId]?.magazineSize ?? 1) : undefined
     })),
     effects: {
       speedMultiplier: 1,
@@ -2796,12 +2830,376 @@ function getSectorChallengePressure(world: GameWorld, sectorId: string) {
   return world.sectors[sectorId]?.challengePressure ?? 0;
 }
 
+function makeRuntimeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getFieldState(world: GameWorld, sectorId: string, beltId: string) {
+  const sector = world.sectors[sectorId];
+  if (!sector) return null;
+  const state = sector.fieldStates[beltId];
+  if (state) return state;
+  const definition = sectorById[sectorId]?.asteroidFields.find((field) => field.beltId === beltId);
+  if (!definition) return null;
+  const created: AsteroidFieldRuntimeState = {
+    beltId: definition.beltId,
+    reserve: clamp(definition.richness * definition.count * 1.4, 12, 100),
+    density: definition.count,
+    richness: definition.richness,
+    depletionPressure: 0,
+    recoveryTimer: 0,
+    desiredCount: Math.max(1, definition.count),
+    maxCount: Math.max(definition.count + Math.ceil(definition.count * 0.5), definition.count + 2),
+    hiddenPocketChance: definition.hiddenPocketChance ?? clamp(0.05 + definition.richness * 0.002, 0.04, 0.12)
+  };
+  sector.fieldStates[beltId] = created;
+  return created;
+}
+
+function getEcologyStateLabel(ecology: SystemEcology, sectorDef: SolarSystemDefinition): SystemEcologyStateId {
+  if (ecology.depletionPressure >= 60 && ecology.asteroidReserve <= 25) return "overmined";
+  if (ecology.hostilePressure >= 70 && sectorDef.security === "high") return "militarized";
+  if (ecology.hostilePressure >= 60) return sectorDef.security === "frontier" ? "frontier_rush" : "tense";
+  if (ecology.scavengerPressure >= 48 && ecology.hostilePressure <= 35) return "scavenger_rich";
+  if (ecology.asteroidReserve <= 35 && ecology.depletionPressure >= 30) return "exploited";
+  if (ecology.hostilePressure <= 20 && ecology.asteroidReserve >= 65) return "stable";
+  if (ecology.recoveryProgress >= 0.6) return "recovering";
+  if (ecology.patrolPressure >= 55 && ecology.hostilePressure <= 30) return "suppressed";
+  if (sectorDef.security === "frontier" && ecology.tradeActivity >= 60 && ecology.hostilePressure >= 20) return "frontier_rush";
+  return ecology.hostilePressure >= 35 ? "tense" : "recovering";
+}
+
+function getSpawnerRadius(field: AsteroidFieldDefinition, index: number, total: number) {
+  const angle = (Math.PI * 2 * index) / Math.max(1, total) + index * 0.61;
+  const radial = field.spread * (0.2 + (index % 5) * 0.11);
+  return {
+    x: field.center.x + Math.cos(angle) * radial,
+    y: field.center.y + Math.sin(angle) * radial
+  };
+}
+
+function spawnAsteroidFromField(
+  world: GameWorld,
+  sectorId: string,
+  field: AsteroidFieldDefinition,
+  fieldState: AsteroidFieldRuntimeState,
+  index: number,
+  total: number,
+  bonusYield = 0
+) {
+  const sector = world.sectors[sectorId];
+  const position = getSpawnerRadius(field, index, total);
+  const richnessFactor = clamp(fieldState.reserve / Math.max(1, fieldState.maxCount * 12), 0.28, 1.3);
+  sector.asteroids.push({
+    id: makeRuntimeId("asteroid"),
+    beltId: field.beltId,
+    position,
+    radius: 18 + ((index + Math.floor(field.richness)) % 4) * 5,
+    resource: field.resource,
+    oreRemaining: Math.max(1, Math.round(field.richness * richnessFactor + bonusYield))
+  });
+}
+
+function getEnemySpawnDefinitionCount(sectorId: string) {
+  return sectorById[sectorId].enemySpawns.reduce((sum, spawn) => sum + spawn.count, 0);
+}
+
+function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  if (!sector || !sectorDef) return;
+
+  const ecology = sector.ecology;
+  const totalEnemyBaseline = Math.max(1, getEnemySpawnDefinitionCount(sectorId));
+  const activeEnemies = sector.enemies.filter((enemy) => enemy.hull > 0);
+  const activeWrecks = sector.wrecks.length;
+  const totalFieldReserve = sectorDef.asteroidFields.reduce((sum, field) => {
+    const state = getFieldState(world, sectorId, field.beltId);
+    return sum + (state?.reserve ?? 0);
+  }, 0);
+  const sectorState = getEcologyStateLabel(ecology, sectorDef);
+
+  ecology.asteroidReserve = clamp(
+    totalFieldReserve / Math.max(1, sectorDef.asteroidFields.length || 1),
+    0,
+    100
+  );
+  ecology.hostilePressure = clamp(
+    ecology.hostilePressure + dt * ((sector.challengePressure ?? 0) * 0.45 + activeEnemies.length * 0.08) - dt * 0.22,
+    0,
+    100
+  );
+  ecology.patrolPressure = clamp(
+    ecology.patrolPressure +
+      dt * (sectorDef.security === "high" ? 0.8 : sectorDef.security === "medium" ? 0.48 : sectorDef.security === "low" ? 0.28 : 0.22) +
+      ecology.hostilePressure * 0.01 -
+      dt * activeEnemies.length * 0.02,
+    0,
+    100
+  );
+  ecology.scavengerPressure = clamp(
+    ecology.scavengerPressure + dt * (activeWrecks * 0.7 + Math.max(0, 30 - ecology.hostilePressure) * 0.06) - dt * 0.12,
+    0,
+    100
+  );
+  ecology.tradeActivity = clamp(
+    ecology.tradeActivity +
+      dt * (sectorDef.traffic === "high" ? 1.3 : sectorDef.traffic === "medium" ? 0.9 : 0.55) -
+      ecology.hostilePressure * 0.01 -
+      ecology.scavengerPressure * 0.01,
+    0,
+    100
+  );
+  ecology.depletionPressure = clamp(
+    ecology.depletionPressure + dt * (100 - ecology.asteroidReserve) * 0.03 - dt * 0.08,
+    0,
+    100
+  );
+  ecology.reinforcementBudget = clamp(
+    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.35 : sectorDef.security === "frontier" ? 0.28 : 0.22),
+    0,
+    80
+  );
+  ecology.recoveryProgress = clamp(
+    ecology.recoveryProgress + dt * (sectorDef.security === "high" ? 0.008 : sectorDef.security === "frontier" ? 0.014 : 0.011),
+    0,
+    1
+  );
+  ecology.missionReserve = clamp(
+    ecology.missionReserve + dt * 0.35 + Math.max(0, totalEnemyBaseline - activeEnemies.length) * 0.02,
+    0,
+    100
+  );
+
+  if (sectorState !== ecology.state) {
+    ecology.state = sectorState;
+    ecology.lastStateChangeAt = world.elapsedTime;
+    if (world.currentSectorId === sectorId && dt > 0) {
+      pushStory(world, `${sectorDef.name}: system state shifted to ${sectorState.replace("_", " ")}.`);
+    }
+  }
+}
+
+function maybeRefreshAsteroidField(world: GameWorld, sectorId: string, field: AsteroidFieldDefinition, dt: number) {
+  const sector = world.sectors[sectorId];
+  if (!sector) return;
+  const fieldState = getFieldState(world, sectorId, field.beltId);
+  if (!fieldState) return;
+  const liveAsteroids = sector.asteroids.filter((asteroid) => asteroid.beltId === field.beltId);
+  const targetState = getEcologyStateLabel(sector.ecology, sectorById[sectorId]);
+  const recoveryRate =
+    field.recoveryRate ??
+    (sectorById[sectorId].security === "high"
+      ? 0.35
+      : sectorById[sectorId].security === "medium"
+        ? 0.26
+        : sectorById[sectorId].security === "low"
+          ? 0.18
+          : 0.12);
+  fieldState.recoveryTimer = Math.max(0, fieldState.recoveryTimer - dt);
+  fieldState.reserve = clamp(fieldState.reserve + dt * recoveryRate * (1 + sector.ecology.recoveryProgress * 0.3), 0, fieldState.maxCount * 18);
+  fieldState.depletionPressure = clamp(fieldState.depletionPressure - dt * 0.2, 0, 100);
+  fieldState.density = liveAsteroids.length;
+  fieldState.richness = field.richness;
+  fieldState.desiredCount = Math.max(
+    1,
+    Math.round(
+      field.count *
+        (targetState === "overmined"
+          ? 0.55
+          : targetState === "exploited"
+            ? 0.72
+            : targetState === "recovering"
+              ? 0.9
+              : targetState === "frontier_rush"
+                ? 1.15
+                : 1)
+    )
+  );
+  const wantsMore = liveAsteroids.length < fieldState.desiredCount;
+  const canSpawn = fieldState.reserve >= 6 && (fieldState.recoveryTimer <= 0 || wantsMore);
+  if (!canSpawn) return;
+  const spawnCount = Math.min(
+    fieldState.desiredCount - liveAsteroids.length,
+    fieldState.reserve >= fieldState.maxCount * 10 ? 2 : 1
+  );
+  if (spawnCount <= 0) return;
+  for (let index = 0; index < spawnCount; index += 1) {
+    spawnAsteroidFromField(world, sectorId, field, fieldState, liveAsteroids.length + index, liveAsteroids.length + spawnCount, targetState === "overmined" ? 0 : 1);
+    fieldState.reserve = Math.max(0, fieldState.reserve - (field.richness * 0.55 + 2));
+    fieldState.depletionPressure = clamp(fieldState.depletionPressure + 0.8, 0, 100);
+  }
+  fieldState.recoveryTimer = targetState === "overmined" ? 44 : targetState === "exploited" ? 28 : 18;
+}
+
+function chooseRepopulationSource(world: GameWorld, sectorId: string, kind: "enemy" | "asteroid") {
+  const sectorDef = sectorById[sectorId];
+  const sourceIds = [sectorId, ...sectorDef.neighbors.slice(0, 3)];
+  return sourceIds[Math.floor(Math.random() * sourceIds.length)] ?? sectorId;
+}
+
+function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  if (!sector || !sectorDef) return;
+  const ecology = sector.ecology;
+  const activeEnemies = sector.enemies.filter((enemy) => enemy.hull > 0);
+  const baseline = getEnemySpawnDefinitionCount(sectorId);
+  if (baseline <= 0) return;
+  const state = getEcologyStateLabel(ecology, sectorDef);
+  const targetCount =
+    state === "suppressed"
+      ? Math.max(1, Math.round(baseline * 0.55))
+      : state === "militarized"
+        ? Math.max(2, Math.round(baseline * 1.15))
+        : state === "frontier_rush"
+          ? Math.max(2, Math.round(baseline * 1.2))
+          : baseline;
+  const respawnInterval =
+    state === "militarized"
+      ? 24
+      : state === "suppressed"
+        ? 40
+        : state === "overmined"
+          ? 44
+          : sectorDef.security === "high"
+            ? 32
+            : sectorDef.security === "frontier"
+              ? 26
+              : 30;
+  ecology.ambientRespawnTimer = Math.max(0, ecology.ambientRespawnTimer - dt);
+  if (ecology.ambientRespawnTimer > 0 || ecology.reinforcementBudget <= 0 || activeEnemies.length >= targetCount) return;
+
+  const respawnSourceId = chooseRepopulationSource(world, sectorId, "enemy");
+  const sourceSector = sectorById[respawnSourceId];
+  const availableSpawns = (sourceSector?.enemySpawns.length ? sourceSector.enemySpawns : sectorDef.enemySpawns).filter((spawn) => spawn.count > 0);
+  if (availableSpawns.length === 0) return;
+
+  const spawnDef = availableSpawns[Math.floor(Math.random() * availableSpawns.length)];
+  const sourceAnchor = sourceSector?.enemySpawns.find((spawn) => spawn.variantId === spawnDef.variantId)?.center ?? spawnDef.center;
+  const spawnCount = Math.min(
+    Math.max(1, Math.round(1 + ecology.hostilePressure / 28)),
+    targetCount - activeEnemies.length,
+    Math.max(1, Math.floor(ecology.reinforcementBudget / 4))
+  );
+  if (spawnCount <= 0) return;
+  for (let index = 0; index < spawnCount; index += 1) {
+    const position = {
+      x: clamp(sourceAnchor.x + (Math.random() - 0.5) * spawnDef.radius, 80, sectorDef.width - 80),
+      y: clamp(sourceAnchor.y + (Math.random() - 0.5) * spawnDef.radius, 80, sectorDef.height - 80)
+    };
+    const enemy = createEnemyFromVariant(spawnDef.variantId, position, sourceAnchor);
+    sector.enemies.push(enemy);
+  }
+  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 4);
+  ecology.ambientRespawnTimer = respawnInterval;
+}
+
+function maybeSeedMissionTargets(world: GameWorld, sectorId: string) {
+  const sector = world.sectors[sectorId];
+  const sectorDef = sectorById[sectorId];
+  if (!sector || !sectorDef) return;
+  if ((sector.ecology.missionSpawnTimer ?? 0) > 0) return;
+
+  const activeClassic = missionCatalog.filter((mission) => {
+    const state = world.missions[mission.id];
+    return state?.status === "active" && mission.targetSystemId === sectorId;
+  });
+  activeClassic.forEach((mission) => {
+    if (mission.type === "bounty" || mission.combatObjective === "clear") {
+      const variants = mission.enemyVariantIds?.length
+        ? mission.enemyVariantIds
+        : sectorDef.enemySpawns.map((spawn) => spawn.variantId);
+      const targetCount = Math.max(1, mission.targetCount ?? 1);
+      const currentCount = sector.enemies.filter((enemy) => enemy.hull > 0 && (!mission.enemyVariantIds?.length || mission.enemyVariantIds.includes(enemy.variantId))).length;
+      const missing = targetCount - currentCount;
+      if (missing > 0) {
+        const anchor = mission.targetDestinationId
+          ? getSystemDestination(sectorId, mission.targetDestinationId)?.position ?? sectorDef.enemySpawns[0]?.center ?? { x: sectorDef.width * 0.5, y: sectorDef.height * 0.5 }
+          : sectorDef.enemySpawns[0]?.center ?? { x: sectorDef.width * 0.5, y: sectorDef.height * 0.5 };
+        for (let index = 0; index < Math.min(missing, 2); index += 1) {
+          const variantId = variants[(index + Math.floor(Math.random() * variants.length)) % Math.max(1, variants.length)] ?? "dust-raider";
+          const offset = {
+            x: clamp(anchor.x + (Math.random() - 0.5) * 260, 80, sectorDef.width - 80),
+            y: clamp(anchor.y + (Math.random() - 0.5) * 260, 80, sectorDef.height - 80)
+          };
+          sector.enemies.push(createEnemyFromVariant(variantId, offset, anchor));
+        }
+        sector.ecology.missionSpawnTimer = 24;
+        if (world.currentSectorId === sectorId) {
+          pushStory(world, `${mission.title}: local reinforcements were seeded from nearby pressure.`);
+        }
+      }
+    }
+    if (mission.type === "mining" && mission.targetResource && mission.targetCount) {
+      const targetCount = mission.targetCount;
+      const currentCount = sector.asteroids.filter((asteroid) => asteroid.resource === mission.targetResource && asteroid.oreRemaining > 0).length;
+      if (currentCount >= targetCount) return;
+      const field = sectorDef.asteroidFields.find((entry) => entry.resource === mission.targetResource) ?? sectorDef.asteroidFields[0];
+      if (!field) return;
+      const fieldState = getFieldState(world, sectorId, field.beltId);
+      if (!fieldState) return;
+      const missing = targetCount - currentCount;
+      const spawnCount = Math.min(missing, 3);
+      for (let index = 0; index < spawnCount; index += 1) {
+        spawnAsteroidFromField(world, sectorId, field, fieldState, sector.asteroids.filter((asteroid) => asteroid.beltId === field.beltId).length + index, sector.asteroids.length + spawnCount, 2);
+        fieldState.reserve = Math.max(0, fieldState.reserve - 4);
+      }
+      sector.ecology.missionSpawnTimer = 18;
+      if (world.currentSectorId === sectorId) {
+        pushStory(world, `${mission.title}: prospecting found a fresh pocket.`);
+      }
+    }
+  });
+
+  const procgenContract = getActiveProceduralContract(world);
+  const procgenState = getActiveProceduralState(world);
+  if (!procgenContract || !procgenState || procgenState.status !== "active" || procgenContract.targetSystemId !== sectorId) return;
+  if (procgenContract.type === "bounty" && procgenContract.targetCount) {
+    const variants = procgenContract.enemyVariantIds?.length
+      ? procgenContract.enemyVariantIds
+      : sectorDef.enemySpawns.map((spawn) => spawn.variantId);
+    const currentCount = sector.enemies.filter((enemy) => enemy.hull > 0 && (!procgenContract.enemyVariantIds?.length || procgenContract.enemyVariantIds.includes(enemy.variantId))).length;
+    const missing = procgenContract.targetCount - currentCount;
+    if (missing > 0) {
+      const anchor = sectorDef.enemySpawns[0]?.center ?? { x: sectorDef.width * 0.5, y: sectorDef.height * 0.5 };
+      for (let index = 0; index < Math.min(missing, 2); index += 1) {
+        const variantId = variants[(index + Math.floor(Math.random() * variants.length)) % Math.max(1, variants.length)] ?? "dust-raider";
+        const offset = {
+          x: clamp(anchor.x + (Math.random() - 0.5) * 280, 80, sectorDef.width - 80),
+          y: clamp(anchor.y + (Math.random() - 0.5) * 280, 80, sectorDef.height - 80)
+        };
+        sector.enemies.push(createEnemyFromVariant(variantId, offset, anchor));
+      }
+      sector.ecology.missionSpawnTimer = 20;
+    }
+  }
+  if (procgenContract.type === "mining" && procgenContract.targetResource && procgenContract.targetCount) {
+    const currentCount = sector.asteroids.filter((asteroid) => asteroid.resource === procgenContract.targetResource && asteroid.oreRemaining > 0).length;
+    if (currentCount < procgenContract.targetCount) {
+      const field = sectorDef.asteroidFields.find((entry) => entry.resource === procgenContract.targetResource) ?? sectorDef.asteroidFields[0];
+      if (!field) return;
+      const fieldState = getFieldState(world, sectorId, field.beltId);
+      if (!fieldState) return;
+      const missing = procgenContract.targetCount - currentCount;
+      for (let index = 0; index < Math.min(missing, 3); index += 1) {
+        spawnAsteroidFromField(world, sectorId, field, fieldState, sector.asteroids.filter((asteroid) => asteroid.beltId === field.beltId).length + index, sector.asteroids.length + 3, 2);
+        fieldState.reserve = Math.max(0, fieldState.reserve - 4);
+      }
+      sector.ecology.missionSpawnTimer = 18;
+    }
+  }
+}
+
 function raiseSectorChallenge(world: GameWorld, sectorId: string, amount: number, source: string) {
   const sector = world.sectors[sectorId];
   if (!sector || amount <= 0) return;
   const before = sector.challengePressure ?? 0;
   sector.challengePressure = clamp(before + amount, 0, 10);
   sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - amount * 2.5);
+  sector.ecology.hostilePressure = clamp(sector.ecology.hostilePressure + amount * 16, 0, 100);
+  sector.ecology.reinforcementBudget = clamp(sector.ecology.reinforcementBudget + amount * 3, 0, 80);
+  sector.ecology.lastIncidentAt = world.elapsedTime;
   if (sector.challengePressure >= 5 && before < 5) {
     pushStory(world, `${sectorById[sectorId].name}: local threat response escalating${source ? ` after ${source}` : ""}.`);
   }
@@ -3763,9 +4161,15 @@ function runPlayerModules(world: GameWorld, dt: number) {
       if (!runtime.moduleId) return;
       const module = moduleById[runtime.moduleId];
       if (!module || module.activation === "passive") return;
+      if (module.kind === "cannon" && runtime.ammoRemaining === undefined) {
+        runtime.ammoRemaining = Math.max(1, module.magazineSize ?? 1);
+      }
 
       if (runtime.cycleRemaining > 0) {
         runtime.cycleRemaining = Math.max(0, runtime.cycleRemaining - dt);
+        if (module.kind === "cannon" && runtime.cycleRemaining <= 0 && (runtime.ammoRemaining ?? 0) <= 0) {
+          runtime.ammoRemaining = Math.max(1, module.magazineSize ?? 1);
+        }
       }
 
       if (!runtime.active) return;
@@ -3801,7 +4205,7 @@ function runPlayerModules(world: GameWorld, dt: number) {
       if (module.kind === "salvager" && (!target || !inRange)) {
         return;
       }
-      if ((module.kind === "laser" || module.kind === "railgun" || module.kind === "missile") && (!target || !inRange)) {
+      if ((module.kind === "laser" || module.kind === "railgun" || module.kind === "missile" || module.kind === "cannon") && (!target || !inRange)) {
         return;
       }
 
@@ -3816,12 +4220,13 @@ function runPlayerModules(world: GameWorld, dt: number) {
         spendCapacitor(player, capUse);
       }
 
-      if (module.kind === "laser" || module.kind === "railgun" || module.kind === "missile") {
+      if (module.kind === "laser" || module.kind === "railgun" || module.kind === "missile" || module.kind === "cannon") {
+        const resolvedTargetPosition = targetPosition ?? player.position;
         const direction = targetPosition ? normalize(subtract(targetPosition, player.position)) : fromAngle(player.rotation);
         let appliedDamage = (module.damage ?? 0) * getWeaponDamageMultiplier(module.kind, derived);
         let quality: "miss" | "grazing" | "solid" | "excellent" | undefined;
-        if (target?.type === "enemy") {
-          const enemy = sector.enemies.find((entry) => entry.id === target.id);
+        const enemy = target?.type === "enemy" ? sector.enemies.find((entry) => entry.id === target.id) : null;
+        if (enemy) {
           if (enemy && module.kind !== "missile") {
             const adjustedModule = getTurretAdjustedModule(
               module,
@@ -3869,10 +4274,10 @@ function runPlayerModules(world: GameWorld, dt: number) {
             "player",
             module.id,
             add(player.position, scale(direction, 18)),
-            scale(direction, module.kind === "missile" ? 280 : 420),
+            scale(direction, getProjectileSpeed(module)),
             0,
             target,
-            targetPosition ? { ...targetPosition } : null,
+            { ...resolvedTargetPosition },
             quality
           )
         );
@@ -3924,6 +4329,16 @@ function runPlayerModules(world: GameWorld, dt: number) {
             player.cargo[entry.resource] += mined;
             remainingSpace -= mined;
             totalMined += mined;
+            const fieldState = getFieldState(world, world.currentSectorId, entry.beltId);
+            if (fieldState) {
+              fieldState.reserve = Math.max(0, fieldState.reserve - mined * 0.85);
+              fieldState.depletionPressure = clamp(fieldState.depletionPressure + mined * 0.45, 0, 100);
+              fieldState.recoveryTimer = Math.max(fieldState.recoveryTimer, mined >= 3 ? 20 : 10);
+            }
+            const ecology = getCurrentSector(world).ecology;
+            ecology.depletionPressure = clamp(ecology.depletionPressure + mined * 0.35, 0, 100);
+            ecology.missionReserve = clamp(ecology.missionReserve + mined * 0.08, 0, 100);
+            ecology.lastIncidentAt = world.elapsedTime;
             addFloatingText(world, entry.position, `+${mined} ${entry.resource}`, "#9fe3b6");
             emitMiningYield(world, entry.position, entry.resource);
             missionCatalog
@@ -4069,7 +4484,16 @@ function runPlayerModules(world: GameWorld, dt: number) {
         }
       }
 
-      runtime.cycleRemaining = (module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived);
+      if (module.kind === "cannon") {
+        const ammoRemaining = runtime.ammoRemaining ?? Math.max(1, module.magazineSize ?? 1);
+        runtime.ammoRemaining = Math.max(0, ammoRemaining - 1);
+        runtime.cycleRemaining =
+          runtime.ammoRemaining > 0
+            ? (module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived)
+            : (module.reloadTime ?? module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived);
+      } else {
+        runtime.cycleRemaining = (module.cycleTime ?? 0) * getWeaponCycleMultiplier(module.kind, derived);
+      }
     });
   });
 }
@@ -4234,8 +4658,14 @@ function runEnemyModules(world: GameWorld, dt: number) {
       if (!runtime.moduleId) return;
       const module = moduleById[runtime.moduleId];
       if (!module) return;
+      if (module.kind === "cannon" && runtime.ammoRemaining === undefined) {
+        runtime.ammoRemaining = Math.max(1, module.magazineSize ?? 1);
+      }
       if (runtime.cycleRemaining > 0) {
         runtime.cycleRemaining = Math.max(0, runtime.cycleRemaining - dt);
+        if (module.kind === "cannon" && runtime.cycleRemaining <= 0 && (runtime.ammoRemaining ?? 0) <= 0) {
+          runtime.ammoRemaining = Math.max(1, module.magazineSize ?? 1);
+        }
       }
       if (!runtime.active || !seesPlayer) return;
       if (module.capacitorDrain) {
@@ -4249,7 +4679,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
 
       enemy.capacitor -= module.capacitorUse ?? 0;
 
-      if (module.kind === "laser" || module.kind === "railgun" || module.kind === "missile") {
+      if (module.kind === "laser" || module.kind === "railgun" || module.kind === "missile" || module.kind === "cannon") {
         const direction = normalize(subtract(world.player.position, enemy.position));
         let appliedDamage = module.damage ?? 0;
         let quality: "miss" | "grazing" | "solid" | "excellent" | undefined;
@@ -4286,7 +4716,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
             "enemy",
             module.id,
             add(enemy.position, scale(direction, 14)),
-            scale(direction, module.kind === "missile" ? 260 : 360),
+            scale(direction, getProjectileSpeed(module)),
             0,
             { id: "player", type: "enemy" },
             { ...world.player.position },
@@ -4305,7 +4735,16 @@ function runEnemyModules(world: GameWorld, dt: number) {
         }
       }
 
-      runtime.cycleRemaining = module.cycleTime ?? 0;
+      if (module.kind === "cannon") {
+        const ammoRemaining = runtime.ammoRemaining ?? Math.max(1, module.magazineSize ?? 1);
+        runtime.ammoRemaining = Math.max(0, ammoRemaining - 1);
+        runtime.cycleRemaining =
+          runtime.ammoRemaining > 0
+            ? module.cycleTime ?? 0
+            : module.reloadTime ?? module.cycleTime ?? 0;
+      } else {
+        runtime.cycleRemaining = module.cycleTime ?? 0;
+      }
     });
   });
 }
@@ -4335,6 +4774,8 @@ function updateProjectiles(world: GameWorld, dt: number) {
         const impactColor =
           projectile.moduleId.includes("missile")
             ? "#ffb265"
+            : projectile.moduleId.includes("cannon")
+              ? "#ff9d5f"
             : projectile.owner === "player"
               ? "#6feeff"
               : "#ff846f";
@@ -4558,6 +4999,10 @@ function cleanupWorld(world: GameWorld) {
         (enemy.boss ? 0.36 : 0),
       variant.name
     );
+    sector.ecology.hostilePressure = clamp(sector.ecology.hostilePressure + 2.5 + variant.threatLevel * 0.6, 0, 100);
+    sector.ecology.scavengerPressure = clamp(sector.ecology.scavengerPressure + (enemy.boss ? 8 : variant.elite ? 5 : 2), 0, 100);
+    sector.ecology.reinforcementBudget = clamp(sector.ecology.reinforcementBudget + 2, 0, 80);
+    sector.ecology.lastIncidentAt = world.elapsedTime;
     sector.wrecks.push({
       id: `wreck-${Date.now()}-${enemy.id}`,
       position: { ...enemy.position },
@@ -4874,9 +5319,10 @@ function getPrompt(world: GameWorld) {
     }
     return `${activeMission.title} • Combat objective active`;
   }
+  const ecologyLabel = getCurrentSector(world).ecology.state.replace("_", " ");
   const selected = getObjectInfo(world, world.selectedObject);
   if (!selected) {
-    return "Left click to select. Right click a target for commands.";
+    return `${sectorById[world.currentSectorId].name} is ${ecologyLabel}. Left click to select. Right click a target for commands.`;
   }
   return `Selected ${selected.name}. Right click for commands.`;
 }
@@ -4890,7 +5336,7 @@ function getNavLabel(world: GameWorld) {
     if (world.routePlan?.autoFollow) {
       return `Autopilot standing by for ${sectorById[world.routePlan.destinationSystemId].name}`;
     }
-    return "Idle";
+    return `${sectorById[world.currentSectorId].name} · ${getCurrentSector(world).ecology.state.replace("_", " ")}`;
   }
   const targetName = getObjectInfo(world, nav.target)?.name ?? "destination";
   if (nav.mode === "approach") return `Approaching ${targetName}`;
@@ -4940,6 +5386,18 @@ export function updateWorld(world: GameWorld, dt: number) {
   resolveTransportMissionDeliveries(world);
   resolveProceduralContractDeliveries(world);
   updateTransportRoute(world);
+  Object.keys(world.sectors).forEach((sectorId) => {
+    updateSystemEcology(world, sectorId, simDt);
+    const sectorDef = sectorById[sectorId];
+    sectorDef.asteroidFields.forEach((field) => {
+      maybeRefreshAsteroidField(world, sectorId, field, simDt);
+    });
+    maybeRepopulateEnemies(world, sectorId, simDt);
+    if ((world.sectors[sectorId].ecology.missionSpawnTimer ?? 0) > 0) {
+      world.sectors[sectorId].ecology.missionSpawnTimer = Math.max(0, world.sectors[sectorId].ecology.missionSpawnTimer - simDt);
+    }
+    maybeSeedMissionTargets(world, sectorId);
+  });
   if (world.dockedStationId) {
     return;
   }

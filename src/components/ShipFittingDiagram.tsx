@@ -278,6 +278,7 @@ const MODULE_KIND_ICONS: Record<string, string> = {
   laser:              "◈",
   railgun:            "▣",
   missile:            "✦",
+  cannon:             "▥",
   mining_laser:       "⛏",
   afterburner:        "➤",
   webifier:           "⟲",

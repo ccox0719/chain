@@ -72,6 +72,7 @@ export type RoleTag =
   | "Missile"
   | "Laser"
   | "Rail"
+  | "Cannon"
   | "Shield"
   | "Armor"
   | "Support";
@@ -119,6 +120,7 @@ export type ModuleKind =
   | "laser"
   | "railgun"
   | "missile"
+  | "cannon"
   | "afterburner"
   | "webifier"
   | "warp_disruptor"
@@ -366,13 +368,17 @@ export interface ModuleDefinition {
   activation: "toggle" | "cycle" | "passive";
   requiresTarget?: SpaceObjectType[];
   cycleTime?: number;
+  reloadTime?: number;
   range?: number;
   optimal?: number;
   falloff?: number;
+  projectileSpeed?: number;
   capacitorUse?: number;
   capacitorDrain?: number;
   damage?: number;
   damageProfile?: DamageProfile;
+  ammoType?: string;
+  magazineSize?: number;
   repairAmount?: number;
   miningAmount?: number;
   miningYieldMultiplier?: number;
@@ -430,9 +436,11 @@ export interface ModuleDefinition {
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
     missileDamageMultiplier?: number;
+    cannonDamageMultiplier?: number;
     laserCycleMultiplier?: number;
     railgunCycleMultiplier?: number;
     missileCycleMultiplier?: number;
+    cannonCycleMultiplier?: number;
   };
   activeModifiers?: {
     maxShield?: number;
@@ -468,9 +476,11 @@ export interface ModuleDefinition {
     laserDamageMultiplier?: number;
     railgunDamageMultiplier?: number;
     missileDamageMultiplier?: number;
+    cannonDamageMultiplier?: number;
     laserCycleMultiplier?: number;
     railgunCycleMultiplier?: number;
     missileCycleMultiplier?: number;
+    cannonCycleMultiplier?: number;
   };
 }
 
@@ -599,6 +609,57 @@ export interface AsteroidFieldDefinition {
   hostileSpawnChance?: number;
   hostileSpawnCount?: number;
   hostileSpawnVariantIds?: string[];
+  recoveryRate?: number;
+  depletionRate?: number;
+  hiddenPocketChance?: number;
+}
+
+export type SystemEcologyStateId =
+  | "stable"
+  | "exploited"
+  | "tense"
+  | "overmined"
+  | "suppressed"
+  | "militarized"
+  | "scavenger_rich"
+  | "recovering"
+  | "rerouted"
+  | "frontier_rush";
+
+export interface AsteroidFieldRuntimeState {
+  beltId: string;
+  reserve: number;
+  density: number;
+  richness: number;
+  depletionPressure: number;
+  recoveryTimer: number;
+  desiredCount: number;
+  maxCount: number;
+  hiddenPocketChance: number;
+}
+
+export interface SystemEcology {
+  state: SystemEcologyStateId;
+  asteroidReserve: number;
+  hostilePressure: number;
+  patrolPressure: number;
+  scavengerPressure: number;
+  tradeActivity: number;
+  missionReserve: number;
+  depletionPressure: number;
+  reinforcementBudget: number;
+  recoveryProgress: number;
+  lastIncidentAt: number;
+  lastStateChangeAt: number;
+  nearbyInfluence: {
+    pirateBias: number;
+    militaryBias: number;
+    miningBias: number;
+    salvageBias: number;
+    tradeBias: number;
+  };
+  ambientRespawnTimer: number;
+  missionSpawnTimer: number;
 }
 
 export interface SolarSystemDefinition {
@@ -775,6 +836,7 @@ export interface ModuleRuntimeState {
   active: boolean;
   cycleRemaining: number;
   autoRepeat: boolean;
+  ammoRemaining?: number;
 }
 
 export interface PendingTargetLock {
@@ -1068,6 +1130,8 @@ export interface SectorRuntime {
   beltSpawnCooldowns: Record<string, number>;
   challengePressure: number;
   reinforcementTimer: number;
+  ecology: SystemEcology;
+  fieldStates: Record<string, AsteroidFieldRuntimeState>;
   cameraShake?: number;
   playerHitFlash?: number;
 }
@@ -1105,9 +1169,11 @@ export interface DerivedShipStats {
   laserDamageMultiplier: number;
   railgunDamageMultiplier: number;
   missileDamageMultiplier: number;
+  cannonDamageMultiplier: number;
   laserCycleMultiplier: number;
   railgunCycleMultiplier: number;
   missileCycleMultiplier: number;
+  cannonCycleMultiplier: number;
   shieldResists: ResistProfile;
   armorResists: ResistProfile;
   hullResists: ResistProfile;
