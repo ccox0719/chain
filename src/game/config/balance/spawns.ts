@@ -119,10 +119,10 @@ const SPAWN_BALANCE_DEFAULT = {
     frontierRoleBoost: 1.05
   },
   pressure: {
-    localReinforcementThreshold: 6,
-    frontierSwarmThreshold: 8,
-    highTierEscortThreshold: 8.5,
-    pressurePackThreshold: 7.5
+    localReinforcementThreshold: 9,
+    frontierSwarmThreshold: 10,
+    highTierEscortThreshold: 10,
+    pressurePackThreshold: 9
   },
   sectorChallenge: {
     hostileSiteDanger4: 0.008,
@@ -135,10 +135,10 @@ const SPAWN_BALANCE_DEFAULT = {
     mission: 0.006,
     contract: 0.004,
     decay: {
-      high: 0.028,
-      medium: 0.022,
-      low: 0.017,
-      frontier: 0.013
+      high: 0.055,
+      medium: 0.042,
+      low: 0.032,
+      frontier: 0.024
     },
     playerPowerTierScale: 0.00035
   },
@@ -151,13 +151,13 @@ const SPAWN_BALANCE_DEFAULT = {
     portalFrontierPerTier: 0.012
   },
   reinforcement: {
-    sectorBaseTimerSec: 68,
-    sectorMinimumTimerSec: 36,
-    sectorMaximumTimerSec: 96,
+    sectorBaseTimerSec: 100,
+    sectorMinimumTimerSec: 70,
+    sectorMaximumTimerSec: 150,
     sectorPressureScale: 0.7,
     sectorPlayerTierPenalty: 4,
-    missionSurviveTimerSec: 42,
-    missionClearTimerSec: 36,
+    missionSurviveTimerSec: 65,
+    missionClearTimerSec: 55,
     missionSurvivePressurePerSecond: 0.006,
     missionClearPressurePerWave: 0.18
   },

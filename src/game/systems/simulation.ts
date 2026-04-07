@@ -2963,7 +2963,7 @@ function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
     100
   );
   ecology.reinforcementBudget = clamp(
-    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.35 : sectorDef.security === "frontier" ? 0.28 : 0.22),
+    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.15 : sectorDef.security === "frontier" ? 0.12 : 0.10),
     0,
     80
   );
@@ -3064,16 +3064,16 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
           : baseline;
   const respawnInterval =
     state === "militarized"
-      ? 24
+      ? 55
       : state === "suppressed"
-        ? 40
+        ? 90
         : state === "overmined"
-          ? 44
+          ? 100
           : sectorDef.security === "high"
-            ? 32
+            ? 70
             : sectorDef.security === "frontier"
-              ? 26
-              : 30;
+              ? 60
+              : 75;
   ecology.ambientRespawnTimer = Math.max(0, ecology.ambientRespawnTimer - dt);
   if (ecology.ambientRespawnTimer > 0 || ecology.reinforcementBudget <= 0 || activeEnemies.length >= targetCount) return;
 
@@ -3085,9 +3085,9 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
   const spawnDef = availableSpawns[Math.floor(Math.random() * availableSpawns.length)];
   const sourceAnchor = sourceSector?.enemySpawns.find((spawn) => spawn.variantId === spawnDef.variantId)?.center ?? spawnDef.center;
   const spawnCount = Math.min(
-    Math.max(1, Math.round(1 + ecology.hostilePressure / 28)),
+    1,
     targetCount - activeEnemies.length,
-    Math.max(1, Math.floor(ecology.reinforcementBudget / 4))
+    Math.max(1, Math.floor(ecology.reinforcementBudget / 10))
   );
   if (spawnCount <= 0) return;
   for (let index = 0; index < spawnCount; index += 1) {
@@ -3098,7 +3098,7 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
     const enemy = createEnemyFromVariant(spawnDef.variantId, position, sourceAnchor);
     sector.enemies.push(enemy);
   }
-  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 4);
+  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 10);
   ecology.ambientRespawnTimer = respawnInterval;
 }
 
