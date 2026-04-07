@@ -2963,7 +2963,7 @@ function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
     100
   );
   ecology.reinforcementBudget = clamp(
-    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.15 : sectorDef.security === "frontier" ? 0.12 : 0.10),
+    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.075 : sectorDef.security === "frontier" ? 0.06 : 0.05),
     0,
     80
   );
@@ -3064,16 +3064,16 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
           : baseline;
   const respawnInterval =
     state === "militarized"
-      ? 55
+      ? 110
       : state === "suppressed"
-        ? 90
+        ? 180
         : state === "overmined"
-          ? 100
+          ? 200
           : sectorDef.security === "high"
-            ? 70
+            ? 140
             : sectorDef.security === "frontier"
-              ? 60
-              : 75;
+              ? 120
+              : 150;
   ecology.ambientRespawnTimer = Math.max(0, ecology.ambientRespawnTimer - dt);
   if (ecology.ambientRespawnTimer > 0 || ecology.reinforcementBudget <= 0 || activeEnemies.length >= targetCount) return;
 
@@ -3098,7 +3098,7 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
     const enemy = createEnemyFromVariant(spawnDef.variantId, position, sourceAnchor);
     sector.enemies.push(enemy);
   }
-  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 10);
+  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 20);
   ecology.ambientRespawnTimer = respawnInterval;
 }
 

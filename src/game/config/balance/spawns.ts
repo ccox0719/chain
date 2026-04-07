@@ -135,10 +135,10 @@ const SPAWN_BALANCE_DEFAULT = {
     mission: 0.006,
     contract: 0.004,
     decay: {
-      high: 0.055,
-      medium: 0.042,
-      low: 0.032,
-      frontier: 0.024
+      high: 0.110,
+      medium: 0.084,
+      low: 0.064,
+      frontier: 0.048
     },
     playerPowerTierScale: 0.00035
   },
@@ -151,13 +151,13 @@ const SPAWN_BALANCE_DEFAULT = {
     portalFrontierPerTier: 0.012
   },
   reinforcement: {
-    sectorBaseTimerSec: 100,
-    sectorMinimumTimerSec: 70,
-    sectorMaximumTimerSec: 150,
+    sectorBaseTimerSec: 200,
+    sectorMinimumTimerSec: 140,
+    sectorMaximumTimerSec: 300,
     sectorPressureScale: 0.7,
     sectorPlayerTierPenalty: 4,
-    missionSurviveTimerSec: 65,
-    missionClearTimerSec: 55,
+    missionSurviveTimerSec: 130,
+    missionClearTimerSec: 110,
     missionSurvivePressurePerSecond: 0.006,
     missionClearPressurePerWave: 0.18
   },
