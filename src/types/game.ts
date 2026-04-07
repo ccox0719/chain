@@ -853,6 +853,7 @@ export interface NavigationState {
   warpFrom: Vec2 | null;
   warpProgress: number;
   postWarpDock: boolean;
+  postWarpJump: boolean;
 }
 
 export type LocalSiteType =

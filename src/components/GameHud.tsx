@@ -211,15 +211,21 @@ function makeTravelButtons(world: GameSnapshot["world"], targetInfo: ObjectInfo 
         ...(distance > 320
           ? warpBtns
           : [{ icon: "→", label: "Approach", command: approach, tone: "primary" as const }]),
-        { icon: "⬡", label: "Dock", command: { type: "dock", target }, disabled: distance > 165 }
+        { icon: "⬡", label: "Dock", command: { type: "dock", target } as const }
       ];
-    case "gate":
+    case "gate": {
+      const gateDef = getSystemDestination(world.currentSectorId, ref.id);
+      const gateLocked =
+        !!gateDef?.unlockMissionId &&
+        world.missions[gateDef.unlockMissionId]?.status !== "completed" &&
+        !world.unlockedSectorIds.includes(gateDef.connectedSystemId ?? "");
       return [
         ...(distance > 320
           ? warpBtns
           : [{ icon: "→", label: "Approach", command: approach, tone: "primary" as const }]),
-        { icon: "⊟", label: "Jump", command: { type: "jump", target }, disabled: distance > 150 }
+        { icon: "⊟", label: gateLocked ? "Locked" : "Jump", command: { type: "jump", target } as const, disabled: gateLocked }
       ];
+    }
     case "enemy": {
       const orbitRange = combatRanges?.orbitRange ?? 180;
       const keepRange = combatRanges?.keepRange ?? 320;

@@ -1550,6 +1550,7 @@ function setIdle(nav: NavigationState) {
   nav.warpFrom = null;
   nav.warpProgress = 0;
   nav.postWarpDock = false;
+  nav.postWarpJump = false;
 }
 
 function shortestAngleDiff(from: number, to: number) {
@@ -2161,6 +2162,7 @@ function issueNav(world: GameWorld, mode: NavigationState["mode"], target: Selec
   world.player.navigation.warpFrom = null;
   world.player.navigation.warpProgress = 0;
   world.player.navigation.postWarpDock = false;
+  world.player.navigation.postWarpJump = false;
 }
 
 function issuePointNav(world: GameWorld, destination: Vec2) {
@@ -2171,6 +2173,7 @@ function issuePointNav(world: GameWorld, destination: Vec2) {
   world.player.navigation.warpFrom = null;
   world.player.navigation.warpProgress = 0;
   world.player.navigation.postWarpDock = false;
+  world.player.navigation.postWarpJump = false;
 }
 
 function getDestinationIfSameSystem(world: GameWorld, ref: SelectableRef | null) {
@@ -2471,7 +2474,11 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
   if (command.type === "jump") {
     if (isRemoteWarpableDestination(world, command.target)) {
       disengageCombat(world);
-      return tryExecuteCommand(world, { type: "warp", target: command.target, range: 120 }, skipDockedCheck);
+      const warped = tryExecuteCommand(world, { type: "warp", target: command.target, range: 120 }, skipDockedCheck);
+      if (warped) {
+        world.player.navigation.postWarpJump = true;
+      }
+      return warped;
     }
     disengageCombat(world);
     disableAutopilot(world);
@@ -2785,7 +2792,8 @@ function createEnemyFromVariant(
       destination: null,
       warpFrom: null,
       warpProgress: 0,
-      postWarpDock: false
+      postWarpDock: false,
+      postWarpJump: false
     },
     lockedTargets: [],
     activeTarget: null,
@@ -3980,6 +3988,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     const previousPosition = { ...player.position };
     const targetRef = nav.target;
     const shouldDockAfterWarp = nav.postWarpDock;
+    const shouldJumpAfterWarp = nav.postWarpJump;
     nav.warpProgress = clamp(nav.warpProgress + dt * 0.9, 0, 1);
     const direction = normalize(subtract(targetPosition, nav.warpFrom));
     const totalDistance = Math.max(distance(nav.warpFrom, targetPosition) - nav.desiredRange, 1);
@@ -4002,6 +4011,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
       nav.warpFrom = null;
       nav.warpProgress = 0;
       nav.postWarpDock = false;
+      nav.postWarpJump = false;
       setIdle(nav);
       aggroEnemyToPlayer(world, warpInterdictor.enemy.id);
       pushStory(world, `Warp interrupted by ${warpInterdictor.variant.name}.`);
@@ -4019,6 +4029,8 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
       setIdle(nav);
       if (shouldDockAfterWarp && targetRef) {
         issueNav(world, "docking", targetRef, 0);
+      } else if (shouldJumpAfterWarp && targetRef) {
+        issueNav(world, "jumping", targetRef, 0);
       }
     }
     return;
