@@ -148,8 +148,6 @@ type BalanceSpec = {
   max: number;
   step: number;
   helper: string;
-  relative?: boolean;
-  relativeFloor?: number;
 };
 
 type MasterDialSpec = {
@@ -176,7 +174,7 @@ type BalanceSnapshot = Record<string, number>;
 const BALANCE_GROUPS: BalanceGroup[] = [
   {
     title: "Combat",
-    note: "Fine-grained combat balance. The master dial moves all six controls at once; the current values are the neutral center, so individual sliders can move above or below them.",
+    note: "Fine-grained combat balance. The master dial moves all six controls at once; adjust individually below for fine tuning.",
     masterDial: {
       label: "Master pressure",
       helper: "Safer ← moves all six controls toward easier combat. Deadlier → does the reverse.",
@@ -206,67 +204,55 @@ const BALANCE_GROUPS: BalanceGroup[] = [
         root: "combat",
         path: ["pressure", "playerDamageMultiplier"],
         label: "Player damage out",
-        min: 0.6,
-        max: 1.4,
+        min: 0.1,
+        max: 3.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets hit harder; negative offsets deal less.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Multiplier on your outgoing weapon damage. Above 1.0 you hit harder; below 1.0 you deal less."
       },
       {
         root: "combat",
         path: ["pressure", "enemyDamageTakenMultiplier"],
         label: "Enemy durability",
-        min: 0.5,
-        max: 1.5,
+        min: 0.1,
+        max: 3.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets make enemies die faster; negative offsets make them tougher.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Scales how much of your damage actually lands on enemies. Above 1.0 enemies die faster; below 1.0 they're tougher."
       },
       {
         root: "combat",
         path: ["pressure", "enemyDamageMultiplier"],
         label: "Enemy damage out",
-        min: 0.6,
-        max: 1.45,
+        min: 0.1,
+        max: 3.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets make enemies hit harder; negative offsets make them easier to tank.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Multiplier on enemy outgoing damage. Above 1.0 enemies hit harder; below 1.0 they're easier to tank."
       },
       {
         root: "combat",
         path: ["pressure", "playerTrackingMultiplier"],
         label: "Player tracking",
-        min: 0.65,
-        max: 1.35,
+        min: 0.1,
+        max: 2.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets improve your tracking; negative offsets make you miss more.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Your turret accuracy against moving targets. Below 1.0 you miss more on fast or crossing enemies."
       },
       {
         root: "combat",
         path: ["pressure", "enemyTrackingMultiplier"],
         label: "Enemy tracking",
-        min: 0.7,
-        max: 1.3,
+        min: 0.1,
+        max: 2.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets improve enemy tracking; negative offsets make them miss more.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Enemy turret accuracy against you. Below 1.0 enemies miss more when you're moving."
       },
       {
         root: "combat",
         path: ["pressure", "enemyDetectionMultiplier"],
         label: "Enemy detection range",
-        min: 0.75,
-        max: 1.25,
+        min: 0.1,
+        max: 2.0,
         step: 0.01,
-        helper: "Relative to the current neutral point. Positive offsets extend enemy detection; negative offsets give more room before they engage.",
-        relative: true,
-        relativeFloor: 0.1
+        helper: "Scales how far enemies spot and chase you. Below 1.0 gives more room to maneuver before getting engaged."
       }
     ]
   },
@@ -443,21 +429,10 @@ function formatBalanceNumber(value: number, step: number) {
   return fixed.replace(/\.?0+$/, "");
 }
 
-function formatSignedBalanceNumber(value: number, step: number) {
-  const formatted = formatBalanceNumber(Math.abs(value), step);
-  return `${value > 0 ? "+" : value < 0 ? "-" : ""}${formatted}`;
-}
-
 function balancePercent(value: number, spec: BalanceSpec) {
   const range = spec.max - spec.min;
   if (range <= 0) return 0;
   return Math.max(0, Math.min(100, ((value - spec.min) / range) * 100));
-}
-
-function relativeSpanForSpec(spec: BalanceSpec, baseline: number) {
-  const upward = Math.max(0, spec.max - baseline);
-  const downward = Math.max(0, baseline - spec.min);
-  return Math.max(upward, downward, spec.step);
 }
 
 function BalanceSlider({
@@ -471,26 +446,11 @@ function BalanceSlider({
   baseline: number;
   onChange: (nextValue: number) => void;
 }) {
-  const relative = Boolean(spec.relative);
-  const relativeSpan = relative ? relativeSpanForSpec(spec, baseline) : 0;
+  const currentPct = balancePercent(value, spec);
+  const baselinePct = balancePercent(baseline, spec);
   const delta = value - baseline;
-  const currentPct = relative
-    ? Math.max(0, Math.min(100, ((delta + relativeSpan) / (relativeSpan * 2)) * 100))
-    : balancePercent(value, spec);
-  const baselinePct = relative ? 50 : balancePercent(baseline, spec);
-  const currentLabel = relative ? formatSignedBalanceNumber(delta, spec.step) : formatBalanceNumber(value, spec.step);
-  const baselineLabel = relative ? "0" : formatBalanceNumber(baseline, spec.step);
-  const sliderMin = relative ? -relativeSpan : spec.min;
-  const sliderMax = relative ? relativeSpan : spec.max;
-  const sliderStep = relative ? spec.step : spec.step;
-  const handleChange = relative
-    ? (event: React.ChangeEvent<HTMLInputElement>) => {
-        const nextDelta = Number(event.target.value);
-        const nextValue = baseline + nextDelta;
-        const floor = spec.relativeFloor ?? Number.NEGATIVE_INFINITY;
-        onChange(Math.max(floor, nextValue));
-      }
-    : (event: React.ChangeEvent<HTMLInputElement>) => onChange(Number(event.target.value));
+  const currentLabel = formatBalanceNumber(value, spec.step);
+  const baselineLabel = formatBalanceNumber(baseline, spec.step);
   return (
     <div
       className="panel-lite"
@@ -501,22 +461,18 @@ function BalanceSlider({
         <strong>{spec.label}</strong>
         <span
           className={`status-chip${Math.abs(delta) < 0.0001 ? "" : delta > 0 ? " active" : " warning"}`}
-          title={
-            relative
-              ? `Offset from neutral: ${currentLabel}. Neutral baseline when the modal opened: ${baselineLabel}.`
-              : `Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.`
-          }
+          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.`}
         >
-          {relative ? `Now ${currentLabel} · Was ${baselineLabel}` : `Now ${currentLabel} · Was ${baselineLabel}`}
+          Now {currentLabel} · Was {baselineLabel}
         </span>
       </div>
       <input
         type="range"
-        min={sliderMin}
-        max={sliderMax}
-        step={sliderStep}
-        value={relative ? delta : value}
-        onChange={handleChange}
+        min={spec.min}
+        max={spec.max}
+        step={spec.step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
         aria-label={spec.label}
         title={`${spec.label}: ${spec.helper}`}
       />
@@ -544,9 +500,9 @@ function BalanceSlider({
         />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-dim)" }}>
-        <span>{relative ? formatSignedBalanceNumber(-relativeSpan, spec.step) : formatBalanceNumber(spec.min, spec.step)}</span>
+        <span>{formatBalanceNumber(spec.min, spec.step)}</span>
         <span title={spec.helper}>{spec.helper}</span>
-        <span>{relative ? formatSignedBalanceNumber(relativeSpan, spec.step) : formatBalanceNumber(spec.max, spec.step)}</span>
+        <span>{formatBalanceNumber(spec.max, spec.step)}</span>
       </div>
     </div>
   );
