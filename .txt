@@ -6,3 +6,36 @@ git push origin main
 netlify deploy
 
 git pull origin main
+
+next edits: 
+Best Bang for Experience — Expansion Analysis
+Tier 1: High Impact, Moderate Effort
+1. More regional events & site hotspots
+You have 5 regional events and only 3 site hotspot templates. These are the living world layer — the things that make each session feel different. Adding ~8 more events (covering frontier-march and cross-region crisis events) and ~4 more hotspot types (wreck field, patrol surge, black market window, ancient signal) would make every system feel alive with minimal code — it's pure data in events.ts and sites.ts.
+
+2. More story missions / a 4th boss
+The chain ends at break-the-arc (~22 missions). There's no "you've cleared the frontier" moment. A fourth boss mission (e.g. a Blackwake or Veilborn apex target, deeper in the unlocked pocket systems) would give the main chain a satisfying capstone. It'd also pull the player into systems like hush-atlas that are currently travel-only endpoints.
+
+3. Faction standing rewards / unlock gates at tier 3
+Standing currently caps at 3.0 but I couldn't find anything that gates at 2.7+ except the last two missions. High standing should unlock something tangible — exclusive modules, discounted ship prices, faction-specific contracts — otherwise it's a meter with no ceiling reward.
+
+Tier 2: Clear Value, Lower Effort
+4. More procgen contract variety
+The board generates transport/mining/bounty but no escort or patrol type. An escort contract (accompany an NPC convoy to a destination) or timed-sweep patrol would feel distinct from the existing three and suit the ship roster well.
+
+5. applySalvageBoundaryPull is a complete stub
+This function exists in updateWorld but does nothing (void world; void dt). If salvage sites are supposed to have a drift/pull hazard like asteroid fields do, this is dead weight. Either implement a mild tidal pull toward wreck centers or remove the call — having it called but empty is a silent lie to the player.
+
+6. Story log is only 7 entries
+storyLog is sliced to 7 lines. It's used for mission events, license level-ups, contract completions — but 7 entries vanish fast in active play. Bumping to 20 with maybe a scrollable history view in the HUD would let players track what happened in the last 10 minutes.
+
+Tier 3: Interesting but Heavier
+7. Anomaly field variety
+The type system supports push | pull | drag | ion | slipstream but most anomalies in universe.ts use pull. A drag anomaly (velocity cap inside the zone) or a slipstream (speed bonus in one direction) would create differentiated tactical situations.
+
+8. More transport missions
+There are ~8 static transport missions. These are premium-feel content — named cargo, specific routes, time bonuses. Adding 4-5 more spanning the frontier regions (Ironbound and Veilborn routes) would fill the gap between early game and procgen contracts feeling generic.
+
+My recommendation for where to start: Regional events + site hotspots first (pure data, zero risk, immediate world-feel payoff), then a fourth boss mission to cap the story chain, then the standing unlock rewards. Those three together are probably 80% of the experience delta for 30-40% of the work.
+
+Want me to start on any of these?
