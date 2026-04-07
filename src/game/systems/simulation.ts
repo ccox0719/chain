@@ -515,16 +515,14 @@ function getDifficultyModifiers(world: GameWorld) {
 }
 
 function getCombatPressureModifiers() {
-  const dial = clamp(COMBAT_BALANCE.pressure.dial ?? 1, 0.6, 1.4);
-  const offset = dial - 1;
+  const p = COMBAT_BALANCE.pressure;
   return {
-    dial,
-    playerDamageMultiplier: clamp(1 - offset * 0.7, 0.6, 1.4),
-    enemyDamageMultiplier: clamp(1 + offset * 0.9, 0.6, 1.45),
-    playerTrackingMultiplier: clamp(1 - offset * 0.45, 0.65, 1.35),
-    enemyTrackingMultiplier: clamp(1 + offset * 0.4, 0.7, 1.3),
-    enemyDetectionMultiplier: clamp(1 + offset * 0.3, 0.75, 1.25),
-    enemyDamageTakenMultiplier: clamp(1 + offset * 1.2, 0.5, 1.5)
+    playerDamageMultiplier: clamp((p.playerDamageMultiplier as number) ?? 1, 0.6, 1.4),
+    enemyDamageMultiplier: clamp((p.enemyDamageMultiplier as number) ?? 1, 0.6, 1.45),
+    playerTrackingMultiplier: clamp((p.playerTrackingMultiplier as number) ?? 1, 0.65, 1.35),
+    enemyTrackingMultiplier: clamp((p.enemyTrackingMultiplier as number) ?? 1, 0.7, 1.3),
+    enemyDetectionMultiplier: clamp((p.enemyDetectionMultiplier as number) ?? 1, 0.75, 1.25),
+    enemyDamageTakenMultiplier: clamp((p.enemyDamageTakenMultiplier as number) ?? 1, 0.5, 1.5)
   };
 }
 

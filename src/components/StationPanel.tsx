@@ -150,10 +150,23 @@ type BalanceSpec = {
   helper: string;
 };
 
+type MasterDialSpec = {
+  label: string;
+  helper: string;
+  min: number;
+  max: number;
+  step: number;
+  /** Returns per-control values to write when the dial moves. */
+  derive: (dial: number) => Array<{ path: string[]; value: number }>;
+  /** Infer the dial position from the current balance values (used on open). */
+  inferFrom: () => number;
+};
+
 type BalanceGroup = {
   title: string;
   note: string;
   controls: BalanceSpec[];
+  masterDial?: MasterDialSpec;
 };
 
 type BalanceSnapshot = Record<string, number>;
@@ -161,16 +174,85 @@ type BalanceSnapshot = Record<string, number>;
 const BALANCE_GROUPS: BalanceGroup[] = [
   {
     title: "Combat",
-    note: "One dial that makes combat safer or harsher in a way you can feel immediately.",
+    note: "Fine-grained combat balance. The master dial moves all six controls at once; adjust individually below for fine tuning.",
+    masterDial: {
+      label: "Master pressure",
+      helper: "Safer ← moves all six controls toward easier combat. Deadlier → does the reverse.",
+      min: 0.6,
+      max: 1.4,
+      step: 0.01,
+      derive(dial: number) {
+        const o = dial - 1;
+        const c = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+        return [
+          { path: ["pressure", "playerDamageMultiplier"],    value: c(1 - o * 0.7,  0.6,  1.4)  },
+          { path: ["pressure", "enemyDamageMultiplier"],     value: c(1 + o * 0.9,  0.6,  1.45) },
+          { path: ["pressure", "playerTrackingMultiplier"],  value: c(1 - o * 0.45, 0.65, 1.35) },
+          { path: ["pressure", "enemyTrackingMultiplier"],   value: c(1 + o * 0.4,  0.7,  1.3)  },
+          { path: ["pressure", "enemyDetectionMultiplier"],  value: c(1 + o * 0.3,  0.75, 1.25) },
+          { path: ["pressure", "enemyDamageTakenMultiplier"],value: c(1 + o * 1.2,  0.5,  1.5)  },
+        ];
+      },
+      inferFrom() {
+        const playerDmg = getBalanceValue("combat", ["pressure", "playerDamageMultiplier"]);
+        const dial = 1 + (1 - playerDmg) / 0.7;
+        return Math.max(0.6, Math.min(1.4, Math.round(dial * 100) / 100));
+      }
+    },
     controls: [
       {
         root: "combat",
-        path: ["pressure", "dial"],
-        label: "Combat pressure",
+        path: ["pressure", "playerDamageMultiplier"],
+        label: "Player damage out",
         min: 0.6,
         max: 1.4,
         step: 0.01,
-        helper: "Lower makes you hit harder, take less, and get engaged later. Higher does the reverse."
+        helper: "Multiplier on your outgoing weapon damage. Above 1.0 you hit harder; below 1.0 you deal less."
+      },
+      {
+        root: "combat",
+        path: ["pressure", "enemyDamageTakenMultiplier"],
+        label: "Enemy durability",
+        min: 0.5,
+        max: 1.5,
+        step: 0.01,
+        helper: "Scales how much of your damage actually lands on enemies. Above 1.0 enemies die faster; below 1.0 they're tougher."
+      },
+      {
+        root: "combat",
+        path: ["pressure", "enemyDamageMultiplier"],
+        label: "Enemy damage out",
+        min: 0.6,
+        max: 1.45,
+        step: 0.01,
+        helper: "Multiplier on enemy outgoing damage. Above 1.0 enemies hit harder; below 1.0 they're easier to tank."
+      },
+      {
+        root: "combat",
+        path: ["pressure", "playerTrackingMultiplier"],
+        label: "Player tracking",
+        min: 0.65,
+        max: 1.35,
+        step: 0.01,
+        helper: "Your turret accuracy against moving targets. Below 1.0 you miss more on fast or crossing enemies."
+      },
+      {
+        root: "combat",
+        path: ["pressure", "enemyTrackingMultiplier"],
+        label: "Enemy tracking",
+        min: 0.7,
+        max: 1.3,
+        step: 0.01,
+        helper: "Enemy turret accuracy against you. Below 1.0 enemies miss more when you're moving."
+      },
+      {
+        root: "combat",
+        path: ["pressure", "enemyDetectionMultiplier"],
+        label: "Enemy detection range",
+        min: 0.75,
+        max: 1.25,
+        step: 0.01,
+        helper: "Scales how far enemies spot and chase you. Below 1.0 gives more room to maneuver before getting engaged."
       }
     ]
   },
@@ -369,14 +451,6 @@ function BalanceSlider({
   const delta = value - baseline;
   const currentLabel = formatBalanceNumber(value, spec.step);
   const baselineLabel = formatBalanceNumber(baseline, spec.step);
-  const modeLabel =
-    spec.root === "combat" && spec.path.join(".") === "pressure.dial"
-      ? value < 0.9
-        ? "Safer"
-        : value > 1.1
-          ? "Deadlier"
-          : "Balanced"
-      : null;
   return (
     <div
       className="panel-lite"
@@ -387,7 +461,7 @@ function BalanceSlider({
         <strong>{spec.label}</strong>
         <span
           className={`status-chip${Math.abs(delta) < 0.0001 ? "" : delta > 0 ? " active" : " warning"}`}
-          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.${modeLabel ? ` ${modeLabel}.` : ""}`}
+          title={`Current value: ${currentLabel}. Baseline when the modal opened: ${baselineLabel}.`}
         >
           Now {currentLabel} · Was {baselineLabel}
         </span>
@@ -445,11 +519,17 @@ export function DeveloperBalanceModal({
 }) {
   const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
   const [, setBalanceRefresh] = useState(0);
+  const [masterDialValues, setMasterDialValues] = useState<Record<string, number>>(() =>
+    Object.fromEntries(BALANCE_GROUPS.filter(g => g.masterDial).map(g => [g.title, g.masterDial!.inferFrom()]))
+  );
 
   useEffect(() => {
     if (!open) return;
     setBalanceBaseline(captureBalanceSnapshot());
     setBalanceRefresh((value) => value + 1);
+    setMasterDialValues(
+      Object.fromEntries(BALANCE_GROUPS.filter(g => g.masterDial).map(g => [g.title, g.masterDial!.inferFrom()]))
+    );
   }, [open]);
 
   function applyBalanceValue(root: BalanceRootKey, path: string[], nextValue: number) {
@@ -459,10 +539,24 @@ export function DeveloperBalanceModal({
     setBalanceRefresh((value) => value + 1);
   }
 
+  function applyMasterDial(group: BalanceGroup, dialValue: number) {
+    if (!group.masterDial) return;
+    const root = group.controls[0].root;
+    setMasterDialValues(prev => ({ ...prev, [group.title]: dialValue }));
+    group.masterDial.derive(dialValue).forEach(({ path, value }) => {
+      setBalanceOverride(root, path, value);
+    });
+    setBalanceBaseline(captureBalanceSnapshot());
+    setBalanceRefresh(v => v + 1);
+  }
+
   function resetBalanceValues() {
     clearBalanceOverrides();
     setBalanceBaseline(captureBalanceSnapshot());
     setBalanceRefresh((value) => value + 1);
+    setMasterDialValues(
+      Object.fromEntries(BALANCE_GROUPS.filter(g => g.masterDial).map(g => [g.title, g.masterDial!.inferFrom()]))
+    );
   }
 
   async function exportBalanceValues() {
@@ -536,6 +630,49 @@ export function DeveloperBalanceModal({
                 <span className="status-chip">{group.note}</span>
               </div>
               <div style={{ display: "grid", gap: "0.7rem" }}>
+                {group.masterDial && (() => {
+                  const md = group.masterDial!;
+                  const dial = masterDialValues[group.title] ?? md.inferFrom();
+                  const pct = ((dial - md.min) / (md.max - md.min)) * 100;
+                  return (
+                    <>
+                      <div
+                        className="panel-lite"
+                        style={{ display: "grid", gap: "0.45rem", padding: "0.75rem 0.8rem", borderColor: "rgba(127, 220, 255, 0.35)" }}
+                        title={md.helper}
+                      >
+                        <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+                          <strong>{md.label}</strong>
+                          <span
+                            className={`status-chip${dial < 0.9 ? "" : dial > 1.1 ? " warning" : " active"}`}
+                            title={`Current dial: ${dial.toFixed(2)}`}
+                          >
+                            {dial < 0.9 ? "Safer" : dial > 1.1 ? "Deadlier" : "Balanced"} · {dial.toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={md.min}
+                          max={md.max}
+                          step={md.step}
+                          value={dial}
+                          onChange={(e) => applyMasterDial(group, Number(e.target.value))}
+                          aria-label={md.label}
+                          title={md.helper}
+                        />
+                        <div style={{ position: "relative", height: "0.7rem", borderRadius: "999px", background: "rgba(255, 255, 255, 0.08)", overflow: "hidden" }}>
+                          <div style={{ position: "absolute", inset: 0, width: `${pct}%`, background: "linear-gradient(90deg, rgba(127, 220, 255, 0.85), rgba(127, 220, 255, 0.35))" }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                          <span>Safer</span>
+                          <span title={md.helper}>{md.helper}</span>
+                          <span>Deadlier</span>
+                        </div>
+                      </div>
+                      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", margin: "0 0.1rem" }} />
+                    </>
+                  );
+                })()}
                 {group.controls.map((spec) => (
                   <BalanceSlider
                     key={balanceKey(spec)}
