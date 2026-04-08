@@ -23,6 +23,7 @@ import { getStationCommodityStock } from "../game/economy/commodityAvailability"
 import { isModuleAvailableAtStation } from "../game/economy/moduleAvailability";
 import { playerShipById, playerShips } from "../game/data/ships";
 import { getFactionRewardDefinition } from "../game/data/factionRewards";
+import { getFactionCoalitionFactions } from "../game/data/factionRelations";
 import { commodityCatalog } from "../game/economy/data/commodities";
 import { getBestSellLocationForCommodity } from "../game/economy/market";
 import {
@@ -512,11 +513,19 @@ function BalanceSlider({
 export function DeveloperBalanceModal({
   open,
   onClose,
-  onRegenShip
+  snapshot,
+  onRegenShip,
+  onTriggerDevRegionalEvent,
+  onTriggerDevSiteHotspot,
+  onTriggerDevWarEvent
 }: {
   open: boolean;
   onClose: () => void;
+  snapshot: GameSnapshot;
   onRegenShip: () => void;
+  onTriggerDevRegionalEvent: () => void;
+  onTriggerDevSiteHotspot: () => void;
+  onTriggerDevWarEvent: () => void;
 }) {
   const [balanceBaseline, setBalanceBaseline] = useState<BalanceSnapshot>(() => captureBalanceSnapshot());
   const [, setBalanceRefresh] = useState(0);
@@ -614,6 +623,30 @@ export function DeveloperBalanceModal({
             </button>
           </div>
         </div>
+        <section className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem", marginBottom: "0.75rem", borderColor: "rgba(127, 220, 255, 0.24)" }}>
+          <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+            <strong>Event Tools</strong>
+            <span className="status-chip">
+              {snapshot.currentRegion.name} · {snapshot.sector.name}
+            </span>
+          </div>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <button type="button" className="ghost-button mini" onClick={onTriggerDevRegionalEvent}>
+                Trigger Regional Event
+              </button>
+              <button type="button" className="ghost-button mini" onClick={onTriggerDevSiteHotspot}>
+                Trigger Site Hotspot
+              </button>
+              <button type="button" className="ghost-button mini" onClick={onTriggerDevWarEvent}>
+                Trigger War Event
+              </button>
+            </div>
+            <span className="status-chip" style={{ justifySelf: "flex-start" }}>
+              Forces the current region and system into the live procgen tables.
+            </span>
+          </div>
+        </section>
         <div
           className="dev-balance-grid"
           style={{
@@ -866,11 +899,11 @@ export function StationPanel({
   const alliedFactionSet = useMemo<Set<string>>(
     () =>
       new Set([
-        ...(stationFaction.allies ?? []),
+        ...getFactionCoalitionFactions(stationFactionId),
         ...(snapshot.currentRegion.secondaryFactions ?? []),
         snapshot.currentRegion.dominantFaction
       ]),
-    [snapshot.currentRegion.dominantFaction, snapshot.currentRegion.secondaryFactions, stationFaction.allies]
+    [snapshot.currentRegion.dominantFaction, snapshot.currentRegion.secondaryFactions, stationFactionId]
   );
 
   function inventoryAllows(tags: string[]) {

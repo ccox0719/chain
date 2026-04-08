@@ -342,6 +342,32 @@ export const missionCatalog: MissionDefinition[] = [
     reinforcementIntervalSec: MISSION_BALANCE.clear.defaultReinforcementIntervalSec,
     reinforcementRoles: ["brawler", "support", "sniper"],
     reinforcementVariantIds: ["ironbound-bruiser", "ironbound-artillery"]
+  },
+  {
+    id: "hush-oracle",
+    title: "Hush Oracle",
+    type: "bounty",
+    briefing: "The quiet pocket in Hush Atlas has gone dark under Veilborn command. Break the oracle hull and clear the escort screen before it seals the route.",
+    rewardCredits: 8400,
+    rewardModuleId: "hush-atlas-resonance-array",
+    rewardModuleCount: 1,
+    issuerFaction: "veilborn",
+    requiredMissionId: "break-the-arc",
+    requiredStanding: 2.7,
+    minPowerTier: 4,
+    targetCount: 1,
+    enemyVariantIds: ["veilborn-hush-oracle"],
+    targetSystemId: "hush-atlas",
+    targetDestinationId: "hush-chart",
+    bossEncounter: {
+      bossVariantId: "veilborn-hush-oracle",
+      escortVariantIds: ["veilborn-hunter", "veilborn-support", "veilborn-hunter"],
+      bossTitle: "Hush Oracle",
+      missionBriefing: "Expect long-range pressure, control disruption, and escort support in the Hush Atlas pocket.",
+      specialMechanicTags: ["long-range", "control", "escort-support"],
+      rewardCreditsBonus: 2400,
+      threatSummary: "Veilborn command sniper with control escorts in the Hush Atlas pocket."
+    }
   }
 ];
 

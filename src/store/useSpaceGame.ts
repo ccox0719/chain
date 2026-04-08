@@ -47,6 +47,11 @@ import {
 import { createInitialWorld } from "../game/entities/factories";
 import { defaultStarterShipConfigId } from "../game/data/starterShips";
 import { normalizePilotLicense } from "../game/utils/pilotLicense";
+import {
+  forceDevRegionalEvent,
+  forceDevSiteHotspot,
+  forceDevWarEvent
+} from "../game/procgen/runtime";
 import { CommodityId, GameSnapshot, GameWorld, ModuleSlot, SelectableRef, StarterShipConfigId, Vec2 } from "../types/game";
 
 function worldPointFromClient(
@@ -274,6 +279,18 @@ export function useSpaceGame() {
       },
       activateTacticalSlow: () => {
         triggerTacticalSlow(worldRef.current);
+        refresh();
+      },
+      triggerDevRegionalEvent: () => {
+        forceDevRegionalEvent(worldRef.current, worldRef.current.currentSectorId);
+        refresh();
+      },
+      triggerDevSiteHotspot: () => {
+        forceDevSiteHotspot(worldRef.current, worldRef.current.currentSectorId);
+        refresh();
+      },
+      triggerDevWarEvent: () => {
+        forceDevWarEvent(worldRef.current, worldRef.current.currentSectorId);
         refresh();
       },
       setTimeScale: (timeScale: number) => {

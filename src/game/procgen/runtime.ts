@@ -1,5 +1,6 @@
 import {
   GameWorld,
+  FactionWarEventState,
   ProceduralContractDefinition,
   ProceduralContractState,
   ProcgenState,
@@ -254,6 +255,112 @@ export function getSiteHotspotForSystem(world: GameWorld, systemId: string) {
 export function getFactionWarEventForSystem(world: GameWorld, systemId: string) {
   ensureProcgenState(world);
   return Object.values(world.procgen.warEvents).find((entry) => entry.systemId === systemId) ?? null;
+}
+
+export function forceDevRegionalEvent(world: GameWorld, regionId: string) {
+  ensureProcgenState(world);
+  const templates = regionalEventTemplates.filter((template) => template.regions.includes(regionId));
+  const chosenTemplates = templates.length > 0 ? templates : regionalEventTemplates;
+  const random = createSeededRandom(`${world.procgen.seed}:${regionId}:dev-regional:${world.elapsedTime}`);
+  const picked = weightedPick(chosenTemplates, random);
+  if (!picked) return null;
+  const event: RegionalEventState = {
+    id: picked.id,
+    regionId,
+    cycle: getProcgenCycle(world),
+    name: picked.name,
+    description: picked.description,
+    affectedTags: picked.affectedTags,
+    serviceOffer: picked.serviceOffer,
+    hostileActivityMultiplier: picked.hostileActivityMultiplier,
+    rewardMultiplier: picked.rewardMultiplier,
+    missionTypeWeights: picked.missionTypeWeights,
+    stockBiasTags: picked.stockBiasTags,
+    priceAdjustments: picked.priceAdjustments
+  };
+  world.procgen.regionalEvents[regionId] = event;
+  world.storyLog = [`DEV: regional event triggered - ${event.name}.`, ...world.storyLog].slice(0, 7);
+  return event;
+}
+
+export function forceDevSiteHotspot(world: GameWorld, systemId: string) {
+  ensureProcgenState(world);
+  const primarySystem = sectorById[systemId];
+  const systemPool = primarySystem
+    ? [primarySystem, ...Object.values(sectorById).filter((entry) => entry.id !== primarySystem.id)]
+    : Object.values(sectorById);
+  const random = createSeededRandom(`${world.procgen.seed}:${systemId}:dev-site:${world.elapsedTime}`);
+  const pickedSystem = pickOne(systemPool.filter((system) =>
+    system.destinations.some((entry) => entry.kind === "anomaly" || entry.kind === "wreck" || entry.kind === "beacon")
+  ), random);
+  if (!pickedSystem) return null;
+  const candidates = pickedSystem.destinations.filter(
+    (entry): entry is typeof entry & { kind: "anomaly" | "wreck" | "beacon" } =>
+      entry.kind === "anomaly" || entry.kind === "wreck" || entry.kind === "beacon"
+  );
+  const destination = pickOne(candidates, random);
+  if (!destination) return null;
+  const template = weightedPick(
+    siteHotspotTemplates
+      .filter((entry) => entry.destinationKinds.includes(destination.kind))
+      .map((entry) => ({ ...entry, weight: entry.weight + (pickedSystem.danger >= 4 ? 0.6 : 0) })),
+    random
+  );
+  if (!template) return null;
+  const hotspot: ProcgenState["siteHotspots"][string] = {
+    id: template.id,
+    systemId: pickedSystem.id,
+    destinationId: destination.id,
+    cycle: getProcgenCycle(world),
+    title: `${destination.name} ${template.title}`,
+    description: template.description,
+    encounterWeight: template.encounterWeight,
+    rewardMultiplier: template.rewardMultiplier,
+    tags: template.tags
+  };
+  world.procgen.siteHotspots[pickedSystem.id] = hotspot;
+  world.storyLog = [`DEV: site hotspot triggered - ${hotspot.title}.`, ...world.storyLog].slice(0, 7);
+  return hotspot;
+}
+
+export function forceDevWarEvent(world: GameWorld, regionId: string) {
+  ensureProcgenState(world);
+  const templates = factionWarEventTemplates.filter((template) => template.regions.includes(regionId));
+  const chosenTemplates = templates.length > 0 ? templates : factionWarEventTemplates;
+  const systems = Object.values(sectorById).filter(
+    (system) => system.regionId === regionId && (system.contestedFactionIds?.length ?? 0) > 0
+  );
+  const chosenSystems = systems.length > 0 ? systems : Object.values(sectorById).filter((system) => (system.contestedFactionIds?.length ?? 0) > 0);
+  if (chosenTemplates.length === 0 || chosenSystems.length === 0) return null;
+  const random = createSeededRandom(`${world.procgen.seed}:${regionId}:dev-war:${world.elapsedTime}`);
+  const template = weightedPick(chosenTemplates, random);
+  if (!template) return null;
+  const system =
+    chosenSystems.find((entry) => entry.id === world.currentSectorId) ??
+    chosenSystems.find((entry) => entry.contestedFactionIds?.includes(template.enemyFactionId)) ??
+    pickOne(chosenSystems, random);
+  if (!system) return null;
+  const location = system.destinations.find((entry) => entry.kind === "beacon" || entry.kind === "anomaly" || entry.kind === "wreck");
+  const warEvent: FactionWarEventState = {
+    id: template.id,
+    cycle: getProcgenCycle(world),
+    regionId,
+    systemId: system.id,
+    locationId: location?.id ?? null,
+    title: template.title,
+    description: template.description,
+    alliedFactionId: template.alliedFactionId,
+    enemyFactionId: template.enemyFactionId,
+    alliedShipCap: template.alliedShipCap,
+    enemyShipCap: template.enemyShipCap,
+    announcedAt: world.elapsedTime,
+    expiresAt: world.elapsedTime + template.durationSec,
+    status: "active",
+    acknowledged: false
+  };
+  world.procgen.warEvents[regionId] = warEvent;
+  world.storyLog = [`DEV: war event triggered - ${warEvent.title} in ${system.name}.`, ...world.storyLog].slice(0, 7);
+  return warEvent;
 }
 
 function getStationEntries() {

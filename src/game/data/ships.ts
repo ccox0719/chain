@@ -2008,6 +2008,35 @@ export const enemyVariants: EnemyVariant[] = [
     shieldResists: { em: 0.1, thermal: 0.16, kinetic: 0.26, explosive: 0.34 },
     armorResists: { em: 0.24, thermal: 0.2, kinetic: 0.14, explosive: 0.1 },
     hullResists: { em: 0.06, thermal: 0.06, kinetic: 0.06, explosive: 0.06 }
+  },
+  {
+    id: "veilborn-hush-oracle",
+    name: "Hush Oracle",
+    faction: "veilborn",
+    archetype: "siege_sniper",
+    roleTags: ["Sniper", "Control", "Support"],
+    color: "#a99aff",
+    silhouette: "needle",
+    combatStyle: "shield",
+    boss: true,
+    bossTitle: "Boss",
+    threatLevel: 6,
+    shield: 162,
+    armor: 124,
+    hull: 132,
+    capacitor: 178,
+    capacitorRegen: 14.4,
+    speed: 84,
+    turnSpeed: 1.22,
+    lockRange: 820,
+    preferredRange: 640,
+    lootCredits: 1380,
+    lootTable: { "ghost-alloy": 5, "ember-crystal": 4, ferrite: 3 },
+    fittedModules: ["pulse-laser", "warp-disruptor", "sensor-dampener", "shield-booster"],
+    signatureRadius: 38,
+    shieldResists: { em: 0.18, thermal: 0.26, kinetic: 0.28, explosive: 0.34 },
+    armorResists: { em: 0.32, thermal: 0.26, kinetic: 0.14, explosive: 0.1 },
+    hullResists: { em: 0.06, thermal: 0.06, kinetic: 0.06, explosive: 0.06 }
   }
 ];
 

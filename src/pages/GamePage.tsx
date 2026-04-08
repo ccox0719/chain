@@ -133,7 +133,11 @@ export function GamePage() {
         <DeveloperBalanceModal
           open={balanceOpen}
           onClose={() => setBalanceOpen(false)}
+          snapshot={snapshot}
           onRegenShip={actions.regenShip}
+          onTriggerDevRegionalEvent={actions.triggerDevRegionalEvent}
+          onTriggerDevSiteHotspot={actions.triggerDevSiteHotspot}
+          onTriggerDevWarEvent={actions.triggerDevWarEvent}
         />
 
         {starterPickerOpen && (

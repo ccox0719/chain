@@ -460,11 +460,6 @@ export function SidebarPanels({
                         War intel · {upcomingWarEvent.title} · {sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}
                       </span>
                     )}
-                    {upcomingWarEvent && (
-                      <span className="status-chip status-chip-danger">
-                        War intel · {upcomingWarEvent.title} · {sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}
-                      </span>
-                    )}
                   </div>
                 </CollapsibleSection>
                 <CollapsibleSection title="Stored Modules" subtitle={`${moduleCatalog.length} types`} defaultOpen>

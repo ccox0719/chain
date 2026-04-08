@@ -69,6 +69,21 @@ export const bossCatalog: BossDefinition[] = [
     rewardCreditsBonus: 1400,
     threatSummary: "Mixed pirate skirmisher boss with disruption and flanking escorts.",
     loreBlurb: "A raider tactician that wins by keeping the fight chaotic and asymmetric."
+  },
+  {
+    id: "veilborn-hush-oracle",
+    faction: "veilborn",
+    archetype: "siege_sniper",
+    variantId: "veilborn-hush-oracle",
+    missionId: "hush-oracle",
+    bossVariantId: "veilborn-hush-oracle",
+    bossTitle: "Hush Oracle",
+    escortVariantIds: ["veilborn-hunter", "veilborn-support", "veilborn-hunter"],
+    missionBriefing: "A Veilborn hush oracle has sealed the quiet pocket in Hush Atlas. Break its command hull and clear the escort screen.",
+    specialMechanicTags: ["long-range", "control", "escort-support"],
+    rewardCreditsBonus: 2400,
+    threatSummary: "Veilborn command sniper with control escorts in the Hush Atlas pocket.",
+    loreBlurb: "A sealed-pocket command hull that denies approach and collapses sensor discipline."
   }
 ];
 
@@ -81,4 +96,3 @@ export const bossByMissionId = Object.fromEntries(bossCatalog.map((entry) => [en
   string,
   BossDefinition
 >;
-

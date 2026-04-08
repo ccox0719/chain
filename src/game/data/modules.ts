@@ -1387,6 +1387,26 @@ const epicModuleCatalog: ModuleDefinition[] = [
     signatureResolution: 96,
     weaponClass: "heavy",
     modifiers: {}
+  }),
+  finalizeModule({
+    id: "hush-atlas-resonance-array",
+    name: "Hush Atlas Resonance Array",
+    specialReward: true,
+    slot: "utility",
+    category: "utility",
+    kind: "passive",
+    sizeClass: "medium",
+    price: 7600,
+    description: "A pocket-map resonance lattice that steadies long-range tracking and shortens the time to reorient in deep frontier space.",
+    tags: ["utility", "exploration", "frontier", "high-tech", "epic"],
+    roleTags: ["Support", "Sniper", "Explorer"],
+    activation: "passive",
+    modifiers: {
+      lockRange: 180,
+      warpSpeed: 0.24,
+      turretTrackingMultiplier: 1.06,
+      capacitorRegen: 10
+    }
   })
 ];
 

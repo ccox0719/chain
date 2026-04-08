@@ -37,6 +37,12 @@ import {
 } from "../../types/game";
 import { bossByMissionId } from "../data/bosses";
 import { factionData } from "../data/factions";
+import {
+  getFactionCoalitionFactions,
+  getFactionCoalitionSupportScore,
+  getFactionRelation,
+  getFactionRelationScore
+} from "../data/factionRelations";
 import { getFactionRewardDefinition } from "../data/factionRewards";
 import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { missionById, missionCatalog } from "../data/missions";
@@ -761,6 +767,7 @@ function getHostileWarpDisruptor(world: GameWorld) {
   const player = world.player;
   const sector = getCurrentSector(world);
   return sector.enemies.find((enemy) => {
+    if (!isEnemyHostileToPlayer(enemy)) return false;
     const variant = enemyVariantById[enemy.variantId];
     if (!variant || enemy.hull <= 0) return false;
     const playerDistance = distance(enemy.position, player.position);
@@ -1319,6 +1326,12 @@ function ensureMissionUnlocks(world: GameWorld) {
       return;
     }
     missionState.status = "available";
+    if (mission.id === "hush-oracle") {
+      pushStory(
+        world,
+        "New intel: the Hush Atlas pocket is lighting up with a sealed Veilborn command signal. The final frontier lane is open."
+      );
+    }
   });
   transportMissionCatalog.forEach((mission) => {
     const missionState = world.transportMissions[mission.id];
@@ -1510,6 +1523,16 @@ export function acceptMission(world: GameWorld, missionId: string) {
       if (ecology) {
         ecology.missionReserve = clamp(ecology.missionReserve + Math.max(2, mission.targetCount ?? 2), 0, 100);
       }
+    }
+    if (mission.id === "hush-oracle" && !world.dockedStationId && world.currentSectorId === mission.targetSystemId) {
+      const pocketCenter = getMissionBossSpawnPoint(world, mission) ?? { ...world.player.position };
+      world.localSite = createWarzoneLocalSite(
+        world.currentSectorId,
+        pocketCenter,
+        "Hush Oracle Signal",
+        "Sealed Veilborn command pocket"
+      );
+      pushStory(world, "Hush Atlas signal pocket marked. The oracle is broadcasting from a sealed zone.");
     }
     pushStory(world, `Mission accepted: ${mission.title}`);
     if (mission.bossEncounter && !world.dockedStationId && world.currentSectorId === mission.targetSystemId) {
@@ -2349,7 +2372,7 @@ function autoEngageNearbyHostile(world: GameWorld) {
 
   const currentActive =
     world.activeTarget?.type === "enemy"
-      ? sector.enemies.find((enemy) => enemy.id === world.activeTarget?.id)
+      ? sector.enemies.find((enemy) => enemy.id === world.activeTarget?.id && isEnemyHostileToPlayer(enemy))
       : null;
   if (currentActive && distance(world.player.position, currentActive.position) <= engagementRange) {
     activateAllWeapons(world);
@@ -2357,6 +2380,7 @@ function autoEngageNearbyHostile(world: GameWorld) {
   }
 
   const nearestEnemy = [...sector.enemies]
+    .filter(isEnemyHostileToPlayer)
     .filter((enemy) => distance(world.player.position, enemy.position) <= engagementRange)
     .sort(
       (left, right) =>
@@ -2378,6 +2402,9 @@ function maintainEnemyLockIntent(world: GameWorld) {
       ? world.activeTarget
       : null;
   if (!candidate) return;
+
+  const candidateEnemy = getCurrentSector(world).enemies.find((enemy) => enemy.id === candidate.id);
+  if (!candidateEnemy || !isEnemyHostileToPlayer(candidateEnemy)) return;
 
   const alreadyLocked = world.lockedTargets.some((entry) => entry.id === candidate.id && entry.type === candidate.type);
   if (alreadyLocked) return;
@@ -3365,14 +3392,58 @@ function getWarEventLocation(world: GameWorld, event: NonNullable<ReturnType<typ
   return { x: sectorDef.width * 0.52, y: sectorDef.height * 0.48 };
 }
 
-function spawnWarFleet(world: GameWorld, event: NonNullable<ReturnType<typeof getFactionWarEventForSystem>>, alignment: "ally" | "hostile", role: HostilePackRole, index: number) {
+function getWarBattlePlan(world: GameWorld, event: NonNullable<ReturnType<typeof getFactionWarEventForSystem>>) {
+  const sectorDef = sectorById[event.systemId];
+  const alliedCoalition = getFactionCoalitionFactions(event.alliedFactionId);
+  const enemyCoalition = getFactionCoalitionFactions(event.enemyFactionId);
+  const relation = getFactionRelation(event.alliedFactionId, event.enemyFactionId);
+  const relationBias = getFactionRelationScore(event.alliedFactionId, event.enemyFactionId);
+  const alliedSupport = getFactionCoalitionSupportScore(event.alliedFactionId);
+  const enemySupport = getFactionCoalitionSupportScore(event.enemyFactionId);
+  const dangerBias = sectorDef ? Math.max(0, sectorDef.danger - 2) * 0.07 : 0;
+  const securityBias =
+    sectorDef?.security === "frontier"
+      ? 0.12
+      : sectorDef?.security === "low"
+        ? 0.08
+        : sectorDef?.security === "medium"
+          ? 0.04
+          : 0.02;
+  const supportGap = Math.max(0, enemySupport - alliedSupport);
+  const alliedRatio = clamp(
+    0.82 - dangerBias - supportGap * 0.08 + (relation === "ally" ? 0.08 : relation === "friendly" ? 0.03 : 0) - securityBias * 0.25,
+    0.45,
+    0.92
+  );
+  const enemyRatio = clamp(
+    1.06 + dangerBias + supportGap * 0.11 + securityBias * 0.18 - Math.max(0, relationBias) * 0.03,
+    1.08,
+    1.65
+  );
+  return {
+    alliedShipCap: Math.max(2, Math.round(event.alliedShipCap * alliedRatio)),
+    enemyShipCap: Math.max(3, Math.round(event.enemyShipCap * enemyRatio)),
+    alliedCoalition,
+    enemyCoalition,
+    relation
+  };
+}
+
+function spawnWarFleet(
+  world: GameWorld,
+  event: NonNullable<ReturnType<typeof getFactionWarEventForSystem>>,
+  alignment: "ally" | "hostile",
+  role: HostilePackRole,
+  index: number
+) {
   const sector = world.sectors[event.systemId];
   const sectorDef = sectorById[event.systemId];
   if (!sector || !sectorDef) return;
-  const factionId = alignment === "ally" ? event.alliedFactionId : event.enemyFactionId;
-  const variantId = pickFactionWarVariant(factionId, role);
+  const battlePlan = getWarBattlePlan(world, event);
+  const factionPool = alignment === "ally" ? battlePlan.alliedCoalition : battlePlan.enemyCoalition;
+  const variantId = pickFactionWarVariant(factionPool, role);
   const anchor = getWarEventLocation(world, event);
-  const offsetAngle = (Math.PI * 2 * index) / Math.max(1, alignment === "ally" ? event.alliedShipCap : event.enemyShipCap);
+  const offsetAngle = (Math.PI * 2 * index) / Math.max(1, alignment === "ally" ? battlePlan.alliedShipCap : battlePlan.enemyShipCap);
   const offsetRadius = alignment === "ally" ? 140 + index * 16 : 180 + index * 18;
   const position = {
     x: clamp(anchor.x + Math.cos(offsetAngle) * offsetRadius, 80, sectorDef.width - 80),
@@ -3393,15 +3464,16 @@ function ensureWarEventPresence(world: GameWorld) {
     `${factionData[event.alliedFactionId].name} vs ${factionData[event.enemyFactionId].name}`
   );
 
+  const battlePlan = getWarBattlePlan(world, event);
   const alliedCount = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment === "ally" && enemy.warEventId === event.id).length;
   const hostileCount = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment !== "ally" && enemy.warEventId === event.id).length;
   if (alliedCount === 0) {
-    for (let index = 0; index < Math.min(event.alliedShipCap, 2); index += 1) {
+    for (let index = 0; index < Math.min(battlePlan.alliedShipCap, 2); index += 1) {
       spawnWarFleet(world, event, "ally", index % 2 === 0 ? "support" : "escort", index);
     }
   }
   if (hostileCount === 0) {
-    for (let index = 0; index < Math.min(event.enemyShipCap, 3); index += 1) {
+    for (let index = 0; index < Math.min(battlePlan.enemyShipCap, 3); index += 1) {
       spawnWarFleet(world, event, "hostile", index % 2 === 0 ? "brawler" : "sniper", index);
     }
   }
@@ -3418,6 +3490,7 @@ function updateFactionWarEvent(world: GameWorld, dt: number) {
   const sector = getCurrentSector(world);
   const allies = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment === "ally" && enemy.warEventId === event.id);
   const hostiles = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment !== "ally" && enemy.warEventId === event.id);
+  const battlePlan = getWarBattlePlan(world, event);
   if (!event.acknowledged && world.currentSectorId === event.systemId) {
     event.acknowledged = true;
     pushStory(
@@ -3426,11 +3499,11 @@ function updateFactionWarEvent(world: GameWorld, dt: number) {
     );
   }
 
-  if (allies.length < event.alliedShipCap && Math.random() < dt * 0.65) {
+  if (allies.length < battlePlan.alliedShipCap && Math.random() < dt * 0.68) {
     const role: HostilePackRole = allies.length % 2 === 0 ? "support" : "escort";
     spawnWarFleet(world, event, "ally", role, allies.length);
   }
-  if (hostiles.length < event.enemyShipCap && Math.random() < dt * 0.55) {
+  if (hostiles.length < battlePlan.enemyShipCap && Math.random() < dt * 0.58) {
     const role: HostilePackRole = hostiles.length % 2 === 0 ? "brawler" : "hunter";
     spawnWarFleet(world, event, "hostile", role, hostiles.length);
   }
@@ -3606,13 +3679,13 @@ function pickEnemyVariantForHostileRole(
   return pickPool[Math.floor(Math.random() * pickPool.length)]?.variant.id ?? "dust-raider";
 }
 
-function pickFactionWarVariant(factionId: FactionId, role: HostilePackRole, preferredVariantIds?: string[]) {
+function pickFactionWarVariant(factionIds: FactionId[], role: HostilePackRole, preferredVariantIds?: string[]) {
   const pool = enemyVariants
-    .filter((variant) => variant.faction === factionId && !variant.boss)
+    .filter((variant) => factionIds.includes(variant.faction) && !variant.boss)
     .filter((variant) => !preferredVariantIds?.length || preferredVariantIds.includes(variant.id))
     .map((variant) => {
       const archetype = getEnemyArchetypeDefinition(variant.archetype);
-      let score = 0;
+      let score = factionIds[0] === variant.faction ? 1.25 : 0.75;
       if (role === "support" && archetype?.id === "support_frigate") score += 4;
       if (role === "hunter" && (archetype?.id === "hunter" || archetype?.id === "interceptor")) score += 4;
       if (role === "sniper" && (archetype?.id === "siege_sniper" || archetype?.id === "artillery")) score += 4;
@@ -3623,7 +3696,7 @@ function pickFactionWarVariant(factionId: FactionId, role: HostilePackRole, pref
       return { variant, score };
     })
     .sort((left, right) => right.score - left.score);
-  return pool[0]?.variant.id ?? enemyVariants.find((variant) => variant.faction === factionId && !variant.boss)?.id ?? "dust-raider";
+  return pool[0]?.variant.id ?? enemyVariants.find((variant) => factionIds.includes(variant.faction) && !variant.boss)?.id ?? "dust-raider";
 }
 
 function chooseHostilePackTemplate(context: TriggerContext, sectorId: string, playerPowerTier: number) {
@@ -3722,6 +3795,10 @@ function getEnemyRetreatThreshold(enemyVariantId: string) {
 
 function isEnemyAllied(enemy: EnemyState) {
   return enemy.alignment === "ally";
+}
+
+function isEnemyHostileToPlayer(enemy: EnemyState) {
+  return enemy.hull > 0 && !isEnemyAllied(enemy);
 }
 
 function getEnemyFactionId(enemy: EnemyState) {
@@ -3889,6 +3966,15 @@ function updateMissionBossEncounters(world: GameWorld) {
     const state = world.missions[mission.id];
     if (!state || state.status !== "active" || state.bossSpawned || !mission.bossEncounter) return;
     if (world.currentSectorId !== mission.targetSystemId) return;
+    if (mission.id === "hush-oracle") {
+      const pocketCenter = getMissionBossSpawnPoint(world, mission) ?? { ...world.player.position };
+      world.localSite = createWarzoneLocalSite(
+        world.currentSectorId,
+        pocketCenter,
+        "Hush Oracle Signal",
+        "Sealed Veilborn command pocket"
+      );
+    }
     spawnMissionBossEncounter(world, mission);
   });
 }
