@@ -724,6 +724,8 @@ export interface MissionDefinition {
   type: MissionType;
   briefing: string;
   rewardCredits: number;
+  rewardModuleId?: string;
+  rewardModuleCount?: number;
   issuerFaction?: FactionId;
   requiredStanding?: number;
   requiredMissionId?: string;

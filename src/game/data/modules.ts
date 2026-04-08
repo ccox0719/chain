@@ -1399,7 +1399,7 @@ const epicModuleCatalog: ModuleDefinition[] = [
     price: 7600,
     description: "A pocket-map resonance lattice that steadies long-range tracking and shortens the time to reorient in deep frontier space.",
     tags: ["utility", "exploration", "frontier", "high-tech", "epic"],
-    roleTags: ["Support", "Sniper", "Explorer"],
+    roleTags: ["Support", "Sniper", "Control"],
     activation: "passive",
     modifiers: {
       lockRange: 180,
