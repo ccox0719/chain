@@ -871,6 +871,60 @@ function applyDamageToTarget(
   return totalDamage;
 }
 
+function applyMissileSplashDamage(
+  world: GameWorld,
+  impactPosition: Vec2,
+  owner: "player" | "enemy",
+  baseDamage: number,
+  moduleId: string,
+  primaryTargetId?: string | null
+) {
+  if (!moduleId.includes("missile") || baseDamage <= 0) return;
+  const module = moduleById[moduleId];
+  if (!module) return;
+
+  const splashRadius = COMBAT_BALANCE.turret.missileSplashRadius;
+  const splashBaseDamage = baseDamage * COMBAT_BALANCE.turret.missileSplashDamageMultiplier;
+  if (splashRadius <= 0 || splashBaseDamage <= 0) return;
+
+  const sector = getCurrentSector(world);
+  const splashPacket = createDamagePacket(module.damageProfile, splashBaseDamage);
+
+  const applySplash = (
+    target: { shield: number; armor: number; hull: number; recentDamageTimer: number },
+    targetResists: { shield: ResistProfile; armor: ResistProfile; hull: ResistProfile },
+    targetPosition: Vec2
+  ) => {
+    const dist = distance(impactPosition, targetPosition);
+    if (dist > splashRadius) return 0;
+    const falloff = clamp(1 - dist / splashRadius, 0.2, 1);
+    return applyDamageToTarget(target, scaleDamagePacket(splashPacket, falloff), targetResists);
+  };
+
+  if (owner === "player") {
+    sector.enemies.forEach((enemy) => {
+      if (enemy.id === primaryTargetId) return;
+      const appliedTotal = applySplash(
+        enemy,
+        getEnemyLayerResists(enemy.id, world),
+        enemy.position
+      );
+      if (appliedTotal > 0.01) {
+        aggroEnemyToPlayer(world, enemy.id);
+        enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 6);
+        showHitText(world, enemy.position, appliedTotal, "grazing", "player");
+      }
+    });
+    return;
+  }
+
+  if (primaryTargetId === "player") return;
+  const appliedTotal = applySplash(world.player, getPlayerLayerResists(world), world.player.position);
+  if (appliedTotal > 0.01) {
+    showHitText(world, world.player.position, appliedTotal, "grazing", "enemy");
+  }
+}
+
 function countChangedModules(current: EquippedLoadout, target: EquippedLoadout) {
   return (["weapon", "utility", "defense"] as ModuleSlot[]).reduce((total, slotType) => {
     const slotCount = Math.max(current[slotType].length, target[slotType].length);
@@ -1693,21 +1747,44 @@ function resolveAsteroidCollisions(world: GameWorld, position: Vec2, velocity: V
   const sector = getCurrentSector(world);
   let nextPosition = { ...position };
   let nextVelocity = { ...velocity };
+  let maxOverlap = 0;
+  let escapeSum = { x: 0, y: 0 };
 
-  sector.asteroids.forEach((asteroid) => {
-    const offset = subtract(nextPosition, asteroid.position);
-    const dist = length(offset);
-    const minDist = bodyRadius + asteroid.radius + TERRAIN.collisionPadding;
-    if (dist <= 0 || dist >= minDist) return;
-    const normal = normalize(offset);
-    const overlap = minDist - dist;
-    nextPosition = add(nextPosition, scale(normal, overlap + 0.5));
-    const radial = nextVelocity.x * normal.x + nextVelocity.y * normal.y;
-    if (radial < 0) {
-      nextVelocity = subtract(nextVelocity, scale(normal, radial * 1.1));
-    }
-    nextVelocity = scale(nextVelocity, TERRAIN.collisionDamping - Math.min(0.12, overlap * TERRAIN.collisionOverlapScale));
-  });
+  for (let pass = 0; pass < 3; pass += 1) {
+    let moved = false;
+    sector.asteroids.forEach((asteroid) => {
+      const offset = subtract(nextPosition, asteroid.position);
+      const dist = length(offset);
+      const minDist = bodyRadius + asteroid.radius + TERRAIN.collisionPadding;
+      if (dist >= minDist) return;
+      const normal = dist > 0.0001 ? normalize(offset) : length(nextVelocity) > 0.0001 ? normalize(nextVelocity) : { x: 1, y: 0 };
+      const overlap = Math.max(0, minDist - dist);
+      maxOverlap = Math.max(maxOverlap, overlap);
+      escapeSum = add(escapeSum, scale(normal, overlap));
+      nextPosition = add(nextPosition, scale(normal, overlap + 0.75));
+      const radial = nextVelocity.x * normal.x + nextVelocity.y * normal.y;
+      if (radial < 0) {
+        nextVelocity = subtract(nextVelocity, scale(normal, radial));
+      }
+      moved = true;
+    });
+    if (!moved) break;
+  }
+
+  if (maxOverlap > 0) {
+    const escapeLength = length(escapeSum);
+    const escapeDirection =
+      escapeLength > 0.0001
+        ? normalize(escapeSum)
+        : length(nextVelocity) > 0.0001
+          ? normalize(nextVelocity)
+          : { x: 1, y: 0 };
+    nextPosition = add(nextPosition, scale(escapeDirection, Math.max(8, maxOverlap * 0.6)));
+    const escapeSpeed = Math.max(length(nextVelocity), 110);
+    nextVelocity = add(nextVelocity, scale(escapeDirection, escapeSpeed * 0.7));
+    const damping = Math.max(0.74, TERRAIN.collisionDamping - Math.min(0.08, maxOverlap * TERRAIN.collisionOverlapScale * 0.5));
+    nextVelocity = scale(nextVelocity, damping);
+  }
 
   return { position: nextPosition, velocity: nextVelocity };
 }
@@ -2456,7 +2533,7 @@ function tryExecuteCommand(world: GameWorld, command: CommandAction, skipDockedC
     if (miningIndex >= 0) {
       world.player.modules.utility[miningIndex].active = true;
     }
-    issueNav(world, "orbit", command.target, 120);
+    issueNav(world, "approach", command.target, 120);
     return true;
   }
   if (command.type === "salvage") {
@@ -2645,7 +2722,8 @@ function computeTurretApplication(
     tracking?: number;
     signatureResolution?: number;
   },
-  targetSignatureRadius: number
+  targetSignatureRadius: number,
+  attackerMode?: NavigationState["mode"]
 ) {
   const rangeToTarget = Math.max(distance(attackerPosition, targetPosition), 1);
   const rangeFactor = getRangePenalty(rangeToTarget, weapon.optimal, weapon.falloff);
@@ -2682,7 +2760,9 @@ function computeTurretApplication(
   const trackingRatio = angularPressure / effectiveTracking;
   const rawTrackingFactor = 1 / (1 + Math.pow(trackingRatio, COMBAT_BALANCE.turret.trackingExponent));
   const trackingFactor = clamp(0.18 + rawTrackingFactor * 0.82, 0, 1);
-  const damage = (weapon.damage ?? 0) * rangeFactor * trackingFactor * trajectoryFactor;
+  const orbitPenalty =
+    attackerMode === "orbit" ? COMBAT_BALANCE.turret.orbitIndirectDamageMultiplier : 1;
+  const damage = (weapon.damage ?? 0) * rangeFactor * trackingFactor * trajectoryFactor * orbitPenalty;
 
   let quality: "miss" | "grazing" | "solid" | "excellent" = "miss";
   if (damage > (weapon.damage ?? 0) * COMBAT_BALANCE.turret.qualityExcellent) quality = "excellent";
@@ -3161,16 +3241,16 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
           : Math.min(ambientCap, baseline);
   const respawnInterval =
     state === "militarized"
-      ? 110
+      ? 220
       : state === "suppressed"
-        ? 180
+        ? 360
         : state === "overmined"
-          ? 200
+          ? 400
           : sectorDef.security === "high"
-            ? 140
+            ? 280
             : sectorDef.security === "frontier"
-              ? 120
-              : 150;
+              ? 240
+              : 300;
   ecology.ambientRespawnTimer = Math.max(0, ecology.ambientRespawnTimer - dt);
   if (ecology.ambientRespawnTimer > 0 || ecology.reinforcementBudget <= 0 || activeEnemies.length >= targetCount) return;
 
@@ -4047,7 +4127,8 @@ function maybeTriggerMiningSpawn(
   world: GameWorld,
   beltId: string,
   anchorPosition: Vec2,
-  preferredVariantIds?: string[]
+  preferredVariantIds?: string[],
+  minedAmount = 1
 ) {
   const sector = getCurrentSector(world);
   if (sector.beltSpawnCooldowns[beltId] && sector.beltSpawnCooldowns[beltId] > 0) return;
@@ -4060,6 +4141,7 @@ function maybeTriggerMiningSpawn(
   const triggerChance = Math.min(
     SPAWN_BALANCE.triggerChance.miningMax,
     (profile.chance + SPAWN_BALANCE.triggerChance.miningBase + frontierBoost) *
+      clamp(1 + Math.max(0, minedAmount - 1) * 0.34, 1, 4.5) *
       getHostileActivityMultiplier(world, world.currentSectorId)
   );
   if (Math.random() > triggerChance) return;
@@ -4102,7 +4184,15 @@ function maybeTriggerPortalSpawn(world: GameWorld, destinationSectorId: string, 
 
 function updateRouteAutopilot(world: GameWorld) {
   if (!world.routePlan?.autoFollow || world.dockedStationId) return;
+  const nav = world.player.navigation;
+  if (nav.mode === "warping" || nav.mode === "jumping" || nav.mode === "docking") return;
   const interactionRange = getCachedDerivedStats(world.player).interactionRange;
+
+  const targetMatches = (target: SelectableRef | null) =>
+    Boolean(nav.target && target && nav.target.id === target.id && nav.target.type === target.type);
+  const shouldIssueNav = (mode: NavigationState["mode"], target: SelectableRef, desiredRange: number) =>
+    nav.mode !== mode || !targetMatches(target) || nav.desiredRange !== desiredRange;
+
   if (world.currentSectorId === world.routePlan.destinationSystemId && world.routePlan.destinationDestinationId) {
     const destination = getSystemDestination(world.currentSectorId, world.routePlan.destinationDestinationId);
     if (!destination) return;
@@ -4113,27 +4203,39 @@ function updateRouteAutopilot(world: GameWorld) {
 
     if (destination.kind === "station" || destination.kind === "outpost") {
       if (targetDistance <= interactionRange) {
-        issueNav(world, "docking", targetRef, 0);
-        return;
-      }
-      if (world.player.navigation.mode === "idle") {
-        if (destination.warpable && targetDistance > 190) {
-          issueNav(world, "align", targetRef, 130);
-        } else {
+        if (shouldIssueNav("docking", targetRef, 0)) {
           issueNav(world, "docking", targetRef, 0);
         }
+        return;
+      }
+      if (destination.warpable && targetDistance > 190) {
+        if (shouldIssueNav("align", targetRef, 130)) {
+          issueNav(world, "align", targetRef, 130);
+        }
+      } else if (shouldIssueNav("docking", targetRef, 0)) {
+        issueNav(world, "docking", targetRef, 0);
       }
       return;
     }
 
-    if (world.player.navigation.mode === "idle") {
-      if (destination.warpable && targetDistance > 190) {
-        issueNav(world, "align", targetRef, destination.kind === "gate" ? 120 : 130);
-      } else if (destination.kind === "gate") {
+    if (targetDistance <= interactionRange && destination.kind === "gate") {
+      if (shouldIssueNav("jumping", targetRef, 0)) {
         issueNav(world, "jumping", targetRef, 0);
-      } else {
-        issueNav(world, "approach", targetRef, 0);
       }
+      return;
+    }
+
+    if (destination.warpable && targetDistance > 190) {
+      const desiredRange = destination.kind === "gate" ? 120 : 130;
+      if (shouldIssueNav("align", targetRef, desiredRange)) {
+        issueNav(world, "align", targetRef, desiredRange);
+      }
+    } else if (destination.kind === "gate") {
+      if (shouldIssueNav("jumping", targetRef, 0)) {
+        issueNav(world, "jumping", targetRef, 0);
+      }
+    } else if (shouldIssueNav("approach", targetRef, 0)) {
+      issueNav(world, "approach", targetRef, 0);
     }
     return;
   }
@@ -4145,12 +4247,13 @@ function updateRouteAutopilot(world: GameWorld) {
   if (!gatePosition) return;
   const gateDistance = distance(world.player.position, gatePosition);
   if (gateDistance <= interactionRange) {
-    issueNav(world, "jumping", gateRef, 0);
+    if (shouldIssueNav("jumping", gateRef, 0)) {
+      issueNav(world, "jumping", gateRef, 0);
+    }
     return;
   }
-  if (world.player.navigation.mode === "idle") {
+  if (shouldIssueNav("align", gateRef, 120)) {
     issueNav(world, "align", gateRef, 120);
-    world.player.navigation.desiredRange = 120;
   }
 }
 
@@ -4177,6 +4280,10 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   if (nav.target && !currentTargetPosition && nav.mode !== "warping") {
     setIdle(nav);
   }
+  const warpCollisionSuppressed =
+    nav.mode === "warping" ||
+    nav.mode === "jumping" ||
+    (nav.mode === "align" && Boolean(nav.target) && nav.desiredRange >= 0 && nav.target ? isRemoteWarpableDestination(world, nav.target) : false);
 
   let targetPosition = currentTargetPosition ?? nav.destination;
   let maxSpeed = derived.maxSpeedWithAfterburner;
@@ -4378,15 +4485,17 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
     }
   }
 
-  desiredVelocity = applyTerrainNavigationInfluence(
-    world,
-    player.position,
-    desiredVelocity,
-    maxSpeed,
-    bodyRadius,
-    dt,
-    terrainBias
-  );
+  if (!warpCollisionSuppressed) {
+    desiredVelocity = applyTerrainNavigationInfluence(
+      world,
+      player.position,
+      desiredVelocity,
+      maxSpeed,
+      bodyRadius,
+      dt,
+      terrainBias
+    );
+  }
 
   if (length(desiredVelocity) > 1) {
     const angleStep = Math.min(1, derived.turnSpeed * dt * 0.9);
@@ -4414,7 +4523,7 @@ function updatePlayerNavigation(world: GameWorld, dt: number) {
   player.velocity = scale(player.velocity, 1 - Math.min(0.45, dt * navDamping));
   player.velocity = clampMagnitude(player.velocity, nav.mode === "align" ? maxSpeed * 0.9 : maxSpeed);
   player.position = add(player.position, scale(player.velocity, dt));
-  {
+  if (!warpCollisionSuppressed) {
     const collision = resolveAsteroidCollisions(world, player.position, player.velocity, bodyRadius);
     player.position = collision.position;
     player.velocity = collision.velocity;
@@ -4540,7 +4649,8 @@ function runPlayerModules(world: GameWorld, dt: number) {
               enemy.position,
               enemy.velocity,
               adjustedModule,
-              enemyVariantById[enemy.variantId].signatureRadius * enemy.effects.signatureMultiplier
+              enemyVariantById[enemy.variantId].signatureRadius * enemy.effects.signatureMultiplier,
+              player.navigation.mode
             );
             appliedDamage =
               application.damage *
@@ -4549,14 +4659,15 @@ function runPlayerModules(world: GameWorld, dt: number) {
               combatPressure.enemyDamageTakenMultiplier;
             quality = application.quality;
           } else if (module.kind === "missile") {
-            appliedDamage =
-              (module.damage ?? 0) *
-              getRangePenalty(targetDistance, module.optimal, module.falloff) *
-              difficulty.playerDamageMultiplier *
-              combatPressure.playerDamageMultiplier *
-              combatPressure.enemyDamageTakenMultiplier;
-            quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
-          }
+          appliedDamage =
+            (module.damage ?? 0) *
+            getRangePenalty(targetDistance, module.optimal, module.falloff) *
+            difficulty.playerDamageMultiplier *
+            combatPressure.playerDamageMultiplier *
+            combatPressure.enemyDamageTakenMultiplier *
+            (player.navigation.mode === "orbit" ? COMBAT_BALANCE.turret.orbitIndirectDamageMultiplier : 1);
+          quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
+        }
           if (enemy) {
             const appliedTotal = applyDamageToTarget(
               enemy,
@@ -4568,6 +4679,9 @@ function runPlayerModules(world: GameWorld, dt: number) {
               enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 8);
             }
             showHitText(world, enemy.position, appliedTotal, quality, "player");
+            if (module.kind === "missile") {
+              applyMissileSplashDamage(world, enemy.position, "player", appliedDamage, module.id, enemy.id);
+            }
           }
         }
         sector.projectiles.push(
@@ -4665,7 +4779,8 @@ function runPlayerModules(world: GameWorld, dt: number) {
             world,
             asteroid.beltId,
             asteroid.position,
-            sourceField?.hostileSpawnVariantIds
+            sourceField?.hostileSpawnVariantIds,
+            totalMined
           );
           awardPilotLicenseProgress(world, totalMined * 0.35);
         }
@@ -4903,7 +5018,7 @@ function updateEnemyNavigation(world: GameWorld, enemyId: string, dt: number) {
   }
   enemy.velocity = clampMagnitude(enemy.velocity, effectiveSpeed);
   enemy.position = add(enemy.position, scale(enemy.velocity, dt));
-  {
+  if (enemy.navigation.mode !== "warping" && enemy.navigation.mode !== "jumping") {
     const collision = resolveAsteroidCollisions(world, enemy.position, enemy.velocity, Math.max(12, variant.signatureRadius * 0.42));
     enemy.position = collision.position;
     enemy.velocity = collision.velocity;
@@ -5015,7 +5130,8 @@ function runEnemyModules(world: GameWorld, dt: number) {
             },
             targetIsPlayer
               ? playerShipById[world.player.hullId].signatureRadius * world.player.effects.signatureMultiplier
-              : enemyVariantById[targetEnemy?.variantId ?? enemy.variantId].signatureRadius
+              : enemyVariantById[targetEnemy?.variantId ?? enemy.variantId].signatureRadius,
+            targetIsPlayer ? world.player.navigation.mode : targetEnemy?.navigation.mode
           );
           appliedDamage = application.damage * difficulty.enemyDamageMultiplier * combatPressure.enemyDamageMultiplier;
           quality = application.quality;
@@ -5024,7 +5140,8 @@ function runEnemyModules(world: GameWorld, dt: number) {
             (module.damage ?? 0) *
             getRangePenalty(targetDistance, module.optimal, module.falloff) *
             difficulty.enemyDamageMultiplier *
-            combatPressure.enemyDamageMultiplier;
+            combatPressure.enemyDamageMultiplier *
+            (enemy.navigation.mode === "orbit" ? COMBAT_BALANCE.turret.orbitIndirectDamageMultiplier : 1);
           quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
         }
         if (targetIsPlayer) {
@@ -5034,6 +5151,9 @@ function runEnemyModules(world: GameWorld, dt: number) {
             getPlayerLayerResists(world)
           );
           showHitText(world, world.player.position, appliedTotal, quality, "enemy");
+          if (module.kind === "missile") {
+            applyMissileSplashDamage(world, world.player.position, "enemy", appliedDamage, module.id, "player");
+          }
           sector.projectiles.push(
             createProjectile(
               allied ? "ally" : "enemy",
@@ -5053,6 +5173,16 @@ function runEnemyModules(world: GameWorld, dt: number) {
             getEnemyLayerResists(targetEnemy.id, world)
           );
           showHitText(world, targetEnemy.position, appliedTotal, quality, allied ? "enemy" : "enemy");
+          if (module.kind === "missile") {
+            applyMissileSplashDamage(
+              world,
+              targetEnemy.position,
+              "enemy",
+              appliedDamage,
+              module.id,
+              targetEnemy.id
+            );
+          }
           sector.projectiles.push(
             createProjectile(
               allied ? "ally" : "enemy",
@@ -5131,7 +5261,7 @@ function updateProjectiles(world: GameWorld, dt: number) {
       (asteroid) => distance(projectile.position, asteroid.position) <= projectile.radius + asteroid.radius
     );
     if (asteroidHit) {
-      emitImpact(world, projectile.position, "#b7b0a6", projectile.moduleId);
+      emitImpact(world, projectile.position, projectile.moduleId.includes("missile") ? "#ffb265" : "#b7b0a6", projectile.moduleId);
       return;
     }
 
@@ -5172,6 +5302,16 @@ function updateProjectiles(world: GameWorld, dt: number) {
             const impactPos = enemy.position;
             const impactColor = projectile.moduleId.includes("missile") ? "#ffb265" : "#6feeff";
             emitImpact(world, impactPos, impactColor, projectile.moduleId);
+            if (projectile.moduleId.includes("missile")) {
+              applyMissileSplashDamage(
+                world,
+                impactPos,
+                projectile.owner,
+                projectile.damage,
+                projectile.moduleId,
+                enemy.id
+              );
+            }
             // Layer-specific hit sparks (mirrors player hit feedback)
             const hullDamaged = hullBefore > enemy.hull;
             const armorDamaged = armorBefore > enemy.armor;
@@ -5255,6 +5395,16 @@ function updateProjectiles(world: GameWorld, dt: number) {
         projectile.damage < 1 ? "#c4d1e8" : "#ff7d7d"
       );
       if (projectile.damage >= 1) {
+        if (projectile.moduleId.includes("missile")) {
+          applyMissileSplashDamage(
+            world,
+            world.player.position,
+            projectile.owner,
+            projectile.damage,
+            projectile.moduleId,
+            "player"
+          );
+        }
         const hullDamaged = hullBefore > world.player.hull;
         const armorDamaged = armorBefore > world.player.armor;
         const shieldDamaged = shieldBefore > world.player.shield;

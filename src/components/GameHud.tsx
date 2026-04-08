@@ -64,6 +64,7 @@ interface GameHudProps {
   onActivateBuild: (buildId: "build-1" | "build-2" | "build-3") => void;
   onActivateTacticalSlow: () => void;
   onSetTimeScale: (value: number) => void;
+  onSetRouteDestination: (systemId: string, preference: "shortest" | "safer", autoFollow?: boolean) => void;
   onIssueCommand: (command: CommandAction) => void;
   onStopShip: () => void;
   onToggleAutopilot: () => void;
@@ -336,6 +337,7 @@ export function GameHud({
   onActivateBuild,
   onActivateTacticalSlow,
   onSetTimeScale,
+  onSetRouteDestination,
   onIssueCommand,
   onStopShip,
   onToggleAutopilot,
@@ -435,6 +437,93 @@ export function GameHud({
           activeMissionRoute?.targetSystem?.name ??
           activeMission?.targetSystemId ??
           null;
+
+  const missionGoTarget = useMemo(() => {
+    if (activeTransportMission) {
+      if (activeTransportMission.objectiveSystemId !== world.currentSectorId) {
+        return {
+          kind: "route" as const,
+          systemId: activeTransportMission.objectiveSystemId,
+          label:
+            activeTransportMission.objectiveText ||
+            sectorById[activeTransportMission.objectiveSystemId]?.name ||
+            activeTransportMission.objectiveSystemId
+        };
+      }
+      if (objectiveRef) {
+        return {
+          kind: "command" as const,
+          command: { type: "dock" as const, target: objectiveRef },
+          label: activeTransportMission.objectiveText || "Dock"
+        };
+      }
+    }
+
+    if (activeMission?.targetSystemId) {
+      if (activeMission.targetSystemId !== world.currentSectorId) {
+        return {
+          kind: "route" as const,
+          systemId: activeMission.targetSystemId,
+          label:
+            activeMissionRoute?.targetSystem?.name ??
+            sectorById[activeMission.targetSystemId]?.name ??
+            activeMission.targetSystemId
+        };
+      }
+      if (missionObjectiveRef) {
+        const destination = activeMissionRoute?.targetDestination;
+        if (destination?.kind === "station" || destination?.kind === "outpost") {
+          return {
+            kind: "command" as const,
+            command: { type: "dock" as const, target: missionObjectiveRef },
+            label: destination.name
+          };
+        }
+        if (destination?.kind === "gate") {
+          return {
+            kind: "command" as const,
+            command: { type: "jump" as const, target: missionObjectiveRef },
+            label: destination.name
+          };
+        }
+        return {
+          kind: "command" as const,
+          command: { type: "warp" as const, target: missionObjectiveRef, range: 130 },
+          label: destination?.name ?? activeMissionRoute?.targetSystem?.name ?? "Go"
+        };
+      }
+    }
+
+    if (activeProceduralContract && activeProceduralContract.targetSystemId !== world.currentSectorId) {
+      return {
+        kind: "route" as const,
+        systemId: activeProceduralContract.targetSystemId,
+        label:
+          sectorById[activeProceduralContract.targetSystemId]?.name ??
+          activeProceduralContract.targetSystemId
+      };
+    }
+
+    return null;
+  }, [
+    activeMission?.targetSystemId,
+    activeMissionRoute?.targetDestination,
+    activeMissionRoute?.targetSystem?.name,
+    activeProceduralContract,
+    activeTransportMission,
+    missionObjectiveRef,
+    objectiveRef,
+    world.currentSectorId
+  ]);
+
+  function handleMissionGo() {
+    if (!missionGoTarget) return;
+    if (missionGoTarget.kind === "route") {
+      onSetRouteDestination(missionGoTarget.systemId, "safer", true);
+      return;
+    }
+    onIssueCommand(missionGoTarget.command);
+  }
 
   // ── Route tracker
   const routeTracker = useMemo(() => {
@@ -835,20 +924,18 @@ export function GameHud({
                 {missionGuideTarget}
               </span>
             )}
-            {(objectiveRef || missionObjectiveRef) && (
+            {missionGoTarget && (
               <button
                 type="button"
                 className="mission-nano-warp"
-                title="Warp to objective"
-                onClick={() =>
-                  onIssueCommand({
-                    type: "warp",
-                    target: (objectiveRef ?? missionObjectiveRef)!,
-                    range: 130
-                  })
+                title={
+                  missionGoTarget.kind === "route"
+                    ? `Route to ${missionGoTarget.label}`
+                    : `Go to ${missionGoTarget.label}`
                 }
+                onClick={handleMissionGo}
               >
-                ✦
+                ⟿
               </button>
             )}
           </div>

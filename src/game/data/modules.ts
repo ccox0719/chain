@@ -92,6 +92,12 @@ function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefini
   const paceScale = techLevel === 2 ? 0.92 : 0.84;
   const capScale = techLevel === 2 ? 1.12 : 1.24;
   const priceScale = techLevel === 2 ? 1.95 : 3.2;
+  const miningCapScale =
+    base.kind === "mining_laser"
+      ? techLevel === 2
+        ? 1.85
+        : 2.95
+      : capScale;
   return {
     ...base,
     id: `${base.id}-t${techLevel}`,
@@ -101,8 +107,8 @@ function makeTechVariant(base: ModuleDefinition, techLevel: 2 | 3): ModuleDefini
     price: Math.round(base.price * priceScale),
     tags: Array.from(new Set([...base.tags, "tech", `tech-${techLevel}`, techLevel === 3 ? "frontier" : "high-tech"])),
     cycleTime: base.cycleTime ? Number((base.cycleTime * paceScale).toFixed(2)) : base.cycleTime,
-    capacitorUse: base.capacitorUse ? Number((base.capacitorUse * capScale).toFixed(1)) : base.capacitorUse,
-    capacitorDrain: base.capacitorDrain ? Number((base.capacitorDrain * capScale).toFixed(1)) : base.capacitorDrain,
+    capacitorUse: base.capacitorUse ? Number((base.capacitorUse * miningCapScale).toFixed(1)) : base.capacitorUse,
+    capacitorDrain: base.capacitorDrain ? Number((base.capacitorDrain * miningCapScale).toFixed(1)) : base.capacitorDrain,
     damage: base.damage ? Number((base.damage * powerScale).toFixed(2)) : base.damage,
     repairAmount: base.repairAmount ? Number((base.repairAmount * powerScale).toFixed(2)) : base.repairAmount,
     miningAmount: base.miningAmount ? Number((base.miningAmount * powerScale).toFixed(2)) : base.miningAmount,

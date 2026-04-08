@@ -131,7 +131,7 @@ const SPAWN_BALANCE_DEFAULT = {
     presenceBase: 0.003,
     presenceDangerScale: 0.0007,
     proximity: 0.008,
-    mining: 0.003,
+    mining: 0.004,
     mission: 0.006,
     contract: 0.004,
     decay: {

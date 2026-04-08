@@ -165,7 +165,7 @@ function createSystemEcology(sectorId: string): SystemEcology {
       salvageBias: sector.danger >= 3 ? 1.1 : 0.92,
       tradeBias
     },
-    ambientRespawnTimer: 24,
+    ambientRespawnTimer: 60,
     missionSpawnTimer: 0
   };
 }

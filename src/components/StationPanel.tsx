@@ -309,6 +309,28 @@ const BALANCE_GROUPS: BalanceGroup[] = [
   {
     title: "Spawns",
     note: "Main lever for how often extra enemies show up.",
+    masterDial: {
+      label: "Mining heat",
+      helper: "Safer ← lowers passive belt pressure. Deadlier → raises ambient belt pressure, mining trigger chance, and big-haul danger.",
+      min: 0.6,
+      max: 1.6,
+      step: 0.01,
+      derive(dial: number) {
+        const o = dial - 1;
+        const c = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+        return [
+          { path: ["sectorChallenge", "mining"], value: c(0.004 + o * 0.002, 0.0008, 0.0085) },
+          { path: ["triggerChance", "miningBase"], value: c(0.02 + o * 0.012, 0.004, 0.05) },
+          { path: ["triggerChance", "miningMax"], value: c(0.24 + o * 0.09, 0.08, 0.4) },
+          { path: ["triggerChance", "miningFrontierPerTier"], value: c(0.01 + o * 0.006, 0.002, 0.02) }
+        ];
+      },
+      inferFrom() {
+        const base = getBalanceValue("spawns", ["sectorChallenge", "mining"]);
+        const dial = 1 + (base - 0.004) / 0.002;
+        return Math.max(0.6, Math.min(1.6, Math.round(dial * 100) / 100));
+      }
+    },
     controls: [
       {
         root: "spawns",
@@ -327,6 +349,33 @@ const BALANCE_GROUPS: BalanceGroup[] = [
         max: 8,
         step: 1,
         helper: "Caps how many triggered enemies can stack near the player."
+      },
+      {
+        root: "spawns",
+        path: ["sectorChallenge", "mining"],
+        label: "Mining ambient pressure",
+        min: 0.0008,
+        max: 0.0085,
+        step: 0.0001,
+        helper: "Passive pressure added while you mine near an asteroid belt."
+      },
+      {
+        root: "spawns",
+        path: ["triggerChance", "miningBase"],
+        label: "Mining trigger base",
+        min: 0,
+        max: 0.08,
+        step: 0.001,
+        helper: "Baseline chance that any mining cycle wakes up hostiles."
+      },
+      {
+        root: "spawns",
+        path: ["triggerChance", "miningMax"],
+        label: "Mining trigger cap",
+        min: 0.05,
+        max: 0.5,
+        step: 0.01,
+        helper: "Upper limit for mining-trigger hostility."
       }
     ]
   },

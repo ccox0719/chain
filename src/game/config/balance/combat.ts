@@ -4,13 +4,13 @@ const COMBAT_BALANCE_DEFAULT = {
   // Individual combat pressure multipliers. Each directly scales one aspect of the fight.
   // Defaults reflect the normal-difficulty tuning.
   pressure: {
-    masterDial: 0.8,                    // UI only, not read by simulation
+    masterDial: 0.7,                    // UI only, not read by simulation
     playerDamageMultiplier: 1.147,      // your outgoing damage
     enemyDamageMultiplier: 0.811,       // enemy outgoing damage
     playerTrackingMultiplier: 1.0945,   // your turret accuracy vs moving targets
     enemyTrackingMultiplier: 0.916,     // enemy turret accuracy vs you
     enemyDetectionMultiplier: 0.937,    // how far enemies spot and chase you
-    enemyDamageTakenMultiplier: 0.748    // multiplier on damage enemies actually receive
+    enemyDamageTakenMultiplier: 0.748   // multiplier on damage enemies actually receive
   },
   // Core damage model defaults. Used when a weapon does not provide a typed profile.
   damage: {
@@ -29,6 +29,9 @@ const COMBAT_BALANCE_DEFAULT = {
     trajectoryScalar: 0.58,
     trajectoryRadialBonus: 0.22,
     trajectoryLateralPenalty: 0.18,
+    orbitIndirectDamageMultiplier: 0.88,
+    missileSplashRadius: 72,
+    missileSplashDamageMultiplier: 0.4,
     qualityExcellent: 0.82,
     qualitySolid: 0.48,
     qualityGrazing: 0.14

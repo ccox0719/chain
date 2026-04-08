@@ -2972,9 +2972,24 @@ select {
   gap: 0.35rem;
 }
 
-.map-edge { stroke: rgba(130, 158, 210, 0.16); stroke-width: 1.5; }
-.map-edge.active { stroke: rgba(255, 200, 128, 0.68); stroke-width: 2.5; }
-.map-edge.mission-route { stroke: rgba(141, 224, 174, 0.72); stroke-width: 2.2; stroke-dasharray: 6 4; }
+.map-edge {
+  stroke: rgba(130, 158, 210, 0.16);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.map-edge.active {
+  stroke: rgba(255, 214, 138, 0.95);
+  stroke-width: 4;
+  stroke-dasharray: 10 6;
+  filter: drop-shadow(0 0 6px rgba(255, 214, 138, 0.45));
+}
+.map-edge.mission-route {
+  stroke: rgba(141, 224, 174, 0.95);
+  stroke-width: 3.2;
+  stroke-dasharray: 8 5;
+  filter: drop-shadow(0 0 5px rgba(141, 224, 174, 0.38));
+}
 
 .faction-legend-row,
 .tag-row {
@@ -3026,7 +3041,11 @@ select {
 .map-node.map-route-node   { stroke: rgba(127, 192, 255, 0.62); }
 .map-node.map-pickup       { stroke: rgba(141, 224, 174, 0.82); }
 .map-node.map-destination  { stroke: rgba(255, 200, 128, 0.82); }
-.map-node.mission-route-node { stroke: rgba(141, 224, 174, 0.9); stroke-width: 2.4; }
+.map-node.mission-route-node {
+  stroke: rgba(141, 224, 174, 1);
+  stroke-width: 3.2;
+  filter: drop-shadow(0 0 5px rgba(141, 224, 174, 0.38));
+}
 .map-node.last-death-node {
   fill: rgba(255, 128, 128, 0.09);
   stroke: rgba(255, 128, 128, 0.9);

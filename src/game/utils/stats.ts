@@ -119,7 +119,7 @@ function computeBaseDerivedStats(player: PlayerState) {
     turretFalloffMultiplier: 1,
     laserDamageMultiplier: 1,
     railgunDamageMultiplier: 1,
-    missileDamageMultiplier: 1,
+    missileDamageMultiplier: 1.08,
     cannonDamageMultiplier: 1,
     laserCycleMultiplier: 1,
     railgunCycleMultiplier: 1,

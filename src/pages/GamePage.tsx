@@ -84,6 +84,7 @@ export function GamePage() {
           onActivateBuild={actions.activateBuild}
           onActivateTacticalSlow={actions.activateTacticalSlow}
           onSetTimeScale={actions.setTimeScale}
+          onSetRouteDestination={actions.setRouteDestination}
           onIssueCommand={actions.issueCommand}
           onStopShip={() => actions.issueCommand({ type: "stop" })}
           onToggleAutopilot={() => actions.setRouteAutoFollow(!Boolean(snapshot.world.routePlan?.autoFollow))}
