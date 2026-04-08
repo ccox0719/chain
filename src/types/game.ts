@@ -248,6 +248,24 @@ export interface SystemDestination {
   };
 }
 
+export interface FactionWarEventState {
+  id: string;
+  cycle: number;
+  regionId: string;
+  systemId: string;
+  locationId: string | null;
+  title: string;
+  description: string;
+  alliedFactionId: FactionId;
+  enemyFactionId: FactionId;
+  alliedShipCap: number;
+  enemyShipCap: number;
+  announcedAt: number;
+  expiresAt: number;
+  status: "announced" | "active" | "resolved";
+  acknowledged: boolean;
+}
+
 export interface ShipHullDefinition {
   id: string;
   name: string;
@@ -355,6 +373,7 @@ export interface FactionDefinition {
 export interface ModuleDefinition {
   id: string;
   name: string;
+  specialReward?: boolean;
   techLevel?: number;
   classTier?: "civilian" | "tech";
   slot: ModuleSlot;
@@ -748,6 +767,8 @@ export interface TransportMissionDefinition {
   baseReward: number;
   bonusReward?: number;
   bonusTimeLimitSec?: number;
+  rewardModuleId?: string;
+  rewardModuleCount?: number;
   riskLevel: TransportRisk;
   clientFaction: FactionId;
   requiredStanding?: number;
@@ -864,7 +885,8 @@ export type LocalSiteType =
   | "anomaly"
   | "mission"
   | "wreck"
-  | "outpost";
+  | "outpost"
+  | "warzone";
 
 export interface LocalSiteState {
   systemId: string;
@@ -903,6 +925,7 @@ export interface PlayerState {
   starterConfigId: StarterShipConfigId;
   pilotLicense: PilotLicenseState;
   factionStandings: FactionStandingState;
+  factionRewardClaims: Record<FactionId, boolean>;
   hullId: string;
   ownedShips: string[];
   position: Vec2;
@@ -936,6 +959,8 @@ export interface EnemyState {
   variantId: string;
   bossMissionId?: string;
   boss?: boolean;
+  alignment?: "hostile" | "ally";
+  warEventId?: string;
   position: Vec2;
   velocity: Vec2;
   rotation: number;
@@ -966,7 +991,7 @@ export interface AsteroidState {
 
 export interface ProjectileState {
   id: string;
-  owner: "player" | "enemy";
+  owner: "player" | "enemy" | "ally";
   moduleId: string;
   position: Vec2;
   velocity: Vec2;
@@ -1104,6 +1129,7 @@ export interface ProcgenState {
   eventCycle: number;
   regionalEvents: Record<string, RegionalEventState>;
   siteHotspots: Record<string, ProceduralSiteHotspotState>;
+  warEvents: Record<string, FactionWarEventState>;
   activeContract: ProceduralContractDefinition | null;
   activeContractState: ProceduralContractState | null;
 }
@@ -1292,5 +1318,6 @@ export interface GameSnapshot {
   availableProceduralContracts: ProceduralContractDefinition[];
   regionalEvent: RegionalEventState | null;
   currentHotspot: ProceduralSiteHotspotState | null;
+  activeWarEvent: FactionWarEventState | null;
   economy: EconomySnapshot;
 }

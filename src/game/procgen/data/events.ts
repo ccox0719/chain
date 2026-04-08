@@ -99,5 +99,122 @@ export const regionalEventTemplates: RegionalEventTemplate[] = [
       { tag: "salvage", buyMultiplier: 1.02, sellMultiplier: 1.09 },
       { tag: "frontier", buyMultiplier: 1.01, sellMultiplier: 1.05 }
     ]
+  },
+  {
+    id: "crosswind-quarantine",
+    regions: ["aurelian-core", "industrial-fringe", "frontier-march"],
+    weight: 2,
+    name: "Crosswind Quarantine",
+    description: "A fast-moving containment sweep is rerouting traffic and paying more for compliant escorts and emergency freight.",
+    affectedTags: ["medical", "logistics", "frontier"],
+    serviceOffer: "Dispatch desks are prioritizing clean, documented routes.",
+    hostileActivityMultiplier: 0.96,
+    rewardMultiplier: 1.08,
+    missionTypeWeights: { transport: 1.18, mining: 0.92, bounty: 0.88 },
+    stockBiasTags: ["medical", "essentials"],
+    priceAdjustments: [
+      { tag: "medical", buyMultiplier: 0.95, sellMultiplier: 1.04 },
+      { tag: "essentials", buyMultiplier: 0.96, sellMultiplier: 1.02 }
+    ]
+  },
+  {
+    id: "rail-corridor-crackdown",
+    regions: ["industrial-fringe"],
+    weight: 3,
+    name: "Rail Corridor Crackdown",
+    description: "Union and contractor security are tightening along the freight lanes. Cargo is safer, but patrol work is hot.",
+    affectedTags: ["industrial", "military", "logistics"],
+    serviceOffer: "Freight offices are boosting escort and convoy cover rates.",
+    hostileActivityMultiplier: 1.12,
+    rewardMultiplier: 1.06,
+    missionTypeWeights: { transport: 1.08, mining: 0.9, bounty: 1.18 },
+    stockBiasTags: ["industrial", "materials"],
+    priceAdjustments: [
+      { tag: "industrial", buyMultiplier: 1.02, sellMultiplier: 1.06 },
+      { tag: "materials", buyMultiplier: 1.01, sellMultiplier: 1.05 }
+    ]
+  },
+  {
+    id: "blackout-relief",
+    regions: ["aurelian-core", "frontier-march"],
+    weight: 2,
+    name: "Blackout Relief",
+    description: "A network outage cut several local systems loose from normal market rhythms. Relief cargo and survey work both pay well.",
+    affectedTags: ["technology", "research", "navigation"],
+    serviceOffer: "Emergency route desks are paying for data, parts, and quick courier runs.",
+    rewardMultiplier: 1.1,
+    missionTypeWeights: { transport: 1.22, mining: 0.88, bounty: 0.92 },
+    stockBiasTags: ["technology", "research"],
+    priceAdjustments: [
+      { tag: "technology", buyMultiplier: 0.97, sellMultiplier: 1.06 },
+      { tag: "research", buyMultiplier: 0.96, sellMultiplier: 1.07 }
+    ]
+  },
+  {
+    id: "claim-race",
+    regions: ["frontier-march"],
+    weight: 2,
+    name: "Claim Race",
+    description: "Salvage crews are racing to mark debris fields before the bigger outfits arrive. Fast recovery jobs are paying a premium.",
+    affectedTags: ["salvage", "frontier", "combat"],
+    serviceOffer: "Local buyers want marked fields cleared, cataloged, and defended.",
+    hostileActivityMultiplier: 1.1,
+    rewardMultiplier: 1.12,
+    missionTypeWeights: { transport: 0.92, mining: 1.08, bounty: 1.2 },
+    stockBiasTags: ["salvage", "frontier"],
+    priceAdjustments: [
+      { tag: "salvage", buyMultiplier: 1.02, sellMultiplier: 1.07 },
+      { tag: "frontier", buyMultiplier: 1.01, sellMultiplier: 1.04 }
+    ]
+  },
+  {
+    id: "frontier-signal-lag",
+    regions: ["frontier-march", "industrial-fringe"],
+    weight: 2,
+    name: "Frontier Signal Lag",
+    description: "Sparse relays are making route work erratic, while high-value data runs and sharp-eyed patrol work both gain urgency.",
+    affectedTags: ["navigation", "research", "frontier"],
+    serviceOffer: "Charts, timing packets, and relay checks are in demand.",
+    rewardMultiplier: 1.05,
+    missionTypeWeights: { transport: 1.14, mining: 0.9, bounty: 0.95 },
+    stockBiasTags: ["navigation", "research"],
+    priceAdjustments: [
+      { tag: "research", buyMultiplier: 0.97, sellMultiplier: 1.05 },
+      { tag: "frontier", buyMultiplier: 0.99, sellMultiplier: 1.03 }
+    ]
+  },
+  {
+    id: "merchant-fog",
+    regions: ["aurelian-core", "industrial-fringe"],
+    weight: 3,
+    name: "Merchant Fog",
+    description: "Traffic is thick enough to hide opportunists. Legal freight still moves, but convoy work is the safer bet.",
+    affectedTags: ["trade", "logistics", "market"],
+    serviceOffer: "Market brokers are paying for safe arrival over speed.",
+    hostileActivityMultiplier: 1.03,
+    rewardMultiplier: 1.01,
+    missionTypeWeights: { transport: 1.16, mining: 0.9, bounty: 0.96 },
+    stockBiasTags: ["trade", "essentials"],
+    priceAdjustments: [
+      { tag: "trade", buyMultiplier: 0.96, sellMultiplier: 1.02 },
+      { tag: "essentials", buyMultiplier: 0.97, sellMultiplier: 1.01 }
+    ]
+  },
+  {
+    id: "border-response",
+    regions: ["industrial-fringe", "frontier-march"],
+    weight: 2,
+    name: "Border Response",
+    description: "Response teams are moving fast to keep the border quiet. Patrols and escort cover are both pulling extra pay.",
+    affectedTags: ["combat", "military", "frontier"],
+    serviceOffer: "Border offices want hostiles reduced before freight backs up.",
+    hostileActivityMultiplier: 1.14,
+    rewardMultiplier: 1.09,
+    missionTypeWeights: { transport: 1.0, mining: 0.86, bounty: 1.28 },
+    stockBiasTags: ["military", "frontier"],
+    priceAdjustments: [
+      { tag: "military", buyMultiplier: 1.01, sellMultiplier: 1.05 },
+      { tag: "frontier", buyMultiplier: 0.99, sellMultiplier: 1.04 }
+    ]
   }
 ];

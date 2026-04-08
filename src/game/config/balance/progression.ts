@@ -17,7 +17,7 @@ const PROGRESSION_BALANCE_DEFAULT = {
     maxTier: 4
   },
   pilotLicense: {
-    awardMultiplier: 1.5,
+    awardMultiplier: 2,
     lossMinimum: 1
   }
 } as const;

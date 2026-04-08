@@ -1,4 +1,4 @@
-import { ModuleDefinition, SecurityBand, SystemDestination } from "../../types/game";
+import { GameWorld, ModuleDefinition, SecurityBand, SystemDestination } from "../../types/game";
 import { stationMarketProfileById } from "./data/stationMarketProfiles";
 import { ECONOMY_BALANCE } from "../config/balance";
 
@@ -66,8 +66,14 @@ export function getModuleStockScore(module: ModuleDefinition, security: Security
   return clamp(score, ECONOMY_BALANCE.moduleStockScore.clampMin, ECONOMY_BALANCE.moduleStockScore.clampMax);
 }
 
-export function isModuleAvailableAtStation(module: ModuleDefinition, security: SecurityBand, station: SystemDestination | null) {
+export function isModuleAvailableAtStation(
+  module: ModuleDefinition,
+  security: SecurityBand,
+  station: SystemDestination | null,
+  world?: GameWorld
+) {
   if (!station) return false;
+  if (module.specialReward) return false;
   const score = getModuleStockScore(module, security, station);
   const roll = hashStringToUnitInterval(`${station.id}:${module.id}:roll`);
   return roll < score;

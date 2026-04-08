@@ -225,6 +225,17 @@ function createStartingFactionStandings(): PlayerState["factionStandings"] {
   };
 }
 
+function createStartingFactionRewardClaims(): PlayerState["factionRewardClaims"] {
+  return {
+    "aurelian-league": false,
+    "cinder-union": false,
+    veilborn: false,
+    "helion-cabal": false,
+    "ironbound-syndicate": false,
+    "blackwake-clans": false
+  };
+}
+
 export function rebuildPlayerRuntime(player: PlayerState) {
   player.modules = {
     weapon: createRuntimeSlots(player.equipped.weapon),
@@ -241,6 +252,7 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
     starterConfigId: starterConfig.id,
     pilotLicense: normalizePilotLicense({ progress: 0 }),
     factionStandings: createStartingFactionStandings(),
+    factionRewardClaims: createStartingFactionRewardClaims(),
     hullId: hull.id,
     ownedShips: [hull.id],
     position: { x: 1140, y: 1180 },

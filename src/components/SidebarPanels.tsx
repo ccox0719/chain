@@ -39,6 +39,20 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
   haul: "Haul"
 };
 
+function formatWarTimeRemaining(seconds: number) {
+  if (seconds <= 0) return "ending";
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  if (minutes <= 0) return `${secs}s`;
+  return `${minutes}m ${secs.toString().padStart(2, "0")}s`;
+}
+
+function getWarIntelStateLabel(status: "announced" | "active" | "resolved") {
+  if (status === "announced") return "Announced";
+  if (status === "active") return "Active";
+  return "Resolved";
+}
+
 const mapWidth = 2200;
 const mapHeight = 1200;
 const MAP_MIN_ZOOM = 0.55;
@@ -354,6 +368,12 @@ export function SidebarPanels({
           .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
           .find((entry) => entry.id !== module.id && (entry.weaponClass ?? entry.sizeClass ?? entry.slot) === (module.weaponClass ?? module.sizeClass ?? module.slot)) ?? null
     }));
+  const warBulletins = Object.values(snapshot.world.procgen.warEvents).sort((left, right) => left.announcedAt - right.announcedAt);
+  const warEvents = warBulletins.filter((event) => event.status !== "resolved");
+  const upcomingWarEvent = warEvents.find((event) => event.status === "announced") ?? warEvents[0] ?? null;
+  const activeWarzoneLabel = upcomingWarEvent
+    ? `${upcomingWarEvent.status === "announced" ? "War intel" : "Warzone"} · ${sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}`
+    : null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -435,6 +455,16 @@ export function SidebarPanels({
                     ) : (
                       <div className="fit-empty-copy">No stored weapons.</div>
                     )}
+                    {upcomingWarEvent && (
+                      <span className="status-chip status-chip-danger">
+                        War intel · {upcomingWarEvent.title} · {sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}
+                      </span>
+                    )}
+                    {upcomingWarEvent && (
+                      <span className="status-chip status-chip-danger">
+                        War intel · {upcomingWarEvent.title} · {sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}
+                      </span>
+                    )}
                   </div>
                 </CollapsibleSection>
                 <CollapsibleSection title="Stored Modules" subtitle={`${moduleCatalog.length} types`} defaultOpen>
@@ -454,6 +484,43 @@ export function SidebarPanels({
           {overlay === "missions" && (
             <div className="overlay-grid">
               <section className="panel-lite">
+                {warBulletins.length > 0 && (
+                  <CollapsibleSection
+                    title="Station Bulletin"
+                    subtitle={`${warBulletins.length} ${warBulletins.length === 1 ? "entry" : "entries"} this cycle`}
+                    defaultOpen
+                  >
+                    <ul className="stack-list">
+                      {warBulletins.map((event) => {
+                        const remaining = Math.max(0, event.expiresAt - snapshot.world.elapsedTime);
+                        return (
+                          <li key={event.id}>
+                            <strong>{event.title}</strong>
+                            <div className="map-meta-row" style={{ marginTop: "0.2rem" }}>
+                              <span className="status-chip status-chip-mission">{getWarIntelStateLabel(event.status)}</span>
+                              <span className="status-chip" style={{ borderColor: factionData[event.alliedFactionId].color, color: factionData[event.alliedFactionId].color }}>
+                                {factionData[event.alliedFactionId].icon} {factionData[event.alliedFactionId].name}
+                              </span>
+                              <span className="status-chip" style={{ borderColor: factionData[event.enemyFactionId].color, color: factionData[event.enemyFactionId].color }}>
+                                {factionData[event.enemyFactionId].icon} {factionData[event.enemyFactionId].name}
+                              </span>
+                            </div>
+                            <p>{event.description}</p>
+                            <p>
+                              {sectorById[event.systemId]?.name ?? event.systemId}
+                              {" · "}
+                              {event.status === "announced"
+                                ? `joins in ${formatWarTimeRemaining(remaining)}`
+                                : event.status === "active"
+                                  ? `ends in ${formatWarTimeRemaining(remaining)}`
+                                  : "resolved"}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CollapsibleSection>
+                )}
                 <CollapsibleSection title="Mission Log" subtitle={`${missionCatalog.length + transportMissionCatalog.length} contracts`} defaultOpen>
                   <ul className="stack-list">
                     {missionCatalog.map((mission) => (
@@ -514,6 +581,7 @@ export function SidebarPanels({
             const modalRegion = modalSys ? regionById[modalSys.regionId] : null;
             const modalRegionFaction = modalRegion ? factionData[modalRegion.dominantFaction] : null;
             const modalFactionStanding = modalFaction ? (world.player.factionStandings[modalFaction.id] ?? 0) : 0;
+            const modalWarEvent = modalSys ? warEvents.find((event) => event.systemId === modalSys.id) ?? null : null;
             return (
               <div className="map-fullscreen-view">
                 <div className="map-top-bar">
@@ -536,6 +604,11 @@ export function SidebarPanels({
                         {activeTransportMission?.title ?? activeMission?.title ?? "Mission"} · {activeTransportMission ? activeTransportMission.nextGateName ?? "En route" : activeMissionRoute.nextGateName ?? "In-system"}
                       </span>
                     )}
+                    {upcomingWarEvent && (
+                      <span className="status-chip status-chip-danger">
+                        War intel · {upcomingWarEvent.title} · {sectorById[upcomingWarEvent.systemId]?.name ?? upcomingWarEvent.systemId}
+                      </span>
+                    )}
                   </div>
                   <div className="map-top-bar-right">
                     <div className="faction-legend-row">
@@ -545,6 +618,11 @@ export function SidebarPanels({
                           {faction.icon} {faction.name}
                         </span>
                       ))}
+                      {upcomingWarEvent && (
+                        <span className="status-chip status-chip-danger faction-legend-chip" style={{ borderColor: "#ff6f6f", color: "#ffb2b2" }}>
+                          ⚔ {activeWarzoneLabel}
+                        </span>
+                      )}
                     </div>
                     <div className="map-zoom-controls">
                       <button type="button" className="ghost-button mini" onClick={() => zoomMap(-MAP_ZOOM_STEP)}>−</button>
@@ -624,6 +702,7 @@ export function SidebarPanels({
                       const ringOpacity = Math.min(0.9, Math.max(0.4, influence / 110));
                       const isSelected = modalSystemId === system.id;
                       const isCurrent = system.id === world.currentSectorId;
+                      const systemWarEvent = warEvents.find((event) => event.systemId === system.id) ?? null;
                       return (
                         <g
                           key={system.id}
@@ -660,6 +739,12 @@ export function SidebarPanels({
                             style={{ fill: `${faction.color}22` }}
                           />
                           <text x={20} y={5} className="map-node-label">{system.name}</text>
+                          {systemWarEvent && (
+                            <>
+                              <circle r={isCurrent ? 30 : 23} className={`map-node war-event-node war-event-${systemWarEvent.status}`} />
+                              <text x={20} y={18} className="map-node-label war-event-label">WAR</text>
+                            </>
+                          )}
                           {deathSummary?.wreckSystemId === system.id && (
                             <>
                               <circle r={20} className="map-node last-death-node" />
@@ -719,6 +804,26 @@ export function SidebarPanels({
                         ))}
                       </div>
                     ) : null}
+                    {modalWarEvent && (
+                      <div className="map-system-modal-intel" style={{ marginTop: "0.6rem" }}>
+                        <span className="map-intel-label">War</span>
+                        <span className="status-chip status-chip-danger">{getWarIntelStateLabel(modalWarEvent.status)}</span>
+                        <span className="map-intel-label">Allies</span>
+                        <span className="status-chip" style={{ borderColor: factionData[modalWarEvent.alliedFactionId].color, color: factionData[modalWarEvent.alliedFactionId].color }}>
+                          {factionData[modalWarEvent.alliedFactionId].icon} {factionData[modalWarEvent.alliedFactionId].name}
+                        </span>
+                        <span className="map-intel-label">Hostiles</span>
+                        <span className="status-chip" style={{ borderColor: factionData[modalWarEvent.enemyFactionId].color, color: factionData[modalWarEvent.enemyFactionId].color }}>
+                          {factionData[modalWarEvent.enemyFactionId].icon} {factionData[modalWarEvent.enemyFactionId].name}
+                        </span>
+                        <span className="map-intel-label">Window</span>
+                        <span className="status-chip">
+                          {modalWarEvent.status === "announced"
+                            ? `joins in ${formatWarTimeRemaining(Math.max(0, modalWarEvent.expiresAt - snapshot.world.elapsedTime))}`
+                            : `ends in ${formatWarTimeRemaining(Math.max(0, modalWarEvent.expiresAt - snapshot.world.elapsedTime))}`}
+                        </span>
+                      </div>
+                    )}
                     <div className="map-system-modal-actions">
                       <button
                         type="button"

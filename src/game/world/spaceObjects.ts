@@ -90,6 +90,7 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
       if (!enemy) return null;
       const variant = enemyVariantById[enemy.variantId];
       const archetype = getEnemyArchetypeDefinition(variant.archetype);
+      const allied = enemy.alignment === "ally";
       const relativeVelocity = {
         x: enemy.velocity.x - playerVelocity.x,
         y: enemy.velocity.y - playerVelocity.y
@@ -107,13 +108,17 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         velocity: Math.hypot(enemy.velocity.x, enemy.velocity.y),
         angularVelocity,
         signatureRadius: variant.signatureRadius,
-        subtitle: `${system.name} hostile · ${factionData[variant.faction].name} · ${archetype?.roleLabel ?? variant.combatStyle}`,
+        subtitle: allied
+          ? `${system.name} allied wing · ${factionData[variant.faction].name} · ${archetype?.roleLabel ?? variant.combatStyle}`
+          : `${system.name} hostile · ${factionData[variant.faction].name} · ${archetype?.roleLabel ?? variant.combatStyle}`,
         factionLabel: factionData[variant.faction].name,
         roleLabel: archetype?.roleLabel ?? undefined,
-        bossLabel: variant.boss ? variant.bossTitle ?? "Boss" : undefined,
+        bossLabel: variant.boss ? variant.bossTitle ?? "Boss" : allied ? "Allied Wing" : undefined,
         threatLabel: variant.boss
           ? `Boss Threat ${variant.threatLevel}`
-          : `Threat ${variant.threatLevel}`,
+          : allied
+            ? "Allied"
+            : `Threat ${variant.threatLevel}`,
         combatProfileLabel: archetype?.summary ?? factionData[variant.faction].threatSummary,
         combatProfileTone: getCombatProfileTone(variant),
         weaknessLabel: getWeightedDamageWeakness(variant, enemy.shield, enemy.armor, enemy.hull) ?? undefined,

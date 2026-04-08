@@ -99,6 +99,30 @@ export const transportCargoTemplates: TransportCargoTemplate[] = [
     volumeRange: [28, 48],
     unitValueRange: [18, 26],
     routePreference: "safer"
+  },
+  {
+    id: "escort-vaults",
+    weight: 2,
+    cargoType: "escort-vaults",
+    label: "escort vaults",
+    titleNouns: ["Escort Screen", "Convoy Guard", "Shield Run"],
+    description: "Move sealed convoy crates that are only valuable if the lane survives the trip intact.",
+    tags: ["combat", "escort", "logistics"],
+    volumeRange: [18, 34],
+    unitValueRange: [22, 30],
+    routePreference: "safer"
+  },
+  {
+    id: "black-market-caches",
+    weight: 1,
+    cargoType: "unmarked-caches",
+    label: "unmarked caches",
+    titleNouns: ["Quiet Drop", "Shadow Lift", "Fence Relay"],
+    description: "Slip deniable cargo through a narrow window before the market shutters again.",
+    tags: ["salvage", "frontier", "trade"],
+    volumeRange: [14, 28],
+    unitValueRange: [26, 38],
+    routePreference: "shortest"
   }
 ];
 
@@ -129,6 +153,15 @@ export const miningContractTemplates: MiningContractTemplate[] = [
     description: "Bring back rare alloy while the local buyers are still paying frontier rates.",
     tags: ["salvage", "frontier", "mining"],
     countRange: [6, 10]
+  },
+  {
+    id: "relay-shard",
+    weight: 1,
+    resource: "local",
+    titleVerb: "Relay Harvest",
+    description: "Recover signal-dense debris from a field that only pays out if the scan survives the pass.",
+    tags: ["research", "navigation", "frontier"],
+    countRange: [8, 13]
   }
 ];
 
@@ -156,5 +189,21 @@ export const bountyContractTemplates: BountyContractTemplate[] = [
     description: "Hit the raider wing controlling today's most profitable frontier approach.",
     tags: ["combat", "frontier", "salvage"],
     countRange: [3, 5]
+  },
+  {
+    id: "escort-screen",
+    weight: 2,
+    titlePrefix: "Escort Screen",
+    description: "Keep a civilian convoy alive through a lane that always seems to attract trouble at the worst time.",
+    tags: ["combat", "escort", "patrol"],
+    countRange: [2, 4]
+  },
+  {
+    id: "patrol-sweep",
+    weight: 2,
+    titlePrefix: "Patrol Sweep",
+    description: "Clear a marked corridor and keep it quiet long enough for the route desks to reopen traffic.",
+    tags: ["combat", "patrol", "frontier"],
+    countRange: [3, 6]
   }
 ];

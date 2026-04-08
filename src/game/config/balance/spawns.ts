@@ -119,7 +119,7 @@ const SPAWN_BALANCE_DEFAULT = {
     frontierRoleBoost: 1.05
   },
   pressure: {
-    localReinforcementThreshold: 9,
+    localReinforcementThreshold: 11.5,
     frontierSwarmThreshold: 10,
     highTierEscortThreshold: 10,
     pressurePackThreshold: 9

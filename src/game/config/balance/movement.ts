@@ -3,6 +3,7 @@ import { createBalanceConfig } from "./overrides";
 const MOVEMENT_BALANCE_DEFAULT = {
   boundary: {
     deepSpaceMargin: 2400,
+    warningDistance: 135,
     // Each site type owns its own local-space pocket instead of inheriting a sector-sized edge.
     pocketTypes: {
       transit: {
@@ -89,7 +90,7 @@ const MOVEMENT_BALANCE_DEFAULT = {
     gateCorridorAllowance: 360
   },
   terrain: {
-    asteroidRepelPadding: 120,
+    asteroidRepelPadding: 175,
     asteroidPushStrength: 110,
     asteroidRadiusScale: 0.85,
     anomalyPullScale: 0.08,

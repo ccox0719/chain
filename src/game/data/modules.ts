@@ -1297,10 +1297,104 @@ const techVariantCatalog = baseModuleCatalog.flatMap((module) => [
   makeTechVariant(module, 3)
 ]);
 
+const epicModuleCatalog: ModuleDefinition[] = [
+  finalizeModule({
+    id: "aeon-command-core",
+    name: "Aeon Command Core",
+    specialReward: true,
+    slot: "utility",
+    category: "control",
+    kind: "passive",
+    sizeClass: "medium",
+    price: 6400,
+    description: "A command lattice that extends lock solutions, steadies tracking, and keeps long operations composed.",
+    tags: ["utility", "control", "high-tech", "military", "epic"],
+    roleTags: ["Control", "Sniper", "Support"],
+    activation: "passive",
+    modifiers: {
+      lockRange: 260,
+      capacitorRegen: 14,
+      turretTrackingMultiplier: 1.12,
+      shieldRegen: 3
+    }
+  }),
+  finalizeModule({
+    id: "atlas-salvage-array",
+    name: "Atlas Salvage Array",
+    specialReward: true,
+    slot: "utility",
+    category: "utility",
+    kind: "salvager",
+    sizeClass: "medium",
+    price: 5800,
+    description: "A heavy recovery net that tears value out of wrecks faster and pulls salvage from farther out.",
+    tags: ["utility", "salvage", "frontier", "high-tech", "epic"],
+    roleTags: ["Support", "Hauler"],
+    activation: "toggle",
+    requiresTarget: ["wreck"],
+    cycleTime: 2.1,
+    range: 260,
+    capacitorUse: 24,
+    salvageYieldMultiplier: 1.76,
+    autoSalvage: true,
+    modifiers: {}
+  }),
+  finalizeModule({
+    id: "apex-ward-matrix",
+    name: "Apex Ward Matrix",
+    specialReward: true,
+    slot: "defense",
+    category: "defense",
+    kind: "shield_booster",
+    price: 7200,
+    description: "A siege-grade shield matrix built to swing a fight back when the hull should already be breaking.",
+    tags: ["defense", "shield", "military", "high-tech", "epic"],
+    roleTags: ["Shield", "Support"],
+    activation: "toggle",
+    cycleTime: 3.2,
+    capacitorUse: 34,
+    repairAmount: 78,
+    modifiers: {
+      maxShield: 28,
+      shieldRegen: 4
+    }
+  }),
+  finalizeModule({
+    id: "solar-prism-cannon",
+    name: "Solar Prism Cannon",
+    specialReward: true,
+    slot: "weapon",
+    category: "weapon",
+    kind: "cannon",
+    sizeClass: "heavy",
+    price: 8400,
+    description: "A brutal forward cannon that turns disciplined heat and kinetic punch into a hull-breaking statement.",
+    tags: ["weapon", "cannon", "military", "high-tech", "epic"],
+    roleTags: ["Cannon", "Brawler", "Sniper"],
+    activation: "toggle",
+    requiresTarget: ["enemy"],
+    cycleTime: 3.4,
+    reloadTime: 5.2,
+    range: 610,
+    optimal: 470,
+    falloff: 190,
+    capacitorUse: 38,
+    damage: 54,
+    damageProfile: { em: 0.08, thermal: 0.42, kinetic: 0.36, explosive: 0.14 },
+    ammoType: "solar-shell",
+    magazineSize: 4,
+    tracking: 0.09,
+    signatureResolution: 96,
+    weaponClass: "heavy",
+    modifiers: {}
+  })
+];
+
 export const moduleCatalog: ModuleDefinition[] = [
   ...civilianCatalog,
   ...baseModuleCatalog,
-  ...techVariantCatalog
+  ...techVariantCatalog,
+  ...epicModuleCatalog
 ];
 
 export const moduleById = Object.fromEntries(moduleCatalog.map((item) => [item.id, item]));

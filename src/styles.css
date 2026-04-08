@@ -114,6 +114,71 @@ button:disabled { opacity: 0.38; cursor: default; }
 }
 
 /* ============================================
+   UI MODE SWITCHES
+   Portrait menus stack into a single column.
+   Battle mode keeps the wide tactical layout.
+   ============================================ */
+.game-shell.mode-menu .menu-backdrop {
+  place-items: start center;
+  padding: 0.5rem;
+}
+
+.game-shell.mode-menu .menu-panel,
+.game-shell.mode-menu .starter-picker-panel,
+.game-shell.mode-menu .death-panel,
+.game-shell.mode-menu .mission-card {
+  width: min(100%, 42rem);
+}
+
+.game-shell.mode-menu .hud-layer {
+  grid-template-rows: auto auto auto;
+}
+
+.game-shell.mode-menu .hud-top,
+.game-shell.mode-menu .hud-middle,
+.game-shell.mode-menu .hud-bottom,
+.game-shell.mode-menu .hud-bl,
+.game-shell.mode-menu .hud-bc,
+.game-shell.mode-menu .hud-br {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.game-shell.mode-menu .hud-top > *,
+.game-shell.mode-menu .hud-middle > *,
+.game-shell.mode-menu .hud-bottom > *,
+.game-shell.mode-menu .hud-bl > *,
+.game-shell.mode-menu .hud-bc > *,
+.game-shell.mode-menu .hud-br > * {
+  width: 100%;
+  max-width: none;
+}
+
+.game-shell.mode-menu .market-actions,
+.game-shell.mode-menu .action-row,
+.game-shell.mode-menu .starter-grid,
+.game-shell.mode-menu .station-grid,
+.game-shell.mode-menu .station-grid-compact,
+.game-shell.mode-menu .station-services-overview-grid,
+.game-shell.mode-menu .station-command-banner,
+.game-shell.mode-menu .missions-grid,
+.game-shell.mode-menu .build-slot-grid,
+.game-shell.mode-menu .build-slot-actions,
+.game-shell.mode-menu .mod-slot-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.game-shell.mode-menu .station-service-pills {
+  width: 100%;
+}
+
+.game-shell.mode-menu .action-row button,
+.game-shell.mode-menu .market-actions button,
+.game-shell.mode-menu .starter-grid button {
+  width: 100%;
+}
+
+/* ============================================
    MENU BUTTON (top-right corner)
    ============================================ */
 .menu-button {
@@ -2968,6 +3033,12 @@ select {
   stroke-width: 2.4;
   stroke-dasharray: 4 3;
 }
+.map-node.war-event-node {
+  fill: rgba(255, 70, 70, 0.08);
+  stroke: rgba(255, 96, 96, 0.95);
+  stroke-width: 2.8;
+  stroke-dasharray: 7 4;
+}
 
 .map-node.security-high     { fill: rgba(80, 165, 255, 0.18); }
 .map-node.security-medium   { fill: rgba(100, 195, 135, 0.18); }
@@ -2976,6 +3047,7 @@ select {
 
 .map-node-label   { fill: #cee0ff; font-size: 13px; }
 .map-node-label.last-death-label { fill: #ffdada; font-weight: 700; }
+.map-node-label.war-event-label { fill: #ff9d9d; font-weight: 800; letter-spacing: 0.08em; }
 .map-region-label { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; fill: rgba(255, 200, 135, 0.75); }
 
 /* ============================================

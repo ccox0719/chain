@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useMemo, useState } from "react";
+import { factionData } from "../game/data/factions";
 import { moduleById } from "../game/data/modules";
 import { getSystemDestination, sectorById } from "../game/data/sectors";
 import { enemyVariantById, playerShipById } from "../game/data/ships";
@@ -652,6 +653,13 @@ export function GameHud({
 
   // ── Boundary zone badge
   const showBoundary = boundary.warningLevel > 0.04 && boundary.title;
+  const warEvent = snapshot.activeWarEvent;
+  const warTimeRemaining = warEvent ? Math.max(0, warEvent.expiresAt - snapshot.world.elapsedTime) : 0;
+  const warTimeLabel = warEvent
+    ? warTimeRemaining > 60
+      ? `${Math.floor(warTimeRemaining / 60)}m ${Math.floor(warTimeRemaining % 60).toString().padStart(2, "0")}s`
+      : `${Math.ceil(warTimeRemaining)}s`
+    : null;
 
   return (
     <div className={`hud-layer${panelsVisible ? "" : " panels-hidden"}`}>
@@ -673,6 +681,17 @@ export function GameHud({
           </span>
         )}
       </div>
+      {warEvent && (
+        <div className="boundary-badge" style={{ top: 56 }} aria-live="polite">
+          {warEvent.title}
+          <span style={{ marginLeft: 8, fontSize: "0.76rem", color: "var(--text-dim)" }}>
+            {factionData[warEvent.alliedFactionId].name} vs {factionData[warEvent.enemyFactionId].name}
+          </span>
+          <span style={{ marginLeft: 8, fontSize: "0.76rem", color: "var(--text-dim)" }}>
+            {warEvent.status === "announced" ? "launches in" : "ends in"} {warTimeLabel}
+          </span>
+        </div>
+      )}
 
       {/* ── Boundary alert ── */}
       {showBoundary && (

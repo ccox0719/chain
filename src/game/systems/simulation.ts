@@ -37,10 +37,12 @@ import {
 } from "../../types/game";
 import { bossByMissionId } from "../data/bosses";
 import { factionData } from "../data/factions";
+import { getFactionRewardDefinition } from "../data/factionRewards";
 import { getEnemyArchetypeDefinition } from "../data/enemyArchetypes";
 import { missionById, missionCatalog } from "../data/missions";
 import { moduleById } from "../data/modules";
 import { enemyVariantById, enemyVariants, playerShipById } from "../data/ships";
+import { getStationMarketProfile } from "../economy/stationIntel";
 import { getSystemBeacons, getSystemDestination, getSystemDestinations, getSystemGates, getSystemStation, regionById, sectorById } from "../data/sectors";
 import { defaultStarterShipConfigId } from "../data/starterShips";
 import { createProjectile, createStarterPlayerState, rebuildPlayerRuntime } from "../entities/factories";
@@ -57,6 +59,7 @@ import { transportMissionById, transportMissionCatalog } from "../missions/data/
 import { commodityById, commodityCatalog } from "../economy/data/commodities";
 import { isCommodityStockedAtStation } from "../economy/commodityAvailability";
 import { isModuleAvailableAtStation } from "../economy/moduleAvailability";
+import { getFactionWarEventForSystem } from "../procgen/runtime";
 import {
   getCommodityBuyPrice,
   getCommoditySellPrice,
@@ -95,7 +98,7 @@ import {
 } from "../utils/vector";
 import { canMineResource, getMiningYieldMultiplier } from "../utils/mining";
 import { findObjectAtPoint, getObjectInfo, getObjectPosition, getOverviewEntries } from "../world/spaceObjects";
-import { createTransitLocalSite, enterDestinationSite, isDestinationLocal, isPositionInLocalSite, syncLocalSite } from "../world/sites";
+import { createTransitLocalSite, createWarzoneLocalSite, enterDestinationSite, isDestinationLocal, isPositionInLocalSite, syncLocalSite } from "../world/sites";
 import {
   CAPACITOR_BALANCE,
   COMBAT_BALANCE,
@@ -467,7 +470,7 @@ function applyPlayerBoundaryBehavior(world: GameWorld, dt: number) {
       ? "anomaly"
       : world.localSite.type === "belt"
         ? "belt"
-        : world.localSite.type === "mission"
+        : world.localSite.type === "mission" || world.localSite.type === "warzone"
           ? "mission"
           : world.localSite.type === "gate"
             ? "gate"
@@ -1287,12 +1290,15 @@ function completeTransportMission(world: GameWorld, mission: TransportMissionDef
     const cargoReimbursement = getTransportCargoReimbursement(mission);
     const payout = getTransportMissionPayout(world, mission);
     world.player.credits += payout;
+    if (mission.rewardModuleId) {
+      world.player.inventory.modules[mission.rewardModuleId] = (world.player.inventory.modules[mission.rewardModuleId] ?? 0) + (mission.rewardModuleCount ?? 1);
+    }
     awardPilotLicenseProgress(world, payout / 16);
     adjustFactionStanding(world, mission.clientFaction, 0.14);
     state.rewardClaimed = true;
     pushStory(
       world,
-      `Transport complete: ${mission.title} (+${payout} credits${cargoReimbursement ? `, including ${cargoReimbursement} credits cargo reimbursement` : ""}).`
+      `Transport complete: ${mission.title} (+${payout} credits${cargoReimbursement ? `, including ${cargoReimbursement} credits cargo reimbursement` : ""}${mission.rewardModuleId ? `, plus ${moduleById[mission.rewardModuleId]?.name ?? mission.rewardModuleId}` : ""}).`
     );
   }
   return true;
@@ -1391,6 +1397,42 @@ function claimMissionRewards(world: GameWorld, missionId: string) {
   }
   pushStory(world, `Mission complete: ${mission.title} (+${rewardCredits} credits)`);
   ensureMissionUnlocks(world);
+  return true;
+}
+
+export function claimFactionReward(world: GameWorld, factionId: FactionId) {
+  const reward = getFactionRewardDefinition(factionId);
+  if (!reward) {
+    pushStory(world, `${factionData[factionId].name} has no veteran reward catalogued here.`);
+    return false;
+  }
+  if (!world.dockedStationId) {
+    pushStory(world, "Dock at a faction station to claim standing rewards.");
+    return false;
+  }
+  const station = getCurrentStation(world);
+  const stationFactionId = station ? (getStationMarketProfile(station)?.factionControl ?? getCurrentSectorDef(world).controllingFaction) : null;
+  if (stationFactionId !== factionId) {
+    pushStory(world, `Faction rewards must be claimed at ${factionData[factionId].name} stations.`);
+    return false;
+  }
+  if (world.player.factionRewardClaims[factionId]) {
+    pushStory(world, `${factionData[factionId].name} reward already claimed.`);
+    return false;
+  }
+  const standing = world.player.factionStandings[factionId] ?? 0;
+  if (standing < reward.standingRequirement) {
+    pushStory(world, `${reward.title} requires ${factionData[factionId].name} standing ${reward.standingRequirement.toFixed(2)}.`);
+    return false;
+  }
+  const module = moduleById[reward.moduleId];
+  if (!module) {
+    pushStory(world, `${reward.title} is unavailable.`);
+    return false;
+  }
+  world.player.inventory.modules[reward.moduleId] = (world.player.inventory.modules[reward.moduleId] ?? 0) + 1;
+  world.player.factionRewardClaims[factionId] = true;
+  pushStory(world, `${reward.title} claimed: ${module.name}.`);
   return true;
 }
 
@@ -1856,7 +1898,7 @@ export function buyModule(world: GameWorld, moduleId: string, priceOverride?: nu
   if (!module) return false;
   ensurePilotLicense(world);
   const station = getCurrentStation(world);
-  if (!isModuleAvailableAtStation(module, getCurrentSectorDef(world).security, station)) {
+  if (!isModuleAvailableAtStation(module, getCurrentSectorDef(world).security, station, world)) {
     pushStory(world, `${module.name} is not stocked here.`);
     return false;
   }
@@ -2762,7 +2804,9 @@ function createEnemyFromVariant(
   variantId: string,
   position: Vec2,
   patrolAnchor = position,
-  bossMissionId?: string
+  bossMissionId?: string,
+  alignment: "hostile" | "ally" = "hostile",
+  warEventId?: string
 ) {
   const variant = enemyVariantById[variantId] ?? enemyVariantById["dust-raider"];
   const archetype = getEnemyArchetypeDefinition(variant.archetype);
@@ -2772,6 +2816,8 @@ function createEnemyFromVariant(
     variantId: variant.id,
     boss: variant.boss,
     bossMissionId,
+    alignment,
+    warEventId,
     position: { ...position },
     velocity: { x: 0, y: 0 },
     rotation: 0,
@@ -2911,6 +2957,26 @@ function getEnemySpawnDefinitionCount(sectorId: string) {
   return sectorById[sectorId].enemySpawns.reduce((sum, spawn) => sum + spawn.count, 0);
 }
 
+function getSectorEnemyCap(sectorId: string) {
+  const sectorDef = sectorById[sectorId];
+  if (!sectorDef) return 6;
+  const baseBySecurity: Record<SolarSystemDefinition["security"], number> = {
+    high: 7,
+    medium: 8,
+    low: 9,
+    frontier: 10
+  };
+  return clamp(
+    baseBySecurity[sectorDef.security] + Math.max(0, sectorDef.danger - 1) * 2,
+    4,
+    16
+  );
+}
+
+function getAmbientEnemyCap(world: GameWorld, sectorId: string) {
+  return getSectorEnemyCap(sectorId) + (world.localSite.type === "warzone" ? 2 : 0);
+}
+
 function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
   const sector = world.sectors[sectorId];
   const sectorDef = sectorById[sectorId];
@@ -2932,7 +2998,7 @@ function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
     100
   );
   ecology.hostilePressure = clamp(
-    ecology.hostilePressure + dt * ((sector.challengePressure ?? 0) * 0.45 + activeEnemies.length * 0.08) - dt * 0.22,
+    ecology.hostilePressure + dt * ((sector.challengePressure ?? 0) * 0.3 + activeEnemies.length * 0.05) - dt * 0.34,
     0,
     100
   );
@@ -2963,9 +3029,9 @@ function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
     100
   );
   ecology.reinforcementBudget = clamp(
-    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.075 : sectorDef.security === "frontier" ? 0.06 : 0.05),
+    ecology.reinforcementBudget + dt * (sectorDef.security === "high" ? 0.045 : sectorDef.security === "frontier" ? 0.035 : 0.03) - dt * activeEnemies.length * 0.05,
     0,
-    80
+    getAmbientEnemyCap(world, sectorId) * 2
   );
   ecology.recoveryProgress = clamp(
     ecology.recoveryProgress + dt * (sectorDef.security === "high" ? 0.008 : sectorDef.security === "frontier" ? 0.014 : 0.011),
@@ -2973,7 +3039,7 @@ function updateSystemEcology(world: GameWorld, sectorId: string, dt: number) {
     1
   );
   ecology.missionReserve = clamp(
-    ecology.missionReserve + dt * 0.35 + Math.max(0, totalEnemyBaseline - activeEnemies.length) * 0.02,
+    ecology.missionReserve + dt * 0.35 + Math.max(0, totalEnemyBaseline - activeEnemies.length) * 0.015,
     0,
     100
   );
@@ -3049,19 +3115,23 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
   const sector = world.sectors[sectorId];
   const sectorDef = sectorById[sectorId];
   if (!sector || !sectorDef) return;
+  const warEvent = getFactionWarEventForSystem(world, sectorId);
+  if (warEvent && warEvent.status !== "resolved") return;
   const ecology = sector.ecology;
   const activeEnemies = sector.enemies.filter((enemy) => enemy.hull > 0);
   const baseline = getEnemySpawnDefinitionCount(sectorId);
   if (baseline <= 0) return;
+  const ambientCap = getAmbientEnemyCap(world, sectorId);
+  if (activeEnemies.length >= ambientCap) return;
   const state = getEcologyStateLabel(ecology, sectorDef);
   const targetCount =
     state === "suppressed"
-      ? Math.max(1, Math.round(baseline * 0.55))
+      ? Math.max(1, Math.min(ambientCap, Math.round(baseline * 0.55)))
       : state === "militarized"
-        ? Math.max(2, Math.round(baseline * 1.15))
+        ? Math.max(2, Math.min(ambientCap, Math.round(baseline * 1.05)))
         : state === "frontier_rush"
-          ? Math.max(2, Math.round(baseline * 1.2))
-          : baseline;
+          ? Math.max(2, Math.min(ambientCap, Math.round(baseline * 1.1)))
+          : Math.min(ambientCap, baseline);
   const respawnInterval =
     state === "militarized"
       ? 110
@@ -3087,7 +3157,7 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
   const spawnCount = Math.min(
     1,
     targetCount - activeEnemies.length,
-    Math.max(1, Math.floor(ecology.reinforcementBudget / 10))
+    Math.max(1, Math.floor(ecology.reinforcementBudget / 14))
   );
   if (spawnCount <= 0) return;
   for (let index = 0; index < spawnCount; index += 1) {
@@ -3098,7 +3168,7 @@ function maybeRepopulateEnemies(world: GameWorld, sectorId: string, dt: number) 
     const enemy = createEnemyFromVariant(spawnDef.variantId, position, sourceAnchor);
     sector.enemies.push(enemy);
   }
-  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 20);
+  ecology.reinforcementBudget = Math.max(0, ecology.reinforcementBudget - spawnCount * 14);
   ecology.ambientRespawnTimer = respawnInterval;
 }
 
@@ -3202,10 +3272,9 @@ function raiseSectorChallenge(world: GameWorld, sectorId: string, amount: number
   const sector = world.sectors[sectorId];
   if (!sector || amount <= 0) return;
   const before = sector.challengePressure ?? 0;
-  sector.challengePressure = clamp(before + amount, 0, 10);
-  sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - amount * 2.5);
-  sector.ecology.hostilePressure = clamp(sector.ecology.hostilePressure + amount * 16, 0, 100);
-  sector.ecology.reinforcementBudget = clamp(sector.ecology.reinforcementBudget + amount * 3, 0, 80);
+  sector.challengePressure = clamp(before + amount, 0, 8);
+  sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - amount * 1.2);
+  sector.ecology.hostilePressure = clamp(sector.ecology.hostilePressure + amount * 9, 0, 100);
   sector.ecology.lastIncidentAt = world.elapsedTime;
   if (sector.challengePressure >= 5 && before < 5) {
     pushStory(world, `${sectorById[sectorId].name}: local threat response escalating${source ? ` after ${source}` : ""}.`);
@@ -3239,17 +3308,17 @@ function refreshSectorChallenge(world: GameWorld, sectorId: string, dt: number) 
     (getActiveProceduralContract(world)?.targetSystemId === sectorId ? SPAWN_BALANCE.sectorChallenge.contract : 0);
   const decay =
     sectorDef.security === "high"
-      ? SPAWN_BALANCE.sectorChallenge.decay.high
+      ? SPAWN_BALANCE.sectorChallenge.decay.high + 0.035
       : sectorDef.security === "medium"
-        ? SPAWN_BALANCE.sectorChallenge.decay.medium
+        ? SPAWN_BALANCE.sectorChallenge.decay.medium + 0.03
         : sectorDef.security === "low"
-          ? SPAWN_BALANCE.sectorChallenge.decay.low
-          : SPAWN_BALANCE.sectorChallenge.decay.frontier;
+          ? SPAWN_BALANCE.sectorChallenge.decay.low + 0.026
+          : SPAWN_BALANCE.sectorChallenge.decay.frontier + 0.02;
   const nextPressure = (sector.challengePressure ?? 0) + dt * (hostileSitePressure + presencePressure + proximityPressure + miningPressure + missionPressure);
   sector.challengePressure = clamp(
-    nextPressure - dt * decay + Math.max(0, playerPowerTier - 1) * dt * SPAWN_BALANCE.sectorChallenge.playerPowerTierScale,
+    nextPressure - dt * decay + Math.max(0, playerPowerTier - 1) * dt * SPAWN_BALANCE.sectorChallenge.playerPowerTierScale - dt * Math.max(0, 4 - sector.enemies.filter((enemy) => enemy.hull > 0).length) * 0.02,
     0,
-    10
+    8
   );
   sector.reinforcementTimer = Math.max(0, (sector.reinforcementTimer ?? 0) - dt);
 }
@@ -3258,17 +3327,19 @@ function maybeSpawnSectorReinforcement(world: GameWorld, sectorId: string) {
   const sector = world.sectors[sectorId];
   const sectorDef = sectorById[sectorId];
   if (!sector || !sectorDef) return;
+  const warEvent = getFactionWarEventForSystem(world, sectorId);
+  if (warEvent && warEvent.status !== "resolved") return;
   const pressure = sector.challengePressure ?? 0;
+  const ambientCap = getAmbientEnemyCap(world, sectorId);
+  const activeEnemies = sector.enemies.filter((enemy) => enemy.hull > 0);
   if (pressure < SPAWN_BALANCE.pressure.localReinforcementThreshold || sector.reinforcementTimer > 0) return;
+  if (activeEnemies.length >= ambientCap) return;
 
   const playerPowerTier = getPlayerPowerTier(world);
   const preferredVariantIds = getSectorResponseVariants(sectorId);
   const roles: HostilePackRole[] =
-    pressure >= 7 ? ["tackle", "sniper", "support"] : pressure >= 5 ? ["tackle", "support"] : ["tackle"];
+    pressure >= 7 ? ["tackle", "sniper"] : pressure >= 5 ? ["tackle", "support"] : ["tackle"];
   if (sectorDef.security === "frontier" && pressure >= SPAWN_BALANCE.pressure.frontierSwarmThreshold) roles.unshift("swarm");
-  if (playerPowerTier >= 4 && pressure >= SPAWN_BALANCE.pressure.highTierEscortThreshold) {
-    roles.push(sectorDef.security === "high" ? "sniper" : "hunter");
-  }
 
   const pack = roles.map((role) => ({
     role,
@@ -3277,11 +3348,102 @@ function maybeSpawnSectorReinforcement(world: GameWorld, sectorId: string) {
   spawnTriggeredHostiles(world, sectorId, { ...world.player.position }, pack);
   sector.reinforcementTimer = clamp(
     SPAWN_BALANCE.reinforcement.sectorBaseTimerSec -
-      Math.min(12, pressure * SPAWN_BALANCE.reinforcement.sectorPressureScale) +
+      Math.min(10, pressure * SPAWN_BALANCE.reinforcement.sectorPressureScale) +
       Math.max(0, 4 - playerPowerTier) * SPAWN_BALANCE.reinforcement.sectorPlayerTierPenalty,
-    SPAWN_BALANCE.reinforcement.sectorMinimumTimerSec,
-    SPAWN_BALANCE.reinforcement.sectorMaximumTimerSec
+    90,
+    210
   );
+}
+
+function getWarEventLocation(world: GameWorld, event: NonNullable<ReturnType<typeof getFactionWarEventForSystem>>) {
+  const sectorDef = sectorById[event.systemId];
+  if (!sectorDef) return { x: 0, y: 0 };
+  if (event.locationId) {
+    const destination = getSystemDestination(event.systemId, event.locationId);
+    if (destination) return destination.position;
+  }
+  return { x: sectorDef.width * 0.52, y: sectorDef.height * 0.48 };
+}
+
+function spawnWarFleet(world: GameWorld, event: NonNullable<ReturnType<typeof getFactionWarEventForSystem>>, alignment: "ally" | "hostile", role: HostilePackRole, index: number) {
+  const sector = world.sectors[event.systemId];
+  const sectorDef = sectorById[event.systemId];
+  if (!sector || !sectorDef) return;
+  const factionId = alignment === "ally" ? event.alliedFactionId : event.enemyFactionId;
+  const variantId = pickFactionWarVariant(factionId, role);
+  const anchor = getWarEventLocation(world, event);
+  const offsetAngle = (Math.PI * 2 * index) / Math.max(1, alignment === "ally" ? event.alliedShipCap : event.enemyShipCap);
+  const offsetRadius = alignment === "ally" ? 140 + index * 16 : 180 + index * 18;
+  const position = {
+    x: clamp(anchor.x + Math.cos(offsetAngle) * offsetRadius, 80, sectorDef.width - 80),
+    y: clamp(anchor.y + Math.sin(offsetAngle) * offsetRadius, 80, sectorDef.height - 80)
+  };
+  sector.enemies.push(createEnemyFromVariant(variantId, position, anchor, undefined, alignment, event.id));
+}
+
+function ensureWarEventPresence(world: GameWorld) {
+  const event = getFactionWarEventForSystem(world, world.currentSectorId);
+  if (!event || event.status === "resolved") return;
+  const sector = getCurrentSector(world);
+  const anchor = getWarEventLocation(world, event);
+  world.localSite = createWarzoneLocalSite(
+    world.currentSectorId,
+    anchor,
+    event.title,
+    `${factionData[event.alliedFactionId].name} vs ${factionData[event.enemyFactionId].name}`
+  );
+
+  const alliedCount = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment === "ally" && enemy.warEventId === event.id).length;
+  const hostileCount = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment !== "ally" && enemy.warEventId === event.id).length;
+  if (alliedCount === 0) {
+    for (let index = 0; index < Math.min(event.alliedShipCap, 2); index += 1) {
+      spawnWarFleet(world, event, "ally", index % 2 === 0 ? "support" : "escort", index);
+    }
+  }
+  if (hostileCount === 0) {
+    for (let index = 0; index < Math.min(event.enemyShipCap, 3); index += 1) {
+      spawnWarFleet(world, event, "hostile", index % 2 === 0 ? "brawler" : "sniper", index);
+    }
+  }
+}
+
+function updateFactionWarEvent(world: GameWorld, dt: number) {
+  const event = getFactionWarEventForSystem(world, world.currentSectorId);
+  if (!event || event.status === "resolved") return;
+  if (world.dockedStationId) return;
+  if (world.currentSectorId !== event.systemId) return;
+
+  ensureWarEventPresence(world);
+
+  const sector = getCurrentSector(world);
+  const allies = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment === "ally" && enemy.warEventId === event.id);
+  const hostiles = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.alignment !== "ally" && enemy.warEventId === event.id);
+  if (!event.acknowledged && world.currentSectorId === event.systemId) {
+    event.acknowledged = true;
+    pushStory(
+      world,
+      `${event.title} announced in ${sectorById[event.systemId].name}: ${factionData[event.alliedFactionId].name} has engaged ${factionData[event.enemyFactionId].name}.`
+    );
+  }
+
+  if (allies.length < event.alliedShipCap && Math.random() < dt * 0.65) {
+    const role: HostilePackRole = allies.length % 2 === 0 ? "support" : "escort";
+    spawnWarFleet(world, event, "ally", role, allies.length);
+  }
+  if (hostiles.length < event.enemyShipCap && Math.random() < dt * 0.55) {
+    const role: HostilePackRole = hostiles.length % 2 === 0 ? "brawler" : "hunter";
+    spawnWarFleet(world, event, "hostile", role, hostiles.length);
+  }
+
+  if (world.elapsedTime >= event.expiresAt || (allies.length === 0 && hostiles.length <= 1)) {
+    event.status = "resolved";
+    pushStory(world, `${event.title} has broken apart and the war pocket is collapsing.`);
+    if (world.localSite.type === "warzone" && world.localSite.systemId === event.systemId) {
+      world.localSite = createTransitLocalSite(world.currentSectorId, world.player.position);
+    }
+  } else {
+    event.status = "active";
+  }
 }
 
 type TriggerContext = "belt" | "gate";
@@ -3444,6 +3606,26 @@ function pickEnemyVariantForHostileRole(
   return pickPool[Math.floor(Math.random() * pickPool.length)]?.variant.id ?? "dust-raider";
 }
 
+function pickFactionWarVariant(factionId: FactionId, role: HostilePackRole, preferredVariantIds?: string[]) {
+  const pool = enemyVariants
+    .filter((variant) => variant.faction === factionId && !variant.boss)
+    .filter((variant) => !preferredVariantIds?.length || preferredVariantIds.includes(variant.id))
+    .map((variant) => {
+      const archetype = getEnemyArchetypeDefinition(variant.archetype);
+      let score = 0;
+      if (role === "support" && archetype?.id === "support_frigate") score += 4;
+      if (role === "hunter" && (archetype?.id === "hunter" || archetype?.id === "interceptor")) score += 4;
+      if (role === "sniper" && (archetype?.id === "siege_sniper" || archetype?.id === "artillery")) score += 4;
+      if (role === "escort" && (archetype?.id === "interceptor" || archetype?.id === "hunter")) score += 3;
+      if (role === "brawler" && archetype?.id === "heavy_bruiser") score += 3;
+      if (role === "swarm" && archetype?.id === "swarm") score += 3;
+      score += Math.max(0, variant.threatLevel - 1) * 0.2;
+      return { variant, score };
+    })
+    .sort((left, right) => right.score - left.score);
+  return pool[0]?.variant.id ?? enemyVariants.find((variant) => variant.faction === factionId && !variant.boss)?.id ?? "dust-raider";
+}
+
 function chooseHostilePackTemplate(context: TriggerContext, sectorId: string, playerPowerTier: number) {
   const templates = getEncounterTemplateOptions(context, sectorId).map((template) => ({
     roles: template.roles as HostilePackRole[],
@@ -3510,6 +3692,7 @@ function updateBeltSpawnCooldowns(world: GameWorld, dt: number) {
 function aggroEnemyToPlayer(world: GameWorld, enemyId: string) {
   const enemy = getCurrentSector(world).enemies.find((entry) => entry.id === enemyId);
   if (!enemy || enemy.hull <= 0) return;
+  if (isEnemyAllied(enemy)) return;
   const playerRef: SelectableRef = { id: "player", type: "enemy" };
   enemy.activeTarget = playerRef;
   enemy.navigation.target = playerRef;
@@ -3535,6 +3718,27 @@ function getEnemyRetreatThreshold(enemyVariantId: string) {
   if (variant.combatStyle === "shield") return 0.58;
   if (variant.combatStyle === "armor") return 0.42;
   return 0.52;
+}
+
+function isEnemyAllied(enemy: EnemyState) {
+  return enemy.alignment === "ally";
+}
+
+function getEnemyFactionId(enemy: EnemyState) {
+  return enemyVariantById[enemy.variantId]?.faction ?? "veilborn";
+}
+
+function findNearestEnemyTarget(world: GameWorld, source: EnemyState, preferHostile = true) {
+  const sector = getCurrentSector(world);
+  const candidates = sector.enemies.filter((enemy) => enemy.hull > 0 && enemy.id !== source.id);
+  const filtered = candidates.filter((enemy) =>
+    preferHostile ? isEnemyAllied(source) !== isEnemyAllied(enemy) : true
+  );
+  const pool = filtered.length ? filtered : candidates;
+  if (pool.length === 0) return null;
+  return pool
+    .map((enemy) => ({ enemy, dist: distance(enemy.position, source.position) }))
+    .sort((left, right) => left.dist - right.dist)[0]?.enemy ?? null;
 }
 
 function shouldEnemyRetreat(
@@ -4629,36 +4833,54 @@ function runEnemyModules(world: GameWorld, dt: number) {
   const combatPressure = getCombatPressureModifiers();
   sector.enemies.forEach((enemy) => {
     const variant = enemyVariantById[enemy.variantId];
+    const allied = isEnemyAllied(enemy);
     enemy.recentDamageTimer = Math.max(0, enemy.recentDamageTimer - dt);
     enemy.pursuitTimer = Math.max(0, enemy.pursuitTimer - dt);
     enemy.shield = clamp(enemy.shield + 2.5 * (enemy.recentDamageTimer > 0 ? 0.03 : 0.18) * dt, 0, variant.shield);
     enemy.capacitor = clamp(enemy.capacitor + variant.capacitorRegen * 0.6 * dt, 0, variant.capacitor);
 
     const playerRef: SelectableRef = { id: "player", type: "enemy" };
-    const playerDistance = distance(enemy.position, world.player.position);
+    const targetEnemy = findNearestEnemyTarget(world, enemy);
+    const targetRef =
+      allied && targetEnemy
+        ? { id: targetEnemy.id, type: "enemy" as const }
+        : !allied && targetEnemy
+          ? { id: targetEnemy.id, type: "enemy" as const }
+          : null;
+    const useEnemyTarget = Boolean(targetEnemy && (allied || getFactionWarEventForSystem(world, world.currentSectorId)));
+    const targetPosition = useEnemyTarget && targetEnemy ? targetEnemy.position : world.player.position;
+    const targetVelocity = useEnemyTarget && targetEnemy ? targetEnemy.velocity : world.player.velocity;
+    const targetDistance = useEnemyTarget && targetEnemy ? distance(enemy.position, targetEnemy.position) : distance(enemy.position, world.player.position);
     const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier * combatPressure.enemyDetectionMultiplier;
     const pursuitRange = Math.max(
       detectionRange * 1.95,
       getEnemyPreferredRange(enemy.variantId) * 2.2 * combatPressure.enemyDetectionMultiplier
     );
-    const seesPlayer = playerDistance <= detectionRange || (enemy.pursuitTimer > 0 && playerDistance <= pursuitRange);
-    const retreating = seesPlayer && shouldEnemyRetreat(enemy, variant, playerDistance);
-    if (seesPlayer) {
-      enemy.activeTarget = playerRef;
-      enemy.navigation.target = playerRef;
+    const seesTarget = allied
+      ? Boolean(targetEnemy) && targetDistance <= detectionRange
+      : targetDistance <= detectionRange || (enemy.pursuitTimer > 0 && targetDistance <= pursuitRange);
+    const retreating = !allied && seesTarget && shouldEnemyRetreat(enemy, variant, targetDistance);
+    if (targetRef && allied) {
+      enemy.activeTarget = targetRef;
+      enemy.navigation.target = targetRef;
+      enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 4);
+    } else if (!allied && seesTarget) {
+      const target = targetRef ?? playerRef;
+      enemy.activeTarget = target;
+      enemy.navigation.target = target;
       enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 3.5);
     } else if (enemy.pursuitTimer <= 0) {
       enemy.activeTarget = null;
       enemy.navigation.target = null;
     }
-    enemy.navigation.mode = seesPlayer
+    enemy.navigation.mode = seesTarget
       ? retreating
         ? "retreat"
-        : playerDistance > getEnemyPreferredRange(enemy.variantId)
+        : targetDistance > getEnemyPreferredRange(enemy.variantId)
           ? "approach"
           : getEnemyCombatMode(enemy.variantId)
       : "approach";
-    enemy.navigation.desiredRange = seesPlayer
+    enemy.navigation.desiredRange = seesTarget
       ? retreating
         ? Math.min(variant.lockRange * 0.9, Math.max(getEnemyPreferredRange(enemy.variantId) * 2.1, getEnemyPreferredRange(enemy.variantId) + 180))
         : getEnemyPreferredRange(enemy.variantId)
@@ -4678,7 +4900,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
           runtime.ammoRemaining = Math.max(1, module.magazineSize ?? 1);
         }
       }
-      if (!runtime.active || !seesPlayer) return;
+      if (!runtime.active || !seesTarget) return;
       if (module.capacitorDrain) {
         const drainAmount = module.capacitorDrain * dt;
         if (enemy.capacitor < drainAmount) return;
@@ -4686,59 +4908,83 @@ function runEnemyModules(world: GameWorld, dt: number) {
       }
       if (runtime.cycleRemaining > 0) return;
       if ((module.capacitorUse ?? 0) > enemy.capacitor) return;
-      if (module.range && playerDistance > module.range) return;
+      if (module.range && targetDistance > module.range) return;
 
       enemy.capacitor -= module.capacitorUse ?? 0;
 
       if (module.kind === "laser" || module.kind === "railgun" || module.kind === "missile" || module.kind === "cannon") {
-        const direction = normalize(subtract(world.player.position, enemy.position));
+        const direction = normalize(subtract(targetPosition, enemy.position));
         let appliedDamage = module.damage ?? 0;
         let quality: "miss" | "grazing" | "solid" | "excellent" | undefined;
+        const targetIsPlayer = !useEnemyTarget;
         if (module.kind !== "missile") {
           const application = computeTurretApplication(
             enemy.position,
             enemy.velocity,
-            world.player.position,
-            world.player.velocity,
+            targetPosition,
+            targetVelocity,
             {
               ...module,
               tracking: (module.tracking ?? 0) * enemy.effects.turretTrackingMultiplier * combatPressure.enemyTrackingMultiplier
             },
-            playerShipById[world.player.hullId].signatureRadius * world.player.effects.signatureMultiplier
+            targetIsPlayer
+              ? playerShipById[world.player.hullId].signatureRadius * world.player.effects.signatureMultiplier
+              : enemyVariantById[targetEnemy?.variantId ?? enemy.variantId].signatureRadius
           );
           appliedDamage = application.damage * difficulty.enemyDamageMultiplier * combatPressure.enemyDamageMultiplier;
           quality = application.quality;
         } else {
           appliedDamage =
             (module.damage ?? 0) *
-            getRangePenalty(playerDistance, module.optimal, module.falloff) *
+            getRangePenalty(targetDistance, module.optimal, module.falloff) *
             difficulty.enemyDamageMultiplier *
             combatPressure.enemyDamageMultiplier;
           quality = appliedDamage > (module.damage ?? 0) * 0.8 ? "solid" : "grazing";
         }
-        const appliedTotal = applyDamageToTarget(
-          world.player,
-          createDamagePacket(module.damageProfile, appliedDamage),
-          getPlayerLayerResists(world)
-        );
-        showHitText(world, world.player.position, appliedTotal, quality, "enemy");
-        sector.projectiles.push(
-          createProjectile(
-            "enemy",
-            module.id,
-            add(enemy.position, scale(direction, 14)),
-            scale(direction, getProjectileSpeed(module)),
-            0,
-            { id: "player", type: "enemy" },
-            { ...world.player.position },
-            quality
-          )
-        );
+        if (targetIsPlayer) {
+          const appliedTotal = applyDamageToTarget(
+            world.player,
+            createDamagePacket(module.damageProfile, appliedDamage),
+            getPlayerLayerResists(world)
+          );
+          showHitText(world, world.player.position, appliedTotal, quality, "enemy");
+          sector.projectiles.push(
+            createProjectile(
+              allied ? "ally" : "enemy",
+              module.id,
+              add(enemy.position, scale(direction, 14)),
+              scale(direction, getProjectileSpeed(module)),
+              0,
+              { id: "player", type: "enemy" },
+              { ...world.player.position },
+              quality
+            )
+          );
+        } else if (targetEnemy) {
+          const appliedTotal = applyDamageToTarget(
+            targetEnemy,
+            createDamagePacket(module.damageProfile, appliedDamage),
+            getEnemyLayerResists(targetEnemy.id, world)
+          );
+          showHitText(world, targetEnemy.position, appliedTotal, quality, allied ? "enemy" : "enemy");
+          sector.projectiles.push(
+            createProjectile(
+              allied ? "ally" : "enemy",
+              module.id,
+              add(enemy.position, scale(direction, 14)),
+              scale(direction, getProjectileSpeed(module)),
+              0,
+              { id: targetEnemy.id, type: "enemy" },
+              { ...targetEnemy.position },
+              quality
+            )
+          );
+        }
       } else if (module.kind === "shield_booster") {
         enemy.shield = clamp(enemy.shield + (module.repairAmount ?? 0), 0, variant.shield);
       } else if (module.kind === "armor_repairer") {
         enemy.armor = clamp(enemy.armor + (module.repairAmount ?? 0), 0, variant.armor);
-      } else if (module.kind === "energy_neutralizer") {
+      } else if (module.kind === "energy_neutralizer" && !allied) {
         const drained = Math.min(world.player.capacitor, module.capacitorNeutralizeAmount ?? 0);
         if (drained > 0) {
           world.player.capacitor = Math.max(0, world.player.capacitor - drained);
@@ -4858,6 +5104,47 @@ function updateProjectiles(world: GameWorld, dt: number) {
           consumed = true;
           break;
         }
+      }
+    } else if (projectile.owner === "ally") {
+      const targetEnemy =
+        projectile.target?.type === "enemy"
+          ? sector.enemies.find((entry) => entry.id === projectile.target?.id && entry.hull > 0) ?? null
+          : sector.enemies.find((entry) => entry.hull > 0 && isEnemyAllied(entry) !== true) ?? null;
+      if (targetEnemy && distance(projectile.position, targetEnemy.position) <= projectile.radius + 18) {
+        const module = moduleById[projectile.moduleId];
+        const shieldBefore = targetEnemy.shield;
+        const armorBefore = targetEnemy.armor;
+        const hullBefore = targetEnemy.hull;
+        const appliedTotal = applyDamageToTarget(
+          targetEnemy,
+          createDamagePacket(module?.damageProfile, projectile.damage),
+          getEnemyLayerResists(targetEnemy.id, world)
+        );
+        if (appliedTotal > 0.01) {
+          targetEnemy.pursuitTimer = Math.max(targetEnemy.pursuitTimer, 8);
+        }
+        addFloatingText(
+          world,
+          targetEnemy.position,
+          projectile.damage < 1 ? "miss" : `${projectile.qualityLabel ?? "hit"} ${Math.round(projectile.damage)}`,
+          projectile.damage < 1 ? "#c4d1e8" : "#8fffd6"
+        );
+        if (projectile.damage >= 1) {
+          const hullDamaged = hullBefore > targetEnemy.hull;
+          const armorDamaged = armorBefore > targetEnemy.armor;
+          const shieldDamaged = shieldBefore > targetEnemy.shield;
+          if (hullDamaged) {
+            emitHullHit(world, targetEnemy.position);
+            sector.cameraShake = Math.min(8, (sector.cameraShake ?? 0) + 2.5 + projectile.damage * 0.03);
+          } else if (armorDamaged) {
+            emitArmorHit(world, targetEnemy.position);
+            sector.cameraShake = Math.min(5, (sector.cameraShake ?? 0) + 1.2 + projectile.damage * 0.015);
+          } else if (shieldDamaged) {
+            emitShieldHit(world, targetEnemy.position);
+            sector.cameraShake = Math.min(2.5, (sector.cameraShake ?? 0) + 0.5 + projectile.damage * 0.008);
+          }
+        }
+        consumed = true;
       }
     } else if (distance(projectile.position, world.player.position) <= projectile.radius + 18) {
       const module = moduleById[projectile.moduleId];
@@ -5012,8 +5299,8 @@ function cleanupWorld(world: GameWorld) {
     );
     sector.ecology.hostilePressure = clamp(sector.ecology.hostilePressure + 2.5 + variant.threatLevel * 0.6, 0, 100);
     sector.ecology.scavengerPressure = clamp(sector.ecology.scavengerPressure + (enemy.boss ? 8 : variant.elite ? 5 : 2), 0, 100);
-    sector.ecology.reinforcementBudget = clamp(sector.ecology.reinforcementBudget + 2, 0, 80);
     sector.ecology.lastIncidentAt = world.elapsedTime;
+    sector.challengePressure = clamp((sector.challengePressure ?? 0) - (enemy.boss ? 0.18 : variant.elite ? 0.12 : 0.08), 0, 8);
     sector.wrecks.push({
       id: `wreck-${Date.now()}-${enemy.id}`,
       position: { ...enemy.position },
@@ -5397,6 +5684,7 @@ export function updateWorld(world: GameWorld, dt: number) {
   resolveTransportMissionDeliveries(world);
   resolveProceduralContractDeliveries(world);
   updateTransportRoute(world);
+  updateFactionWarEvent(world, simDt);
   Object.keys(world.sectors).forEach((sectorId) => {
     updateSystemEcology(world, sectorId, simDt);
     const sectorDef = sectorById[sectorId];
@@ -5479,6 +5767,7 @@ export function createSnapshot(world: GameWorld): GameSnapshot {
     availableProceduralContracts,
     regionalEvent: getRegionalEventForSystem(world, world.currentSectorId),
     currentHotspot: getSiteHotspotForSystem(world, world.currentSectorId),
+    activeWarEvent: getFactionWarEventForSystem(world, world.currentSectorId),
     economy
   };
 }

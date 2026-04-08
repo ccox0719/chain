@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ContextMenu } from "../components/ContextMenu";
 import { DeathOverlay } from "../components/DeathOverlay";
 import { GameCanvas } from "../components/GameCanvas";
@@ -19,13 +19,34 @@ export function GamePage() {
     () => window.localStorage.getItem("starfall-world") === null
   );
   const deathSummary = snapshot.world.player.deathSummary;
+  const uiMode =
+    !menuOpen && !starterPickerOpen && !overlay && !snapshot.world.dockedStationId && !deathSummary
+      ? "battle"
+      : "menu";
   const contextCombatRanges =
     contextMenu && contextMenu.target.type === "enemy"
       ? getCombatControlRanges(snapshot.world, contextMenu.target)
       : null;
 
+  useEffect(() => {
+    const orientation = window.screen.orientation as unknown as {
+      lock?: (orientation: "portrait" | "landscape") => Promise<void>;
+      unlock?: () => void;
+    };
+    if (!orientation?.lock) return;
+
+    const desiredOrientation = uiMode === "battle" ? "landscape" : "portrait";
+    orientation.lock(desiredOrientation).catch(() => {
+      // Ignore browsers that do not allow programmatic orientation changes.
+    });
+
+    return () => {
+      orientation.unlock?.();
+    };
+  }, [uiMode]);
+
   return (
-    <div className="game-shell">
+    <div className={`game-shell mode-${uiMode}`}>
       <div className="play-area">
         <GameCanvas
           canvasRef={canvasRef}
@@ -139,6 +160,7 @@ export function GamePage() {
           onEquip={actions.equipModule}
           onAcceptMission={actions.acceptMission}
           onTurnInMission={actions.turnInMission}
+          onClaimFactionReward={actions.claimFactionReward}
           onBuyShip={actions.buyShip}
           onSellShip={actions.sellShip}
           onSwitchShip={actions.switchShip}

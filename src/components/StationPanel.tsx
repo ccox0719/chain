@@ -22,6 +22,7 @@ import type { BalanceRootKey } from "../game/config/balance/overrides";
 import { getStationCommodityStock } from "../game/economy/commodityAvailability";
 import { isModuleAvailableAtStation } from "../game/economy/moduleAvailability";
 import { playerShipById, playerShips } from "../game/data/ships";
+import { getFactionRewardDefinition } from "../game/data/factionRewards";
 import { commodityCatalog } from "../game/economy/data/commodities";
 import { getBestSellLocationForCommodity } from "../game/economy/market";
 import {
@@ -44,7 +45,7 @@ import { regionById, sectorById } from "../game/data/sectors";
 import { getFactionStandingLabel, getStandingRequirementForAccessTier } from "../game/utils/factionStanding";
 import { getCachedDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
 import { findComparableEquippedWeapon, getWeaponSummaryStats } from "../game/utils/weaponStats";
-import { CommodityId, GameSnapshot, ModuleSlot, ResourceId, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
+import { CommodityId, FactionId, GameSnapshot, ModuleSlot, ResourceId, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
 type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
 type MarketSortKey = "name" | "category" | "volume" | "owned" | "buyPrice" | "sellPrice" | "profit";
@@ -805,6 +806,7 @@ interface StationPanelProps {
   onEquip: (slotType: ModuleSlot, slotIndex: number, moduleId: string | null) => void;
   onAcceptMission: (missionId: string) => void;
   onTurnInMission: (missionId: string) => void;
+  onClaimFactionReward: (factionId: FactionId) => void;
   onBuyShip: (shipId: string) => void;
   onSellShip: (shipId: string) => void;
   onSwitchShip: (shipId: string) => void;
@@ -825,6 +827,7 @@ export function StationPanel({
   onEquip,
   onAcceptMission,
   onTurnInMission,
+  onClaimFactionReward,
   onBuyShip,
   onSellShip,
   onSwitchShip,
@@ -857,6 +860,8 @@ export function StationPanel({
   const stationFactionId = stationProfile?.factionControl ?? snapshot.sector.controllingFaction;
   const stationFaction = factionData[stationFactionId];
   const stationStanding = world.player.factionStandings[stationFactionId] ?? 0;
+  const stationFactionReward = getFactionRewardDefinition(stationFactionId);
+  const stationFactionRewardClaimed = world.player.factionRewardClaims[stationFactionId] ?? false;
   const stationStandingLabel = getFactionStandingLabel(stationStanding);
   const alliedFactionSet = useMemo<Set<string>>(
     () =>
@@ -939,8 +944,8 @@ export function StationPanel({
     ]
   );
   const availableModules = useMemo(
-    () => moduleCatalog.filter((module) => isModuleAvailableAtStation(module, security, currentStation)),
-    [security, currentStation?.id]
+    () => moduleCatalog.filter((module) => isModuleAvailableAtStation(module, security, currentStation, world)),
+    [security, currentStation?.id, world]
   );
   const currentHull = playerShipById[world.player.hullId];
   const previewHull = playerShipById[shipPreviewId] ?? currentHull;
@@ -1958,6 +1963,51 @@ export function StationPanel({
               ))}
             </div>
             </article>
+            <article className="panel-lite license-panel mod-top-card faction-reward-card">
+              <h3>Faction Reward</h3>
+              {stationFactionReward ? (() => {
+                const rewardModule = moduleById[stationFactionReward.moduleId] ?? null;
+                const rewardReady = stationStanding >= stationFactionReward.standingRequirement;
+                return (
+                  <div className="license-summary">
+                    <div className="license-summary-head">
+                      <span>
+                        {stationFaction.icon} {stationFaction.name}
+                      </span>
+                      <span className={`status-chip${stationFactionRewardClaimed ? " active" : rewardReady ? "" : " mkt-risk-chip"}`}>
+                        {stationFactionRewardClaimed
+                          ? "claimed"
+                          : rewardReady
+                            ? `Req ${stationFactionReward.standingRequirement.toFixed(2)}`
+                            : stationStandingLabel}
+                      </span>
+                    </div>
+                    <div className="faction-reward-copy">
+                      <strong>{stationFactionReward.title}</strong>
+                      <p>{stationFactionReward.description}</p>
+                      <p className="station-command-note">
+                        Reward: {rewardModule?.name ?? stationFactionReward.moduleId}
+                      </p>
+                    </div>
+                    <div className="market-actions">
+                      {stationFactionRewardClaimed ? (
+                        <span className="status-chip active">Reward secured</span>
+                      ) : rewardReady ? (
+                        <button type="button" className="primary-button" onClick={() => onClaimFactionReward(stationFactionId)}>
+                          Claim {rewardModule?.name ?? "Reward"}
+                        </button>
+                      ) : (
+                        <span className="mkt-warn">
+                          Requires {stationFaction.name} standing {stationFactionReward.standingRequirement.toFixed(2)}.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })() : (
+                <p className="station-command-note">No veteran module reward is catalogued for this faction.</p>
+              )}
+            </article>
             </div>
             <div className="mod-slot-toggle" role="tablist" aria-label="Module slot types">
               {(["weapon", "utility", "defense"] as ModuleSlot[]).map((slotType) => (
@@ -2348,6 +2398,11 @@ export function StationPanel({
                           <span className="status-chip">{mission.cargoVolume}u {mission.cargoType}</span>
                           {route.cargoReimbursement > 0 && (
                             <span className="status-chip">reimburses {route.cargoReimbursement} cr</span>
+                          )}
+                          {mission.rewardModuleId && (
+                            <span className="status-chip">
+                              reward {moduleById[mission.rewardModuleId]?.name ?? mission.rewardModuleId}
+                            </span>
                           )}
                           {state.status === "available" && freeCargo < mission.cargoVolume && (
                             <span className="status-chip mkt-risk-chip">Needs more cargo room</span>

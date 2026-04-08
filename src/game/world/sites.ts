@@ -55,6 +55,18 @@ export function createTransitLocalSite(systemId: string, center: Vec2): LocalSit
   };
 }
 
+export function createWarzoneLocalSite(systemId: string, center: Vec2, label: string, subtitle: string): LocalSiteState {
+  return {
+    systemId,
+    destinationId: null,
+    type: "warzone",
+    center: { ...center },
+    activeRadius: SITE_RADIUS_BY_KIND.anomaly,
+    label,
+    subtitle
+  };
+}
+
 export function createLocalSiteFromDestination(systemId: string, destination: SystemDestination): LocalSiteState {
   const info = siteLabel(destination);
   return {
@@ -76,6 +88,10 @@ export function getActiveLocalDestination(world: GameWorld) {
 export function syncLocalSite(world: GameWorld) {
   if (world.localSite.systemId !== world.currentSectorId) {
     world.localSite = createTransitLocalSite(world.currentSectorId, world.player.position);
+  }
+
+  if (world.localSite.type === "warzone" && world.localSite.systemId === world.currentSectorId) {
+    return world.localSite;
   }
 
   const destination = getActiveLocalDestination(world);

@@ -7,6 +7,7 @@ import { sectorById } from "../game/data/sectors";
 import {
   acceptMission,
   addCredits,
+  claimFactionReward,
   buyCommodity,
   buyModule,
   buyShip,
@@ -291,6 +292,10 @@ export function useSpaceGame() {
         turnInMission(worldRef.current, missionId);
         refresh();
       },
+      claimFactionReward: (factionId: Parameters<typeof claimFactionReward>[1]) => {
+        claimFactionReward(worldRef.current, factionId);
+        refresh();
+      },
       buyShip: (shipId: string) => {
         buyShip(worldRef.current, shipId);
         refresh();
@@ -542,6 +547,10 @@ function loadWorld() {
         deathSummary: parsed.player?.deathSummary ?? fallback.player.deathSummary,
         pendingLocks: parsed.player?.pendingLocks ?? fallback.player.pendingLocks,
         savedBuilds: mergedBuilds,
+        factionRewardClaims: {
+          ...fallback.player.factionRewardClaims,
+          ...(parsed.player?.factionRewardClaims ?? {})
+        },
         modules: {
           weapon: (parsed.player?.modules?.weapon ?? fallback.player.modules.weapon).map(normalizeRuntime),
           utility: (parsed.player?.modules?.utility ?? fallback.player.modules.utility).map(normalizeRuntime),
@@ -594,6 +603,10 @@ function loadWorld() {
         siteHotspots: {
           ...fallback.procgen.siteHotspots,
           ...(parsed.procgen?.siteHotspots ?? {})
+        },
+        warEvents: {
+          ...fallback.procgen.warEvents,
+          ...(parsed.procgen?.warEvents ?? {})
         },
         activeContract: parsed.procgen?.activeContract ?? fallback.procgen.activeContract,
         activeContractState: parsed.procgen?.activeContractState ?? fallback.procgen.activeContractState
