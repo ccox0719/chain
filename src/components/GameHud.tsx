@@ -856,6 +856,7 @@ export function GameHud({
   const travelButtons = makeTravelButtons(world, selectedInfo);
   const actionButtons = makeActionButtons(selectedInfo, selectedIsActive, onSetActiveTarget);
   const allCmdButtons = [...travelButtons, ...actionButtons];
+  const combatEffectChips = getPlayerCombatEffectChips(world.player);
 
   // ── Boundary zone badge
   const showBoundary = boundary.warningLevel > 0.04 && boundary.title;
@@ -1416,6 +1417,20 @@ export function GameHud({
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {combatEffectChips.length > 0 && (
+          <div className="combat-effect-strip" aria-label="Active combat effects">
+            <div className="combat-effect-strip-head">Active effects</div>
+            <div className="combat-effect-chiprow">
+              {combatEffectChips.map((chip) => (
+                <span key={chip.label} className={`status-chip combat-effect-chip tone-${chip.tone}`}>
+                  <strong>{chip.label}</strong>
+                  <span>{chip.detail}</span>
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

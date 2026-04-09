@@ -2403,6 +2403,36 @@ select {
   color: #edf7ff;
 }
 
+.status-chip.tone-shield {
+  border-color: rgba(141, 224, 174, 0.24);
+  background: rgba(141, 224, 174, 0.08);
+  color: #dbffe9;
+}
+
+.status-chip.tone-armor {
+  border-color: rgba(255, 186, 127, 0.24);
+  background: rgba(255, 186, 127, 0.08);
+  color: #ffe7d0;
+}
+
+.status-chip.tone-hull {
+  border-color: rgba(255, 135, 135, 0.24);
+  background: rgba(255, 135, 135, 0.08);
+  color: #ffd8d8;
+}
+
+.status-chip.tone-scan {
+  border-color: rgba(127, 192, 255, 0.22);
+  background: rgba(127, 192, 255, 0.08);
+  color: #dff1ff;
+}
+
+.status-chip.tone-risk {
+  border-color: rgba(212, 150, 255, 0.22);
+  background: rgba(212, 150, 255, 0.08);
+  color: #f1e0ff;
+}
+
 /* Capacitor pressure chip (replaces two-chip pattern) */
 .cap-status-chip.cap-idle    { color: var(--text-dim); }
 .cap-status-chip.cap-stable  { color: #8de0ae; border-color: rgba(141, 224, 174, 0.22); }
@@ -7175,6 +7205,50 @@ select {
 
 .sel-target-chiprow .status-chip.dim {
   opacity: 0.72;
+}
+
+.combat-effect-strip {
+  width: min(100%, 320px);
+  padding: 6px 8px 7px;
+  margin-bottom: 0.35rem;
+  border: 1px solid rgba(255, 133, 110, 0.16);
+  background: linear-gradient(180deg, rgba(24, 12, 20, 0.86), rgba(9, 10, 18, 0.88));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.combat-effect-strip-head {
+  font-size: 0.59rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #ffb6ac;
+  margin-bottom: 0.28rem;
+}
+
+.combat-effect-chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.24rem;
+}
+
+.combat-effect-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.34rem;
+  padding: 0.14rem 0.38rem;
+  font-size: 0.64rem;
+}
+
+.combat-effect-chip strong {
+  font-size: 0.63rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.combat-effect-chip span {
+  font-size: 0.58rem;
+  color: inherit;
+  opacity: 0.84;
 }
 
 .sel-target-bars {

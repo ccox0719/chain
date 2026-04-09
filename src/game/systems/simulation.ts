@@ -3053,6 +3053,21 @@ function getPlayerCapacitorFraction(world: GameWorld) {
   return derived.capacitorCapacity > 0 ? world.player.capacitor / derived.capacitorCapacity : 0;
 }
 
+function getPlayerCombatHealthFraction(world: GameWorld) {
+  const derived = getCachedDerivedStats(world.player);
+  const maxTotal = Math.max(1, derived.maxShield + derived.maxArmor + derived.maxHull);
+  return (world.player.shield + world.player.armor + world.player.hull) / maxTotal;
+}
+
+function isPlayerVisiblyWounded(world: GameWorld) {
+  const derived = getCachedDerivedStats(world.player);
+  return (
+    getPlayerCombatHealthFraction(world) <= 0.42 ||
+    world.player.hull <= derived.maxHull * 0.7 ||
+    world.player.armor <= derived.maxArmor * 0.35
+  );
+}
+
 function shouldEnemyUseUtilityModule(
   world: GameWorld,
   enemy: EnemyState,
@@ -5258,13 +5273,21 @@ function runEnemyModules(world: GameWorld, dt: number) {
     const tacticalRole = getEnemyTacticalRole(variant);
     const advancedTactics = isEnemyAdvancedTactician(variant);
     const allied = isEnemyAllied(enemy);
+    const playerIsWounded = !allied && isPlayerVisiblyWounded(world);
     enemy.recentDamageTimer = Math.max(0, enemy.recentDamageTimer - dt);
     enemy.pursuitTimer = Math.max(0, enemy.pursuitTimer - dt);
     enemy.shield = clamp(enemy.shield + 2.5 * (enemy.recentDamageTimer > 0 ? 0.03 : 0.18) * dt, 0, variant.shield);
     enemy.capacitor = clamp(enemy.capacitor + variant.capacitorRegen * 0.6 * dt, 0, variant.capacitor);
 
     const playerRef: SelectableRef = { id: "player", type: "enemy" };
-    const targetEnemy = findNearestEnemyTarget(world, enemy);
+    const playerDistance = distance(enemy.position, world.player.position);
+    const preferredRange = getEnemyPreferredRange(enemy.variantId);
+    const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier * combatPressure.enemyDetectionMultiplier;
+    const opportunisticKillRange = playerIsWounded
+      ? Math.max(detectionRange * 1.18, preferredRange * 2.5)
+      : 0;
+    const prioritizePlayer = !allied && playerIsWounded && playerDistance <= opportunisticKillRange;
+    const targetEnemy = prioritizePlayer ? null : findNearestEnemyTarget(world, enemy);
     const targetRef =
       allied && targetEnemy
         ? { id: targetEnemy.id, type: "enemy" as const }
@@ -5274,18 +5297,21 @@ function runEnemyModules(world: GameWorld, dt: number) {
     const useEnemyTarget = Boolean(targetEnemy && (allied || getFactionWarEventForSystem(world, world.currentSectorId)));
     const targetPosition = useEnemyTarget && targetEnemy ? targetEnemy.position : world.player.position;
     const targetVelocity = useEnemyTarget && targetEnemy ? targetEnemy.velocity : world.player.velocity;
-    const targetDistance = useEnemyTarget && targetEnemy ? distance(enemy.position, targetEnemy.position) : distance(enemy.position, world.player.position);
+    const targetDistance = useEnemyTarget && targetEnemy ? distance(enemy.position, targetEnemy.position) : playerDistance;
     const targetHealthFraction = useEnemyTarget && targetEnemy ? getEnemyHealthFraction(targetEnemy, enemyVariantById[targetEnemy.variantId]) : 1;
-    const playerSpeed = length(world.player.velocity);
-    const detectionRange = variant.lockRange * enemy.effects.lockRangeMultiplier * combatPressure.enemyDetectionMultiplier;
     const pursuitRange = Math.max(
       detectionRange * 1.95,
-      getEnemyPreferredRange(enemy.variantId) * 2.2 * combatPressure.enemyDetectionMultiplier
+      preferredRange * 2.2 * combatPressure.enemyDetectionMultiplier
     );
+    const woundedPursuitRange = playerIsWounded ? Math.max(pursuitRange, detectionRange * 2.3) : pursuitRange;
     const seesTarget = allied
       ? Boolean(targetEnemy) && targetDistance <= detectionRange
-      : targetDistance <= detectionRange || (enemy.pursuitTimer > 0 && targetDistance <= pursuitRange);
-    const retreating = !allied && seesTarget && shouldEnemyRetreat(enemy, variant, targetDistance);
+      : targetDistance <= detectionRange || (enemy.pursuitTimer > 0 && targetDistance <= woundedPursuitRange) || prioritizePlayer;
+    const retreating =
+      !allied &&
+      seesTarget &&
+      shouldEnemyRetreat(enemy, variant, targetDistance) &&
+      !(playerIsWounded && getEnemyHealthFraction(enemy, variant) > 0.34 && targetDistance <= preferredRange * 1.4);
     if (targetRef && allied) {
       enemy.activeTarget = targetRef;
       enemy.navigation.target = targetRef;
@@ -5294,7 +5320,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
       const target = targetRef ?? playerRef;
       enemy.activeTarget = target;
       enemy.navigation.target = target;
-      enemy.pursuitTimer = Math.max(enemy.pursuitTimer, 3.5);
+      enemy.pursuitTimer = Math.max(enemy.pursuitTimer, playerIsWounded ? 5.5 : 3.5);
     } else if (enemy.pursuitTimer <= 0) {
       enemy.activeTarget = null;
       enemy.navigation.target = null;
@@ -5314,7 +5340,16 @@ function runEnemyModules(world: GameWorld, dt: number) {
             ? "orbit"
             : "keep_range"
           : combatMode;
-    const preferredRange = getEnemyPreferredRange(enemy.variantId);
+    const woundedPressureRangeMultiplier =
+      !allied && playerIsWounded
+        ? tacticalRole === "support" || tacticalRole === "artillery"
+          ? 0.9
+          : tacticalRole === "jammer"
+            ? 0.84
+            : tacticalRole === "tackler" || tacticalRole === "hunter"
+              ? 0.62
+              : 0.72
+        : 1;
     const tacticalRangeBias =
       tacticalRole === "support" ? 1.32 :
       tacticalRole === "jammer" ? 1.18 :
@@ -5369,7 +5404,7 @@ function runEnemyModules(world: GameWorld, dt: number) {
               getEnemyPreferredRange(enemy.variantId) + retreatRangeBuffer
             )
           )
-        : Math.round(preferredRange * tacticalRangeBias)
+        : Math.round(preferredRange * tacticalRangeBias * woundedPressureRangeMultiplier)
       : 0;
     updateEnemyNavigation(world, enemy.id, dt);
 
