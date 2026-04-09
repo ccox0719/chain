@@ -40,7 +40,7 @@ export function GameMenu({ difficulty, onSetDifficulty, onResetGame, onOpenBalan
 
         <div className="panel-lite">
           <h3>New Run</h3>
-          <p>Choose one of the four stripped-down starter fits and regenerate the current save.</p>
+          <p>Choose a starter fit with a distinct weapon mix and role profile, then regenerate the current save.</p>
           <button type="button" onClick={onResetGame}>
             Pick Starter Ship
           </button>

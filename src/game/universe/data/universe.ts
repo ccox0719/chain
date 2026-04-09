@@ -400,7 +400,7 @@ const baseSectorCatalog: BaseSystemDefinition[] = [
       belt("ember-belt-alpha", "Reach Belt Alpha", 1480, 1220, "ember-crystal", "Dense ember crystal field with pirate pickets."),
       belt("ember-belt-beta", "Reach Belt Beta", 980, 1640, "ferrite", "Secondary ore field used by refinery crews."),
       anomaly("ember-anomaly", "Melt Rift", 2180, 1280, "A pirate ambush pocket forming inside the heat wake.", {
-        effect: "push",
+        effect: "drag",
         radius: 260,
         strength: 180,
         debrisCount: 10,
@@ -605,7 +605,7 @@ const baseSectorCatalog: BaseSystemDefinition[] = [
       gate("gate-blackwake-verge", "Outer Verge Gate", 2460, 520, "outer-verge", "gate-verge-blackwake", "Border gate back toward Shade Hub."),
       gate("gate-blackwake-ghostlight", "Ghostlight Gate", 2760, 2320, "ghostlight-pocket", "gate-ghostlight-blackwake", "Unstable gate into the lucrative pocket.", "ghostlight-charter"),
       anomaly("blackwake-rift", "Wake Rift", 1780, 1420, "Large pirate anomaly with disciplined raider wings.", {
-        effect: "pull",
+        effect: "slipstream",
         radius: 320,
         strength: 245,
         debrisCount: 14,
@@ -915,7 +915,7 @@ const expansionSectorCatalog: BaseSystemDefinition[] = [
       gate("gate-ashen-revenant", "Revenant Gate", 2700, 2240, "revenant-crossing", "gate-revenant-ashen", "Deep frontier gate toward unstable salvage lanes."),
       belt("ashen-belt-alpha", "Ashen Belt Alpha", 1540, 1300, "ghost-alloy", "A rare alloy field with poor rescue odds and good payouts."),
       anomaly("ashen-breach", "Ashen Breach", 2100, 1580, "A violent frontier rupture favored by raider wings.", {
-        effect: "pull",
+        effect: "drag",
         radius: 300,
         strength: 220,
         debrisCount: 12,
@@ -1012,7 +1012,7 @@ const expansionSectorCatalog: BaseSystemDefinition[] = [
       belt("revenant-belt-alpha", "Revenant Belt Alpha", 1820, 1380, "ghost-alloy", "Rich alloy seam wrapped in fresh wreck signatures."),
       wreck("revenant-vault", "Vault Scatter", 1340, 1180, "A field of torn cargo vaults and stripped escort hulls."),
       anomaly("revenant-rift", "Revenant Rift", 2360, 1760, "A violent anomaly that drags fights into ugly ranges.", {
-        effect: "pull",
+        effect: "ion",
         radius: 340,
         strength: 250,
         debrisCount: 15,

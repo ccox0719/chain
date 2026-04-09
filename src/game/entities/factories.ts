@@ -236,6 +236,11 @@ function createStartingFactionRewardClaims(): PlayerState["factionRewardClaims"]
   };
 }
 
+function applyStarterBonus(value: number, bonus?: number) {
+  if (bonus === undefined) return Math.max(1, Math.round(value));
+  return Math.max(1, Math.round(value + bonus));
+}
+
 export function rebuildPlayerRuntime(player: PlayerState) {
   player.modules = {
     weapon: createRuntimeSlots(player.equipped.weapon),
@@ -247,6 +252,7 @@ export function rebuildPlayerRuntime(player: PlayerState) {
 export function createPlayer(starterConfigId = defaultStarterShipConfigId): PlayerState {
   const starterConfig = starterShipConfigById[starterConfigId] ?? starterShipConfigById[defaultStarterShipConfigId];
   const hull = playerShipById[starterConfig.shipId];
+  const starterBonuses = starterConfig.starterBonuses ?? {};
   const starterFit = cloneLoadout(starterConfig.equipped);
   const player: PlayerState = {
     starterConfigId: starterConfig.id,
@@ -258,10 +264,10 @@ export function createPlayer(starterConfigId = defaultStarterShipConfigId): Play
     position: { x: 1140, y: 1180 },
     velocity: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    shield: hull.baseShield,
-    armor: hull.baseArmor,
-    hull: hull.baseHull,
-    capacitor: hull.baseCapacitor,
+    shield: applyStarterBonus(hull.baseShield, starterBonuses.maxShield),
+    armor: applyStarterBonus(hull.baseArmor, starterBonuses.maxArmor),
+    hull: applyStarterBonus(hull.baseHull, starterBonuses.maxHull),
+    capacitor: applyStarterBonus(hull.baseCapacitor, starterBonuses.capacitorCapacity),
     cargo: { ferrite: 0, "ember-crystal": 0, "ghost-alloy": 0 },
     commodities: {
       "food-supplies": 0,
@@ -433,6 +439,7 @@ export function createRuntimeSector(sectorId: string, difficulty: DifficultyId =
     beltSpawnCooldowns: {},
     challengePressure: 0,
     reinforcementTimer: 0,
+    simulationAccumulator: 0,
     ecology: createSystemEcology(sectorId),
     fieldStates
   };

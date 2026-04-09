@@ -8,7 +8,7 @@ export interface RegionalEventTemplate {
   serviceOffer?: string;
   hostileActivityMultiplier?: number;
   rewardMultiplier?: number;
-  missionTypeWeights?: Partial<Record<"transport" | "mining" | "bounty", number>>;
+  missionTypeWeights?: Partial<Record<"transport" | "mining" | "bounty" | "escort" | "patrol", number>>;
   stockBiasTags?: string[];
   priceAdjustments?: Array<{
     tag: string;
@@ -215,6 +215,40 @@ export const regionalEventTemplates: RegionalEventTemplate[] = [
     priceAdjustments: [
       { tag: "military", buyMultiplier: 1.01, sellMultiplier: 1.05 },
       { tag: "frontier", buyMultiplier: 0.99, sellMultiplier: 1.04 }
+    ]
+  },
+  {
+    id: "relay-blackout",
+    regions: ["aurelian-core", "industrial-fringe", "frontier-march"],
+    weight: 2,
+    name: "Relay Blackout",
+    description: "A hard comms blackout is making route timing sloppy and pushing higher-value work toward live pilots.",
+    affectedTags: ["navigation", "research", "logistics"],
+    serviceOffer: "Relay desks are paying for manual chart checks and timely packet recovery.",
+    hostileActivityMultiplier: 1.05,
+    rewardMultiplier: 1.07,
+    missionTypeWeights: { transport: 1.16, mining: 0.9, bounty: 0.96 },
+    stockBiasTags: ["navigation", "research", "technology"],
+    priceAdjustments: [
+      { tag: "research", buyMultiplier: 0.96, sellMultiplier: 1.05 },
+      { tag: "technology", buyMultiplier: 0.97, sellMultiplier: 1.04 }
+    ]
+  },
+  {
+    id: "salvage-security-rush",
+    regions: ["industrial-fringe", "frontier-march"],
+    weight: 2,
+    name: "Salvage Security Rush",
+    description: "Recovery crews are hiring guns faster than they can process the wrecks, and patrol work is paying the difference.",
+    affectedTags: ["salvage", "combat", "frontier"],
+    serviceOffer: "Recovery offices want fast escorts and cleared debris lanes.",
+    hostileActivityMultiplier: 1.09,
+    rewardMultiplier: 1.09,
+    missionTypeWeights: { transport: 0.94, mining: 1.02, bounty: 1.18 },
+    stockBiasTags: ["salvage", "frontier"],
+    priceAdjustments: [
+      { tag: "salvage", buyMultiplier: 1.02, sellMultiplier: 1.08 },
+      { tag: "frontier", buyMultiplier: 0.99, sellMultiplier: 1.03 }
     ]
   }
 ];

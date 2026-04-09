@@ -559,8 +559,8 @@ export function SidebarPanels({
                 </CollapsibleSection>
               </section>
               <section className="panel-lite">
-                <CollapsibleSection title="Story Log" subtitle={`${world.storyLog.length} entries`}>
-                  <ul className="stack-list">
+                <CollapsibleSection title="Story Log" subtitle={`${world.storyLog.length} entries`} defaultOpen>
+                  <ul className="stack-list story-log-scroll">
                     {world.storyLog.map((item, index) => (
                       <li key={`${item}-${index}`}>{item}</li>
                     ))}

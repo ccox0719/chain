@@ -1,19 +1,5 @@
 import { SelectableRef } from "../types/game";
 
-function getWarpBands(target: SelectableRef) {
-  switch (target.type) {
-    case "station":
-    case "gate":
-    case "belt":
-    case "anomaly":
-    case "beacon":
-    case "outpost":
-      return [0, 10, 20, 30];
-    default:
-      return [0];
-  }
-}
-
 interface ContextMenuProps {
   x: number;
   y: number;
@@ -37,10 +23,12 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ x, y, target, controlRanges, onCommand }: ContextMenuProps) {
-  const warpItems = getWarpBands(target).map((range) => ({
-    label: `Warp ${range}`,
-    command: { type: "warp", target, range } as const
-  }));
+  const warpItems = [
+    {
+      label: "Warp 0",
+      command: { type: "warp", target, range: 0 } as const
+    }
+  ];
   const common = [
     { label: "Approach", command: { type: "approach", target } as const },
     { label: "Stop Ship", command: { type: "stop" } as const }
@@ -135,3 +123,5 @@ export function ContextMenu({ x, y, target, controlRanges, onCommand }: ContextM
     </div>
   );
 }
+
+

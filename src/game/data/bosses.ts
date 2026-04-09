@@ -84,6 +84,21 @@ export const bossCatalog: BossDefinition[] = [
     rewardCreditsBonus: 2400,
     threatSummary: "Veilborn command sniper with control escorts in the Hush Atlas pocket.",
     loreBlurb: "A sealed-pocket command hull that denies approach and collapses sensor discipline."
+  },
+  {
+    id: "blackwake-abyss-king",
+    faction: "blackwake-clans",
+    archetype: "interceptor",
+    variantId: "blackwake-abyss-king",
+    missionId: "abyss-crown",
+    bossVariantId: "blackwake-abyss-king",
+    bossTitle: "Abyss King",
+    escortVariantIds: ["blackwake-reaver-captain", "blackwake-reaver", "blackwake-interceptor"],
+    missionBriefing: "A Blackwake command raider has pushed into Revenant Crossing to dominate the salvage lanes.",
+    specialMechanicTags: ["tackle", "disruption", "raider-command"],
+    rewardCreditsBonus: 2600,
+    threatSummary: "Blackwake apex command hull pushing deep into frontier salvage lanes.",
+    loreBlurb: "A raider sovereign built to take a salvage lane by force, speed, and disruption."
   }
 ];
 

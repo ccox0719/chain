@@ -90,7 +90,7 @@ const MOVEMENT_BALANCE_DEFAULT = {
     gateCorridorAllowance: 360
   },
   terrain: {
-    asteroidRepelPadding: 96,
+    asteroidRepelPadding: 175,
     asteroidPushStrength: 84,
     asteroidRadiusScale: 0.85,
     anomalyPullScale: 0.06,

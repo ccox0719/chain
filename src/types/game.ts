@@ -79,7 +79,7 @@ export type RoleTag =
 
 export type MissionType = "bounty" | "mining" | "deliver" | "travel";
 export type TransportRisk = "low" | "medium" | "high" | "extreme";
-export type ProceduralContractType = "transport" | "mining" | "bounty";
+export type ProceduralContractType = "transport" | "mining" | "bounty" | "escort" | "patrol";
 
 export type SecurityBand = "high" | "medium" | "low" | "frontier";
 
@@ -152,7 +152,10 @@ export type StarterShipConfigId =
   | "balanced-patrol"
   | "missile-runner"
   | "ore-hound"
-  | "wreck-diver";
+  | "wreck-diver"
+  | "rail-scout"
+  | "cannon-brawler"
+  | "longshot-lane";
 
 export type CommandAction =
   | { type: "approach"; target: SelectableRef; range?: number }
@@ -319,8 +322,20 @@ export interface ShipModuleBonusProfile {
 }
 
 export interface ShipBonusProfile {
+  maxHull?: number;
+  maxShield?: number;
+  maxArmor?: number;
+  capacitorCapacity?: number;
+  capacitorRegen?: number;
+  acceleration?: number;
+  turnSpeed?: number;
+  maxSpeed?: number;
+  lockRange?: number;
+  warpSpeed?: number;
   cargoCapacity?: number;
   cargoCapacityMultiplier?: number;
+  interactionRange?: number;
+  signatureRadius?: number;
   miningYieldMultiplier?: number;
   commodityBuyMultiplier?: number;
   commoditySellMultiplier?: number;
@@ -832,6 +847,13 @@ export interface StarterShipConfig {
   shipId: string;
   summary: string;
   description: string;
+  starterStats: {
+    offense: number;
+    mobility: number;
+    defense: number;
+    utility: number;
+  };
+  starterBonuses?: ShipBonusProfile;
   equipped: EquippedLoadout;
 }
 
@@ -1103,6 +1125,7 @@ export interface ProceduralContractDefinition {
   rewardCredits: number;
   bonusReward?: number;
   bonusTimeLimitSec?: number;
+  patrolDurationSec?: number;
   routePreference?: RoutePreference;
   targetSystemId: string;
   targetDestinationId?: string;
@@ -1120,6 +1143,8 @@ export interface ProceduralContractState {
   status: "active" | "readyToTurnIn" | "completed";
   progress: number;
   acceptedAt: number;
+  originSystemId?: string;
+  routeHopCount?: number;
   dueAt: number | null;
   rewardClaimed: boolean;
   pickedUp?: boolean;
@@ -1163,6 +1188,7 @@ export interface SectorRuntime {
   fieldStates: Record<string, AsteroidFieldRuntimeState>;
   cameraShake?: number;
   playerHitFlash?: number;
+  simulationAccumulator?: number;
 }
 
 export interface DerivedShipStats {
@@ -1182,6 +1208,7 @@ export interface DerivedShipStats {
   warpSpeed: number;
   cargoCapacity: number;
   interactionRange: number;
+  signatureRadius: number;
   miningYieldMultiplier: number;
   shieldRepairAmountMultiplier: number;
   armorRepairAmountMultiplier: number;

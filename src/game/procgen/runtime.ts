@@ -16,8 +16,10 @@ import { enemyVariantById, enemyVariants } from "../data/ships";
 import { estimateRouteRisk, planRoute } from "../universe/routePlanning";
 import { encounterPackTemplates, lootBonusTemplates } from "./data/encounters";
 import {
+  escortContractTemplates,
   bountyContractTemplates,
   miningContractTemplates,
+  patrolContractTemplates,
   proceduralTypeWeights,
   transportCargoTemplates
 } from "./data/contracts";
@@ -29,6 +31,7 @@ import { SPAWN_BALANCE } from "../config/balance";
 
 export const PROCGEN_EVENT_CYCLE_SEC = 720;
 export const PROCGEN_BOARD_SIZE = 4;
+const STORY_LOG_LIMIT = 20;
 
 const FACTION_CONTRACT_STYLE: Record<
   keyof typeof factionData,
@@ -86,6 +89,8 @@ function stationContractBias(station: SystemDestination, type: ProceduralContrac
   if (type === "transport" && (tags.has("market") || tags.has("logistics"))) bias += 0.18;
   if (type === "mining" && (tags.has("mining") || tags.has("industrial"))) bias += 0.2;
   if (type === "bounty" && (tags.has("repair") || tags.has("frontier") || tags.has("military"))) bias += 0.16;
+  if (type === "escort" && (tags.has("market") || tags.has("logistics") || tags.has("military"))) bias += 0.22;
+  if (type === "patrol" && (tags.has("military") || tags.has("frontier") || tags.has("repair"))) bias += 0.24;
   return bias;
 }
 
@@ -279,7 +284,7 @@ export function forceDevRegionalEvent(world: GameWorld, regionId: string) {
     priceAdjustments: picked.priceAdjustments
   };
   world.procgen.regionalEvents[regionId] = event;
-  world.storyLog = [`DEV: regional event triggered - ${event.name}.`, ...world.storyLog].slice(0, 7);
+  world.storyLog = [`DEV: regional event triggered - ${event.name}.`, ...world.storyLog].slice(0, STORY_LOG_LIMIT);
   return event;
 }
 
@@ -319,7 +324,7 @@ export function forceDevSiteHotspot(world: GameWorld, systemId: string) {
     tags: template.tags
   };
   world.procgen.siteHotspots[pickedSystem.id] = hotspot;
-  world.storyLog = [`DEV: site hotspot triggered - ${hotspot.title}.`, ...world.storyLog].slice(0, 7);
+  world.storyLog = [`DEV: site hotspot triggered - ${hotspot.title}.`, ...world.storyLog].slice(0, STORY_LOG_LIMIT);
   return hotspot;
 }
 
@@ -359,7 +364,7 @@ export function forceDevWarEvent(world: GameWorld, regionId: string) {
     acknowledged: false
   };
   world.procgen.warEvents[regionId] = warEvent;
-  world.storyLog = [`DEV: war event triggered - ${warEvent.title} in ${system.name}.`, ...world.storyLog].slice(0, 7);
+  world.storyLog = [`DEV: war event triggered - ${warEvent.title} in ${system.name}.`, ...world.storyLog].slice(0, STORY_LOG_LIMIT);
   return warEvent;
 }
 
@@ -561,6 +566,131 @@ function buildBountyContract(
   } satisfies ProceduralContractDefinition;
 }
 
+function buildEscortContract(
+  world: GameWorld,
+  station: SystemDestination,
+  system: SolarSystemDefinition,
+  event: RegionalEventState | null,
+  random: () => number,
+  slot: number
+) {
+  const destinationPool = getStationEntries()
+    .filter((entry) => entry.station.id !== station.id)
+    .map((entry) => {
+      const routePreference = pickOne(["shortest", "safer"] as const, random);
+      const route = planRoute(world, system.id, entry.system.id, routePreference, false);
+      if (!route || route.steps.length <= 0 || route.steps.length > 4) return null;
+      let weight = 2.3 - route.steps.length * 0.28;
+      if (entry.system.regionId !== system.regionId) weight += 0.2;
+      if (entry.system.missionTags.includes("escort") || entry.system.economyTags.includes("logistics")) weight += 0.45;
+      if (event?.missionTypeWeights?.escort) weight *= event.missionTypeWeights.escort ?? 1;
+      return { ...entry, routePreference, route, weight };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const destination = weightedPick(destinationPool, random);
+  if (!destination) return null;
+
+  const templatePool = escortContractTemplates.map((template) => {
+    let weight = template.weight;
+    if (template.tags.some((tag) => station.tags?.includes(tag) || system.missionTags.includes(tag) || system.economyTags.includes(tag))) {
+      weight += 0.8;
+    }
+    if (event && template.tags.some((tag) => event.affectedTags.includes(tag))) weight += 0.6;
+    return { ...template, weight };
+  });
+  const template = weightedPick(templatePool, random);
+  if (!template) return null;
+
+  const routeRisk = estimateRouteRisk(destination.route.steps);
+  const jumps = destination.route.steps.length;
+  const rewardCredits = Math.round(
+    (480 + jumps * 210 + riskScore(routeRisk) * 130 + (event?.rewardMultiplier ?? 1) * 120) *
+      stationContractBias(station, "escort")
+  );
+
+  return {
+    id: `proc:${system.id}:${getProcgenCycle(world)}:${slot}:escort`,
+    templateId: template.id,
+    type: "escort" as const,
+    title: `${template.titlePrefix} ${pickOne(["Convoy", "Screen", "Run"], random)}`,
+    briefing: `${template.description} Escort the convoy from ${station.name} to ${destination.station.name} in ${destination.system.name}.`,
+    issuerStationId: station.id,
+    issuerSystemId: system.id,
+    issuerRegionId: system.regionId,
+    issuerFaction: system.controllingFaction,
+    requiredStanding: getContractStandingRequirement(routeRisk),
+    riskLevel: routeRisk,
+    rewardCredits,
+    bonusReward: routeRisk === "high" || routeRisk === "extreme" ? 220 + jumps * 60 : undefined,
+    bonusTimeLimitSec: jumps >= 2 ? 540 + jumps * 70 : undefined,
+    routePreference: template.routePreference,
+    targetSystemId: destination.system.id,
+    targetStationId: destination.station.id
+  } satisfies ProceduralContractDefinition;
+}
+
+function buildPatrolContract(
+  world: GameWorld,
+  station: SystemDestination,
+  system: SolarSystemDefinition,
+  event: RegionalEventState | null,
+  random: () => number,
+  slot: number
+) {
+  const targetPool = [system, ...system.neighbors.map((neighborId) => sectorById[neighborId]).filter(Boolean)]
+    .map((candidate) => {
+      const route = planRoute(world, system.id, candidate.id, "safer", false);
+      if (!route || route.steps.length > 3) return null;
+      let weight = 1.4 + candidate.danger * 0.22;
+      if (candidate.missionTags.includes("combat") || candidate.missionTags.includes("patrol")) weight += 1.0;
+      if (candidate.economyTags.includes("frontier") || candidate.economyTags.includes("logistics")) weight += 0.35;
+      if (event?.missionTypeWeights?.patrol) weight *= event.missionTypeWeights.patrol ?? 1;
+      return { candidate, route, weight };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const target = weightedPick(targetPool, random);
+  if (!target) return null;
+
+  const templatePool = patrolContractTemplates.map((template) => {
+    let weight = template.weight;
+    if (template.tags.some((tag) => station.tags?.includes(tag) || system.missionTags.includes(tag) || system.economyTags.includes(tag))) {
+      weight += 0.7;
+    }
+    if (event && template.tags.some((tag) => event.affectedTags.includes(tag))) weight += 0.5;
+    return { ...template, weight };
+  });
+  const template = weightedPick(templatePool, random);
+  if (!template) return null;
+
+  const durationSec = randomInt(template.durationRange[0], template.durationRange[1], random);
+  const routeRisk = estimateRouteRisk(target.route.steps);
+  const rewardCredits = Math.round(
+    (420 + durationSec * 5.2 + target.route.steps.length * 160 + riskScore(routeRisk) * 100 + (event?.rewardMultiplier ?? 1) * 140) *
+      stationContractBias(station, "patrol")
+  );
+
+  return {
+    id: `proc:${system.id}:${getProcgenCycle(world)}:${slot}:patrol`,
+    templateId: template.id,
+    type: "patrol" as const,
+    title: `${template.titlePrefix} ${pickOne(["Sweep", "Hold", "Run"], random)}`,
+    briefing: `${template.description} Hold ${target.candidate.name} long enough for local traffic to recover.`,
+    issuerStationId: station.id,
+    issuerSystemId: system.id,
+    issuerRegionId: system.regionId,
+    issuerFaction: system.controllingFaction,
+    requiredStanding: getContractStandingRequirement(routeRisk),
+    riskLevel: routeRisk,
+    rewardCredits,
+    bonusReward: routeRisk === "high" || routeRisk === "extreme" ? 180 + durationSec * 2 : undefined,
+    bonusTimeLimitSec: durationSec + 180,
+    patrolDurationSec: durationSec,
+    targetSystemId: target.candidate.id,
+    targetDestinationId: target.candidate.destinations.find((entry) => entry.kind === "beacon" || entry.kind === "station" || entry.kind === "outpost")?.id,
+    routePreference: "safer"
+  } satisfies ProceduralContractDefinition;
+}
+
 export function generateContractsForStation(world: GameWorld, station: SystemDestination | null, systemId: string) {
   if (!station) return [];
   ensureProcgenState(world);
@@ -592,7 +722,11 @@ export function generateContractsForStation(world: GameWorld, station: SystemDes
         ? buildTransportContract(world, station, system, event, random, index)
         : typeEntry.type === "mining"
           ? buildMiningContract(world, station, system, event, random, index)
-          : buildBountyContract(world, station, system, event, random, index);
+          : typeEntry.type === "escort"
+            ? buildEscortContract(world, station, system, event, random, index)
+            : typeEntry.type === "patrol"
+              ? buildPatrolContract(world, station, system, event, random, index)
+              : buildBountyContract(world, station, system, event, random, index);
     if (contract && !contracts.some((entry) => entry.id === contract.id || (entry.type === contract.type && entry.templateId === contract.templateId && entry.targetSystemId === contract.targetSystemId))) {
       contracts.push(contract);
     }
@@ -606,11 +740,17 @@ export function getBoardContractById(world: GameWorld, contractId: string) {
 }
 
 export function createContractState(world: GameWorld, contract: ProceduralContractDefinition): ProceduralContractState {
+  const route =
+    contract.type === "escort"
+      ? planRoute(world, world.currentSectorId, contract.targetSystemId, contract.routePreference ?? "safer", false)
+      : null;
   return {
     contractId: contract.id,
     status: "active",
     progress: 0,
     acceptedAt: world.elapsedTime,
+    originSystemId: world.currentSectorId,
+    routeHopCount: route?.steps.length ?? 0,
     dueAt: contract.bonusReward && contract.bonusTimeLimitSec ? world.elapsedTime + contract.bonusTimeLimitSec : null,
     rewardClaimed: false,
     pickedUp: contract.type === "transport",
@@ -689,5 +829,7 @@ export function rollProceduralLoot(world: GameWorld, variantId: string) {
 export function contractProgressFraction(contract: ProceduralContractDefinition, state: ProceduralContractState | null) {
   if (!state) return 0;
   if (contract.type === "transport") return state.delivered ? 1 : state.pickedUp ? 0.5 : 0;
+  if (contract.type === "escort") return clamp(state.progress, 0, 1);
+  if (contract.type === "patrol") return clamp(state.progress / Math.max(1, contract.patrolDurationSec ?? contract.targetCount ?? 1), 0, 1);
   return clamp(state.progress / Math.max(1, contract.targetCount ?? 1), 0, 1);
 }

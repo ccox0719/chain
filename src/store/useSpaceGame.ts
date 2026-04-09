@@ -47,6 +47,7 @@ import {
 import { createInitialWorld } from "../game/entities/factories";
 import { defaultStarterShipConfigId } from "../game/data/starterShips";
 import { normalizePilotLicense } from "../game/utils/pilotLicense";
+import { PERFORMANCE } from "../game/config/performance";
 import {
   forceDevRegionalEvent,
   forceDevSiteHotspot,
@@ -73,6 +74,7 @@ export function useSpaceGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef<GameWorld>(loadWorld());
   const autosaveRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
   const isMobileRef = useRef<boolean>(window.innerWidth < 768);
   const zoomTargetRef = useRef<number>(
     window.innerWidth < 768
@@ -91,7 +93,23 @@ export function useSpaceGame() {
 
   const refresh = () => {
     setSnapshot(createSnapshot(worldRef.current));
+    scheduleSave();
+  };
+
+  const flushSave = () => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     saveWorld(worldRef.current);
+  };
+
+  const scheduleSave = () => {
+    if (saveTimerRef.current !== null) return;
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      saveWorld(worldRef.current);
+    }, PERFORMANCE.ui.saveDelayMs);
   };
 
   useEffect(() => {
@@ -144,22 +162,22 @@ export function useSpaceGame() {
   }, []);
 
   useEffect(() => {
-    const saveNow = () => {
-      saveWorld(worldRef.current);
-    };
-
-    saveNow();
-    autosaveRef.current = window.setInterval(saveNow, 2000);
-    window.addEventListener("beforeunload", saveNow);
-    window.addEventListener("pagehide", saveNow);
+    flushSave();
+    autosaveRef.current = window.setInterval(flushSave, 2000);
+    window.addEventListener("beforeunload", flushSave);
+    window.addEventListener("pagehide", flushSave);
 
     return () => {
       if (autosaveRef.current !== null) {
         window.clearInterval(autosaveRef.current);
         autosaveRef.current = null;
       }
-      window.removeEventListener("beforeunload", saveNow);
-      window.removeEventListener("pagehide", saveNow);
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      window.removeEventListener("beforeunload", flushSave);
+      window.removeEventListener("pagehide", flushSave);
     };
   }, []);
 
@@ -205,7 +223,7 @@ export function useSpaceGame() {
       );
 
       snapshotAccumulator += dt;
-      if (snapshotAccumulator >= 0.2) {
+      if (snapshotAccumulator >= PERFORMANCE.ui.snapshotRefreshIntervalSec) {
         snapshotAccumulator = 0;
         setSnapshot(createSnapshot(worldRef.current));
       }

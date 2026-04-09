@@ -54,3 +54,23 @@ export function getContractStandingRequirement(risk: "low" | "medium" | "high" |
   if (risk === "high") return 1.9;
   return 2.7;
 }
+
+export function getFactionStandingCommerceModifiers(
+  factionId: FactionId,
+  standing: number,
+  stationProfile: StationMarketProfile | null
+) {
+  if (!stationProfile || stationProfile.factionControl !== factionId) return null;
+  const tier = getFactionStandingTier(standing);
+  if (tier === "neutral-operator" || tier === "licensed-contractor") return null;
+  if (tier === "auxiliary-affiliate") {
+    return { moduleBuyMultiplier: 0.985, shipBuyMultiplier: 0.99, commodityBuyMultiplier: 0.995 };
+  }
+  if (tier === "fleet-support") {
+    return { moduleBuyMultiplier: 0.955, shipBuyMultiplier: 0.965, commodityBuyMultiplier: 0.985 };
+  }
+  if (tier === "enlisted-ally") {
+    return { moduleBuyMultiplier: 0.925, shipBuyMultiplier: 0.94, commodityBuyMultiplier: 0.97 };
+  }
+  return { moduleBuyMultiplier: 0.9, shipBuyMultiplier: 0.92, commodityBuyMultiplier: 0.96 };
+}

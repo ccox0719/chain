@@ -47,6 +47,8 @@ export const proceduralTypeWeights: ProceduralTypeWeightTemplate[] = [
   { id: "local-extraction", type: "mining", weight: 3, stationTags: ["mining", "industrial"], systemTags: ["mining"] },
   { id: "frontier-sweep", type: "bounty", weight: 2, stationTags: ["frontier", "repair"], systemTags: ["combat"] },
   { id: "checkpoint-patrol", type: "bounty", weight: 2, stationTags: ["military", "repair"], regionIds: ["industrial-fringe", "frontier-march"] },
+  { id: "convoy-escort", type: "escort", weight: 2, stationTags: ["market", "logistics", "military"], regionIds: ["aurelian-core", "industrial-fringe", "frontier-march"] },
+  { id: "lane-patrol", type: "patrol", weight: 2, stationTags: ["military", "frontier", "repair"], systemTags: ["combat"], regionIds: ["industrial-fringe", "frontier-march"] },
   { id: "civil-priority", type: "transport", weight: 2, regionIds: ["aurelian-core"] },
   { id: "ore-charter", type: "mining", weight: 2, regionIds: ["industrial-fringe", "frontier-march"] }
 ];
@@ -205,5 +207,77 @@ export const bountyContractTemplates: BountyContractTemplate[] = [
     description: "Clear a marked corridor and keep it quiet long enough for the route desks to reopen traffic.",
     tags: ["combat", "patrol", "frontier"],
     countRange: [3, 6]
+  }
+];
+
+export interface EscortContractTemplate {
+  id: string;
+  weight: number;
+  titlePrefix: string;
+  description: string;
+  tags: string[];
+  routePreference: "shortest" | "safer";
+}
+
+export interface PatrolContractTemplate {
+  id: string;
+  weight: number;
+  titlePrefix: string;
+  description: string;
+  tags: string[];
+  durationRange: [number, number];
+}
+
+export const escortContractTemplates: EscortContractTemplate[] = [
+  {
+    id: "convoy-screen",
+    weight: 3,
+    titlePrefix: "Escort Screen",
+    description: "Keep the convoy moving and absorb the first contact if trouble shows on the lane.",
+    tags: ["combat", "escort", "logistics"],
+    routePreference: "safer"
+  },
+  {
+    id: "route-guard",
+    weight: 2,
+    titlePrefix: "Route Guard",
+    description: "Shadow a civilian lane through contested space and make sure the cargo survives the trip.",
+    tags: ["escort", "frontier", "patrol"],
+    routePreference: "shortest"
+  },
+  {
+    id: "shield-run",
+    weight: 2,
+    titlePrefix: "Shield Run",
+    description: "Escort a high-value convoy from berth to berth without letting raiders split the formation.",
+    tags: ["combat", "military", "escort"],
+    routePreference: "safer"
+  }
+];
+
+export const patrolContractTemplates: PatrolContractTemplate[] = [
+  {
+    id: "lane-watch",
+    weight: 3,
+    titlePrefix: "Lane Watch",
+    description: "Sweep a marked corridor and keep local pressure down long enough for traffic to reopen.",
+    tags: ["patrol", "logistics", "combat"],
+    durationRange: [72, 112]
+  },
+  {
+    id: "checkpoint-hold",
+    weight: 2,
+    titlePrefix: "Checkpoint Hold",
+    description: "Hold the lane in a live sector while patrols or supply traffic pass through.",
+    tags: ["patrol", "military", "frontier"],
+    durationRange: [84, 126]
+  },
+  {
+    id: "sweep-order",
+    weight: 2,
+    titlePrefix: "Sweep Order",
+    description: "Patrol a hot zone until the local threat curve cools enough for follow-on work.",
+    tags: ["patrol", "repair", "frontier"],
+    durationRange: [90, 140]
   }
 ];

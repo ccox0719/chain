@@ -79,5 +79,15 @@ export const siteHotspotTemplates: SiteHotspotTemplate[] = [
     tags: ["research", "navigation", "frontier"],
     encounterWeight: 1.03,
     rewardMultiplier: 1.16
+  },
+  {
+    id: "drift-cache",
+    destinationKinds: ["wreck", "beacon"],
+    weight: 2,
+    title: "Drift Cache",
+    description: "A hidden stash or dead drop is drawing salvage crews and opportunists into a short, profitable scramble.",
+    tags: ["salvage", "trade", "frontier"],
+    encounterWeight: 1.06,
+    rewardMultiplier: 1.1
   }
 ];

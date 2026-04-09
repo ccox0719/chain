@@ -1,5 +1,6 @@
 import { GameWorld, ParticleState, Vec2 } from "../../types/game";
 import { MOVEMENT_BALANCE } from "../config/balance";
+import { PERFORMANCE } from "../config/performance";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { moduleById } from "../data/modules";
 import { sectorById } from "../data/sectors";
@@ -31,6 +32,36 @@ function worldToScreen(point: Vec2, cameraX: number, cameraY: number, zoom: numb
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isInView(
+  position: Vec2,
+  radius: number,
+  cameraX: number,
+  cameraY: number,
+  viewWidth: number,
+  viewHeight: number,
+  margin: number
+) {
+  return (
+    position.x + radius >= cameraX - margin &&
+    position.x - radius <= cameraX + viewWidth + margin &&
+    position.y + radius >= cameraY - margin &&
+    position.y - radius <= cameraY + viewHeight + margin
+  );
+}
+
+function getActiveModuleRuntime(world: GameWorld, kind: string) {
+  for (const slotType of ["weapon", "utility", "defense"] as const) {
+    for (const runtime of world.player.modules[slotType]) {
+      if (!runtime.active || !runtime.moduleId) continue;
+      const module = moduleById[runtime.moduleId];
+      if (module?.kind === kind) {
+        return runtime;
+      }
+    }
+  }
+  return null;
 }
 
 export function getCameraFrame(
@@ -553,12 +584,7 @@ function drawStraightBeam(
 
 function drawMiningBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
   const player = world.player;
-  const allModules = [
-    ...player.modules.weapon,
-    ...player.modules.utility,
-    ...player.modules.defense
-  ];
-  const activeMiningRuntime = allModules.find((m) => m.moduleId && m.active && moduleById[m.moduleId]?.kind === "mining_laser");
+  const activeMiningRuntime = getActiveModuleRuntime(world, "mining_laser");
   if (!activeMiningRuntime?.moduleId) return;
 
   const moduleDef = moduleById[activeMiningRuntime.moduleId];
@@ -588,12 +614,7 @@ function drawMiningBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
 
 function drawSalvageBeam(ctx: CanvasRenderingContext2D, world: GameWorld) {
   const player = world.player;
-  const allModules = [
-    ...player.modules.weapon,
-    ...player.modules.utility,
-    ...player.modules.defense
-  ];
-  const activeSalvagerRuntime = allModules.find((m) => m.moduleId && m.active && moduleById[m.moduleId]?.kind === "salvager");
+  const activeSalvagerRuntime = getActiveModuleRuntime(world, "salvager");
   if (!activeSalvagerRuntime?.moduleId) return;
   if (world.activeTarget?.type !== "wreck") return;
 
@@ -627,6 +648,10 @@ export function renderSector(
   const playerHull = playerShipById[world.player.hullId];
   const derived = getCachedDerivedStats(world.player);
   const destinations = getVisibleSystemDestinations(world);
+  const visibleMargin = PERFORMANCE.rendering.effectCullMargin;
+  const labelMargin = PERFORMANCE.rendering.labelCullMargin;
+  const particleMargin = PERFORMANCE.rendering.particleCullMargin;
+  const objectMargin = PERFORMANCE.rendering.objectCullMargin;
 
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
   drawArenaBackdrop(ctx, viewportWidth, viewportHeight, world, zoom, cameraX, cameraY);
@@ -661,6 +686,7 @@ export function renderSector(
   ctx.translate(-(cameraX + shakeX), -(cameraY + shakeY));
 
   destinations.filter((entry) => entry.kind === "belt").forEach((belt) => {
+    if (!isInView(belt.position, 130, cameraX, cameraY, viewWidth, viewHeight, visibleMargin)) return;
     ctx.strokeStyle = "rgba(110, 245, 255, 0.36)";
     ctx.lineWidth = 1.6;
     setGlow(ctx, "#77ecff", 9);
@@ -672,6 +698,7 @@ export function renderSector(
   });
 
   destinations.filter((entry) => entry.kind === "station").forEach((station) => {
+    if (!isInView(station.position, 48, cameraX, cameraY, viewWidth, viewHeight, visibleMargin)) return;
     ctx.save();
     ctx.translate(station.position.x, station.position.y);
     setGlow(ctx, "#84e8ff", 18);
@@ -687,6 +714,7 @@ export function renderSector(
   });
 
   destinations.filter((entry) => entry.kind === "gate").forEach((gate) => {
+    if (!isInView(gate.position, 64, cameraX, cameraY, viewWidth, viewHeight, visibleMargin)) return;
     ctx.save();
     ctx.translate(gate.position.x, gate.position.y);
     const pulse = 1 + Math.sin(world.elapsedTime * 2.8 + gate.position.x * 0.01) * 0.08;
@@ -709,6 +737,7 @@ export function renderSector(
   destinations
     .filter((entry) => entry.kind === "beacon" || entry.kind === "anomaly" || entry.kind === "outpost" || entry.kind === "wreck")
     .forEach((entry) => {
+      if (!isInView(entry.position, entry.kind === "anomaly" ? (entry.anomalyField?.radius ?? 120) : 36, cameraX, cameraY, viewWidth, viewHeight, visibleMargin)) return;
       if (entry.kind === "anomaly" && entry.anomalyField) {
         const radius = entry.anomalyField.radius;
         const tint =
@@ -804,9 +833,10 @@ export function renderSector(
       setGlow(ctx, stroke, 10);
       drawDiamond(ctx, entry.position.x, entry.position.y, entry.kind === "anomaly" ? 12 : 9, stroke, fill);
       clearGlow(ctx);
-    });
+  });
 
   sector.asteroids.forEach((asteroid, index) => {
+    if (!isInView(asteroid.position, asteroid.radius + 8, cameraX, cameraY, viewWidth, viewHeight, objectMargin)) return;
     const stroke =
       asteroid.resource === "ferrite"
         ? "#86e0ff"
@@ -826,6 +856,7 @@ export function renderSector(
   });
 
   sector.loot.forEach((drop, index) => {
+    if (!isInView(drop.position, 20, cameraX, cameraY, viewWidth, viewHeight, objectMargin)) return;
     const angle = world.elapsedTime * 1.8 + index * 0.4;
     ctx.save();
     ctx.translate(drop.position.x, drop.position.y);
@@ -837,6 +868,7 @@ export function renderSector(
   });
 
   sector.wrecks.forEach((wreck, index) => {
+    if (!isInView(wreck.position, 30, cameraX, cameraY, viewWidth, viewHeight, objectMargin)) return;
     ctx.save();
     ctx.translate(wreck.position.x, wreck.position.y);
     ctx.rotate(world.elapsedTime * 0.2 + index * 0.15);
@@ -851,6 +883,7 @@ export function renderSector(
   });
 
   sector.projectiles.forEach((projectile, index) => {
+    if (!isInView(projectile.position, projectile.radius + 20, cameraX, cameraY, viewWidth, viewHeight, particleMargin)) return;
     const isMissile = projectile.moduleId.includes("missile");
     const color =
       isMissile
@@ -905,6 +938,7 @@ export function renderSector(
   drawSalvageBeam(ctx, world);
 
   sector.enemies.forEach((enemy, index) => {
+    if (!isInView(enemy.position, 54, cameraX, cameraY, viewWidth, viewHeight, objectMargin)) return;
     const variant = enemyVariantById[enemy.variantId];
     ctx.save();
     ctx.translate(enemy.position.x, enemy.position.y);
@@ -948,21 +982,24 @@ export function renderSector(
 
   const selectedInfo = getObjectInfo(world, world.selectedObject);
   if (selectedInfo) {
-    setGlow(ctx, "#ffe082", 10);
-    ctx.strokeStyle = "#ffe082";
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.arc(selectedInfo.position.x, selectedInfo.position.y, 24, 0, Math.PI * 2);
-    ctx.stroke();
-    clearGlow(ctx);
-    ctx.fillStyle = "#fff2b8";
-    ctx.font = '12px "Space Grotesk", sans-serif';
-    ctx.fillText(selectedInfo.name, selectedInfo.position.x + 18, selectedInfo.position.y - 18);
+    if (isInView(selectedInfo.position, 38, cameraX, cameraY, viewWidth, viewHeight, labelMargin)) {
+      setGlow(ctx, "#ffe082", 10);
+      ctx.strokeStyle = "#ffe082";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(selectedInfo.position.x, selectedInfo.position.y, 24, 0, Math.PI * 2);
+      ctx.stroke();
+      clearGlow(ctx);
+      ctx.fillStyle = "#fff2b8";
+      ctx.font = '12px "Space Grotesk", sans-serif';
+      ctx.fillText(selectedInfo.name, selectedInfo.position.x + 18, selectedInfo.position.y - 18);
+    }
   }
 
   world.lockedTargets.forEach((ref) => {
     const info = getObjectInfo(world, ref);
     if (!info) return;
+    if (!isInView(info.position, 42, cameraX, cameraY, viewWidth, viewHeight, labelMargin)) return;
     const primary = world.activeTarget?.id === ref.id && world.activeTarget.type === ref.type;
     const color = primary ? "#ffb454" : "#75d4ff";
     setGlow(ctx, color, 10);
@@ -980,16 +1017,18 @@ export function renderSector(
   if (world.player.navigation.target) {
     const navTargetInfo = getObjectInfo(world, world.player.navigation.target);
     if (navTargetInfo) {
-      ctx.strokeStyle = "rgba(170, 230, 255, 0.22)";
-      ctx.setLineDash([5, 7]);
-      ctx.beginPath();
-      ctx.moveTo(world.player.position.x, world.player.position.y);
-      ctx.lineTo(navTargetInfo.position.x, navTargetInfo.position.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(210, 244, 255, 0.8)";
-      ctx.font = '12px "Space Grotesk", sans-serif';
-      ctx.fillText(world.player.navigation.mode.toUpperCase(), world.player.position.x + 18, world.player.position.y - 18);
+      if (isInView(navTargetInfo.position, 42, cameraX, cameraY, viewWidth, viewHeight, labelMargin)) {
+        ctx.strokeStyle = "rgba(170, 230, 255, 0.22)";
+        ctx.setLineDash([5, 7]);
+        ctx.beginPath();
+        ctx.moveTo(world.player.position.x, world.player.position.y);
+        ctx.lineTo(navTargetInfo.position.x, navTargetInfo.position.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(210, 244, 255, 0.8)";
+        ctx.font = '12px "Space Grotesk", sans-serif';
+        ctx.fillText(world.player.navigation.mode.toUpperCase(), world.player.position.x + 18, world.player.position.y - 18);
+      }
     }
   }
 
@@ -997,12 +1036,14 @@ export function renderSector(
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     for (const p of sector.particles) {
+      if (!isInView(p.position, p.size + 12, cameraX, cameraY, viewWidth, viewHeight, particleMargin)) continue;
       drawParticle(ctx, p);
     }
     ctx.restore();
   }
 
   sector.floatingText.forEach((entry) => {
+    if (!isInView(entry.position, 24, cameraX, cameraY, viewWidth, viewHeight, labelMargin)) return;
     setGlow(ctx, entry.color, 8);
     ctx.fillStyle = entry.color;
     ctx.font = 'bold 14px "Space Grotesk", sans-serif';

@@ -129,7 +129,9 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
   bounty: "Bounty",
   mining: "Mining",
   deliver: "Delivery",
-  travel: "Survey"
+  travel: "Survey",
+  escort: "Escort",
+  patrol: "Patrol"
 };
 
 const BALANCE_ROOTS = {
@@ -1415,113 +1417,190 @@ export function StationPanel({
         {tab === "services" && (
           <>
             <div className="station-services-overview-grid">
-              <div className="panel-lite station-command-banner" style={{ margin: 0 }}>
-                <div className="station-command-copy">
-                  <div className="mission-card-header" style={{ marginBottom: "0.4rem" }}>
-                    <strong>{stationIdentity.icon} {stationIdentity.label}</strong>
-                    <span className="status-chip">{snapshot.currentRegion.name}</span>
-                    <span className="status-chip">{snapshot.sector.name}</span>
-                  </div>
-                  <p style={{ margin: 0 }}>{stationProfile?.headline ?? currentStation.description}</p>
-                  <p className="station-command-note">{stationProfile?.planningNote ?? stationIdentity.summary}</p>
-                </div>
-                <div className="station-command-tags">
-                  <div>
-                    <span className="station-command-label">Stocks well</span>
-                    <div className="map-meta-grid">
-                      {stationSupplyLabels.length > 0 ? stationSupplyLabels.map((label) => (
-                        <span key={label} className="status-chip">{label}</span>
-                      )) : <span className="status-chip">General service stock</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="station-command-label">Pays for</span>
-                    <div className="map-meta-grid">
-                      {stationDemandLabels.length > 0 ? stationDemandLabels.map((label) => (
-                        <span key={label} className="status-chip">{label}</span>
-                      )) : <span className="status-chip">Routine local demand</span>}
-                    </div>
+              <div className="panel-lite station-command-banner station-summary-card" style={{ margin: 0 }}>
+                <div className="mission-card-header station-summary-head" style={{ marginBottom: "0.25rem" }}>
+                  <strong>{stationIdentity.icon} {currentStation.name}</strong>
+                  <div className="station-summary-badges">
+                    <span className="status-chip station-chip-primary">{stationIdentity.label}</span>
+                    <span className="status-chip station-chip-secondary">{snapshot.sector.security.toUpperCase()}</span>
                   </div>
                 </div>
-                <div className="map-meta-grid" style={{ marginTop: "0.65rem" }}>
-                  <span className="status-chip">
-                    Access {SHIP_ACCESS_TIER_LABELS[stationProfile?.shipAccessTier ?? "neutral"] ?? stationProfile?.shipAccessTier ?? "Neutral"}
-                  </span>
-                  <span className="status-chip">
-                    Law {LEGAL_STATUS_LABELS[stationProfile?.legalStatus ?? "licensed"] ?? stationProfile?.legalStatus ?? "Licensed"}
-                  </span>
-                  <span className="status-chip">
-                    Control {stationFaction.icon} {stationFaction.name}
-                  </span>
-                  <span className="status-chip">
-                    Standing {stationStanding.toFixed(2)} · {stationStandingLabel}
-                  </span>
-                  <span className="status-chip">
-                    {FLEET_SUPPORT_LABELS[stationProfile?.fleetSupportLevel ?? "rear"] ?? stationProfile?.fleetSupportLevel ?? "Rear support"}
-                  </span>
-                  {stationProfile?.recruitmentNode ? (
-                    <span className="status-chip">
-                      Recruit {stationProfile.recruitmentBranch ?? "Faction Office"}
-                    </span>
+                <div className="station-command-note station-summary-subhead">
+                  {stationIdentity.summary}
+                </div>
+                <div className="station-summary-grid">
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Control</span>
+                    <strong>{stationFaction.icon} {stationFaction.name}</strong>
+                    <span>Faction owner and dock authority</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Standing</span>
+                    <strong>{stationStanding.toFixed(2)} · {stationStandingLabel}</strong>
+                    <span>Current player access level</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Access / Law</span>
+                    <strong>{SHIP_ACCESS_TIER_LABELS[stationProfile?.shipAccessTier ?? "neutral"] ?? stationProfile?.shipAccessTier ?? "Neutral"}</strong>
+                    <span>{LEGAL_STATUS_LABELS[stationProfile?.legalStatus ?? "licensed"] ?? stationProfile?.legalStatus ?? "Licensed"}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Support</span>
+                    <strong>{FLEET_SUPPORT_LABELS[stationProfile?.fleetSupportLevel ?? "rear"] ?? stationProfile?.fleetSupportLevel ?? "Rear support"}</strong>
+                    <span>{stationProfile?.recruitmentNode ? `Recruit ${stationProfile.recruitmentBranch ?? "Faction Office"}` : "Local service priority"}</span>
+                  </div>
+                  <div className="station-compact-stat station-compact-wide">
+                    <span className="station-compact-label">Best For</span>
+                    <strong>{stationProfile?.headline ?? currentStation.description}</strong>
+                    <span>{stationProfile?.planningNote ?? stationIdentity.summary}</span>
+                  </div>
+                  <div className="station-compact-stat station-compact-wide">
+                    <span className="station-compact-label">Market Bias</span>
+                    <strong>{stationProfile?.supplyTags?.length ? stationProfile.supplyTags.slice(0, 3).map((tag) => formatStationTradeTag(tag)).join(" / ") : "General stock"}</strong>
+                    <span>{stationProfile?.demandTags?.length ? stationProfile.demandTags.slice(0, 3).map((tag) => formatStationTradeTag(tag)).join(" / ") : "Routine local demand"}</span>
+                  </div>
+                </div>
+                <div className="station-chip-groups">
+                  <div className="station-chip-group">
+                    <span className="station-command-label">Exports</span>
+                    <div className="station-chip-row">
+                      {stationSupplyLabels.length > 0 ? stationSupplyLabels.slice(0, 4).map((label) => (
+                        <span key={label} className="status-chip station-chip-secondary">{label}</span>
+                      )) : <span className="status-chip station-chip-secondary">General service stock</span>}
+                    </div>
+                  </div>
+                  <div className="station-chip-group">
+                    <span className="station-command-label">Imports</span>
+                    <div className="station-chip-row">
+                      {stationDemandLabels.length > 0 ? stationDemandLabels.slice(0, 4).map((label) => (
+                        <span key={label} className="status-chip station-chip-secondary">{label}</span>
+                      )) : <span className="status-chip station-chip-secondary">Routine local demand</span>}
+                    </div>
+                  </div>
+                  {stationProfile?.shipFamilyBias?.length ? (
+                    <div className="station-chip-group">
+                      <span className="station-command-label">Ship Bias</span>
+                      <div className="station-chip-row">
+                        {stationProfile.shipFamilyBias.slice(0, 4).map((family) => (
+                          <span key={family} className="status-chip station-chip-tertiary">{family}</span>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
-                {stationProfile?.shipFamilyBias?.length ? (
-                  <div className="tag-row" style={{ marginTop: "0.5rem" }}>
-                    {stationProfile.shipFamilyBias.map((family) => (
-                      <span key={family} className="status-chip">{family}</span>
-                    ))}
-                  </div>
-                ) : null}
               </div>
-              <div className="panel-lite faction-intel-banner" style={{ margin: 0, borderColor: systemFaction.color }}>
-                <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+              <div className="panel-lite faction-intel-banner station-faction-card" style={{ margin: 0, borderColor: systemFaction.color }}>
+                <div className="mission-card-header station-summary-head" style={{ marginBottom: "0.25rem" }}>
                   <strong>Faction Intel</strong>
-                  <span className="status-chip" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
-                    {systemFaction.icon} {systemFaction.name}
-                  </span>
-                  <span className="status-chip" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
-                    Region · {regionFaction.icon} {regionFaction.name}
-                  </span>
-                  <span className="status-chip">Theater {snapshot.sector.theaterTag ?? snapshot.currentRegion.wartimeRole ?? "rear"}</span>
+                  <div className="station-summary-badges">
+                    <span className="status-chip station-chip-primary" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
+                      {systemFaction.icon} {systemFaction.name}
+                    </span>
+                    <span className="status-chip station-chip-secondary" style={{ borderColor: regionFaction.color, color: regionFaction.color }}>
+                      Region {regionFaction.icon} {regionFaction.name}
+                    </span>
+                    <span className="status-chip station-chip-tertiary">Theater {snapshot.sector.theaterTag ?? snapshot.currentRegion.wartimeRole ?? "rear"}</span>
+                  </div>
                 </div>
-                <div className="map-meta-grid">
-                  <span className="status-chip">Damage {factionDamageLabel(systemFaction.id)}</span>
-                  <span className="status-chip">Defense {systemFaction.tankStyle}</span>
-                  <span className="status-chip">Resists {factionResistLabel(systemFaction.id)}</span>
-                  <span className="status-chip">{snapshot.sector.identityLabel}</span>
-                  <span className="status-chip">Threat {snapshot.sector.threatSummary ?? systemFaction.threatSummary}</span>
+                <div className="station-intel-grid">
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Standing</span>
+                    <strong>{stationStanding.toFixed(2)} · {stationStandingLabel}</strong>
+                    <span>Access against {stationFaction.name}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Doctrine</span>
+                    <strong>{stationFaction.tankStyle.toUpperCase()}</strong>
+                    <span>{stationFaction.doctrineSummary}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Common Damage</span>
+                    <strong>{factionDamageLabel(systemFaction.id)}</strong>
+                    <span>{systemFaction.preferredDamageProfile.em >= systemFaction.preferredDamageProfile.thermal ? "EM lead" : "Thermal lead"}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Resist Bias</span>
+                    <strong>{factionResistLabel(systemFaction.id)}</strong>
+                    <span>{systemFaction.preferredResistanceProfile.em >= systemFaction.preferredResistanceProfile.thermal ? "Shield side" : "Armor side"}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Patrol Style</span>
+                    <strong>{systemFaction.fleetIdentity}</strong>
+                    <span>{systemFaction.recruitmentStyle}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Inspection</span>
+                    <strong>{systemFaction.legalStyle}</strong>
+                    <span>{systemFaction.stationTone}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Trade Focus</span>
+                    <strong>{systemFaction.marketBias?.slice(0, 3).join(" / ") ?? "General trade"}</strong>
+                    <span>{stationProfile?.legalStatus === "black" ? "Smuggling viable" : stationProfile?.legalStatus === "gray" ? "Gray-market tolerance" : "Open service lanes"}</span>
+                  </div>
+                  <div className="station-compact-stat">
+                    <span className="station-compact-label">Threat</span>
+                    <strong>{snapshot.sector.threatSummary ?? systemFaction.threatSummary}</strong>
+                    <span>{systemFaction.enemyArchetypePreferences.slice(0, 2).join(" / ")}</span>
+                  </div>
                 </div>
-                <p style={{ margin: "0.5rem 0 0", color: "var(--text-dim)" }}>
-                  {systemFaction.doctrineSummary}
-                </p>
-                <div className="tag-row" style={{ marginTop: "0.45rem" }}>
-                  {systemFaction.enemyArchetypePreferences.map((entry) => (
-                    <span key={entry} className="status-chip">{entry}</span>
-                  ))}
-                  {snapshot.currentRegion.localShipFamilies?.map((entry) => (
-                    <span key={entry} className="status-chip">{entry}</span>
-                  ))}
+                <div className="station-chip-groups station-faction-tags">
+                  <div className="station-chip-group">
+                    <span className="station-command-label">Relations</span>
+                    <div className="station-chip-row">
+                      <span className="status-chip station-chip-secondary" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
+                        Allies {systemFaction.allies?.length ?? 0}
+                      </span>
+                      <span className="status-chip station-chip-secondary" style={{ borderColor: systemFaction.color, color: systemFaction.color }}>
+                        Rivals {systemFaction.rivals?.length ?? 0}
+                      </span>
+                      <span className="status-chip station-chip-tertiary">
+                        {snapshot.currentRegion.localShipFamilies?.slice(0, 2).join(" / ") ?? "Local ship mix"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
               {snapshot.regionalEvent && (
-                <div className="panel-lite station-services-callout">
-                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                <div
+                  className={`panel-lite station-services-callout station-event-strip${
+                    snapshot.regionalEvent.hostileActivityMultiplier && snapshot.regionalEvent.hostileActivityMultiplier > 1
+                      ? " station-event-risk"
+                      : " station-event-good"
+                  }`}
+                >
+                  <div className="mission-card-header station-summary-head" style={{ marginBottom: "0.2rem" }}>
                     <strong>{snapshot.regionalEvent.name}</strong>
-                    <span className="status-chip">{snapshot.currentRegion.name}</span>
+                    <span className="status-chip station-chip-primary">{snapshot.currentRegion.name}</span>
                   </div>
-                  <p style={{ margin: 0 }}>{snapshot.regionalEvent.description}</p>
-                  {snapshot.regionalEvent.serviceOffer && (
-                    <p style={{ margin: "0.35rem 0 0", color: "var(--text-dim)", fontSize: "0.78rem" }}>{snapshot.regionalEvent.serviceOffer}</p>
-                  )}
+                  <div className="station-event-meta">
+                    <span className="status-chip station-chip-secondary">Regional condition</span>
+                    <span className="status-chip station-chip-tertiary">
+                      {snapshot.regionalEvent.hostileActivityMultiplier && snapshot.regionalEvent.hostileActivityMultiplier > 1
+                        ? "Risk up"
+                        : snapshot.regionalEvent.rewardMultiplier && snapshot.regionalEvent.rewardMultiplier > 1
+                          ? "Profit up"
+                          : "Stable"}
+                    </span>
+                  </div>
+                  <p className="station-command-note">
+                    {snapshot.regionalEvent.serviceOffer ?? snapshot.regionalEvent.description}
+                  </p>
                 </div>
               )}
               {snapshot.currentHotspot && (
-                <div className="panel-lite station-services-callout">
-                  <div className="mission-card-header" style={{ marginBottom: "0.35rem" }}>
+                <div className="panel-lite station-services-callout station-event-strip station-event-risk">
+                  <div className="mission-card-header station-summary-head" style={{ marginBottom: "0.2rem" }}>
                     <strong>{snapshot.currentHotspot.title}</strong>
-                    <span className="status-chip">Hotspot</span>
+                    <span className="status-chip station-chip-primary">Hotspot</span>
                   </div>
-                  <p style={{ margin: 0 }}>{snapshot.currentHotspot.description}</p>
+                  <div className="station-event-meta">
+                    <span className="status-chip station-chip-secondary">Local alert</span>
+                    <span className="status-chip station-chip-tertiary">Watch lanes</span>
+                  </div>
+                  <p className="station-command-note">
+                    {snapshot.currentHotspot.description}
+                  </p>
                 </div>
               )}
             </div>
@@ -1824,35 +1903,48 @@ export function StationPanel({
         {tab === "market" && (
           <div className="mkt-container">
             <div className="station-grid station-grid-compact">
-              <article className="panel-lite station-service-card">
-                <div className="mission-card-header">
+              <article className="panel-lite station-service-card mkt-summary-card">
+                <div className="mission-card-header station-summary-head">
                   <strong>Local Supply</strong>
-                  <span className="status-chip">{stationIdentity.label}</span>
+                  <span className="status-chip station-chip-primary">{stationIdentity.label}</span>
                 </div>
-                <p>This dock regularly turns over these cargo lines and service priorities.</p>
-                <div className="station-service-pills">
-                  {stationSupplyLabels.length > 0 ? stationSupplyLabels.map((label) => (
-                    <span key={label} className="status-chip">{label}</span>
-                  )) : <span className="status-chip">General stock</span>}
-                </div>
-                <div className="station-brief-list">
+                <div className="station-brief-list mkt-brief-inline">
                   <div>
-                    <strong>Region role</strong>
+                    <strong>Role</strong>
                     <span>{snapshot.currentRegion.gameplayRole}</span>
                   </div>
+                  <div>
+                    <strong>Bias</strong>
+                    <span>{stationProfile?.supplyTags?.length ? stationProfile.supplyTags.slice(0, 3).map((tag) => formatStationTradeTag(tag)).join(" / ") : "General stock"}</span>
+                  </div>
+                </div>
+                <div className="station-service-pills">
+                  {stationSupplyLabels.length > 0 ? stationSupplyLabels.slice(0, 5).map((label) => (
+                    <span key={label} className="status-chip station-chip-secondary">{label}</span>
+                  )) : <span className="status-chip station-chip-secondary">General stock</span>}
                 </div>
               </article>
 
-              <article className="panel-lite station-service-card">
-                <div className="mission-card-header">
+              <article className="panel-lite station-service-card mkt-summary-card">
+                <div className="mission-card-header station-summary-head">
                   <strong>Outbound Trades</strong>
-                  <span className="status-chip">{exportOpportunityRows.length} leads</span>
+                  <span className="status-chip station-chip-primary">{exportOpportunityRows.length} leads</span>
+                </div>
+                <div className="station-brief-list mkt-brief-inline">
+                  <div>
+                    <strong>Best fit</strong>
+                    <span>{stationSupplyLabels[0] ?? "Local stock"}</span>
+                  </div>
+                  <div>
+                    <strong>Route tone</strong>
+                    <span>Sell where demand is strongest</span>
+                  </div>
                 </div>
                 {exportOpportunityRows.length > 0 ? exportOpportunityRows.map((row) => (
                   <div key={row.commodity.id} className="station-brief-list">
                     <div>
                       <strong>{row.commodity.name}</strong>
-                      <span>Buy here {row.buyPrice} cr · best sale +{row.profitPerUnit} cr/unit</span>
+                      <span>Buy {row.buyPrice} cr · best sale +{row.profitPerUnit} cr/unit</span>
                     </div>
                     <small>{row.hint?.stationName} · {row.hint?.systemName}</small>
                   </div>
@@ -1861,16 +1953,26 @@ export function StationPanel({
                 )}
               </article>
 
-              <article className="panel-lite station-service-card">
-                <div className="mission-card-header">
+              <article className="panel-lite station-service-card mkt-summary-card">
+                <div className="mission-card-header station-summary-head">
                   <strong>Inbound Demand</strong>
-                  <span className="status-chip">{stationDemandLabels[0] ?? "Local demand"}</span>
+                  <span className="status-chip station-chip-primary">{stationDemandLabels[0] ?? "Local demand"}</span>
+                </div>
+                <div className="station-brief-list mkt-brief-inline">
+                  <div>
+                    <strong>Pull</strong>
+                    <span>{stationProfile?.demandTags?.length ? stationProfile.demandTags.slice(0, 3).map((tag) => formatStationTradeTag(tag)).join(" / ") : "Routine demand"}</span>
+                  </div>
+                  <div>
+                    <strong>Buyback</strong>
+                    <span>{stationProfile?.legalStatus ?? "licensed"}</span>
+                  </div>
                 </div>
                 {importDemandRows.length > 0 ? importDemandRows.map((row) => (
                   <div key={row.commodity.id} className="station-brief-list">
                     <div>
                       <strong>{row.commodity.name}</strong>
-                      <span>Sells here for {row.sellPrice} cr · {row.premium >= 0 ? "+" : ""}{row.premium} vs base</span>
+                      <span>Sells {row.sellPrice} cr · {row.premium >= 0 ? "+" : ""}{row.premium} vs base</span>
                     </div>
                     <small>{row.commodity.tags.map((tag) => formatStationTradeTag(tag)).slice(0, 2).join(" · ")}</small>
                   </div>
@@ -1879,10 +1981,20 @@ export function StationPanel({
                 )}
               </article>
 
-              <article className="panel-lite station-service-card">
-                <div className="mission-card-header">
+              <article className="panel-lite station-service-card mkt-summary-card">
+                <div className="mission-card-header station-summary-head">
                   <strong>Ore Buyback</strong>
-                  <span className="status-chip">Local rates</span>
+                  <span className="status-chip station-chip-primary">Local rates</span>
+                </div>
+                <div className="station-brief-list mkt-brief-inline">
+                  <div>
+                    <strong>Sell lane</strong>
+                    <span>Resource disposal and refining loop</span>
+                  </div>
+                  <div>
+                    <strong>Top rate</strong>
+                    <span>{bestResourceSales[0]?.[0] ?? "none"}</span>
+                  </div>
                 </div>
                 {bestResourceSales.map(([resourceId, value]) => (
                   <div key={resourceId} className="station-brief-list">
@@ -1897,7 +2009,7 @@ export function StationPanel({
             <div className="mkt-header-bar">
               <div className="mkt-table-copy">
                 <strong>Commodity Exchange</strong>
-                <span>All stocked goods in one sortable table.</span>
+                <span>All stocked goods in one sortable table. Tight margins first, details second.</span>
               </div>
               <div className="mkt-cargo-strip">
                 <span className="mkt-cargo-label">Cargo</span>
@@ -2087,7 +2199,7 @@ export function StationPanel({
                   </div>
                 );
               })() : (
-                <p className="station-command-note">No veteran module reward is catalogued for this faction.</p>
+                <p className="station-command-note">No standing reward is catalogued for this faction.</p>
               )}
             </article>
             </div>
@@ -2370,20 +2482,21 @@ export function StationPanel({
                 <div className="stack-list">
                   {visibleStoryMissions.map((mission) => {
                     const state = world.missions[mission.id];
-                    const isLocked = state.status === "locked";
-                    const isCompleted = state.status === "completed";
+                    const status = state?.status ?? "locked";
+                    const isLocked = status === "locked";
+                    const isCompleted = status === "completed";
                     const missionFactionId = mission.issuerFaction ?? snapshot.sector.controllingFaction;
                     const missionStanding = world.player.factionStandings[missionFactionId] ?? 0;
                     const standingLocked =
                       mission.requiredStanding !== undefined && missionStanding < mission.requiredStanding;
-                    const cardClass = `market-item${isLocked || isCompleted ? " mission-card-dim" : ""} mission-status-${state.status}`;
+                    const cardClass = `market-item${isLocked || isCompleted ? " mission-card-dim" : ""} mission-status-${status}`;
                     return (
                       <div key={mission.id} className={cardClass}>
                         <div className="mission-card-header">
                           <strong className={isLocked || isCompleted ? "mission-title-dim" : ""}>{mission.title}</strong>
                           <div className="mission-card-badges">
                             <span className={`status-chip mission-type-${mission.type}`}>{missionTypeLabel(mission.type)}</span>
-                            <span className={`status-chip mission-status-chip-${state.status}`}>{state.status}</span>
+                            <span className={`status-chip mission-status-chip-${status}`}>{status}</span>
                             {mission.issuerFaction ? (
                               <span
                                 className="status-chip"
@@ -2402,18 +2515,20 @@ export function StationPanel({
                             ) : null}
                           </div>
                         </div>
-                        {!isLocked && <p>{mission.briefing}</p>}
+                        {!isLocked && (
+                          <p className="mission-card-copy">{mission.briefing}</p>
+                        )}
                         {!isLocked && standingLocked ? (
-                          <p style={{ color: "var(--text-dim)" }}>
+                          <p className="mission-card-note">
                             Requires {factionData[missionFactionId].name} standing {mission.requiredStanding?.toFixed(2)}.
                           </p>
                         ) : null}
-                        {(state.status === "available" || state.status === "readyToTurnIn") && (
+                        {(status === "available" || status === "readyToTurnIn") && (
                           <div className="market-actions">
-                            {state.status === "available" && (
+                            {status === "available" && (
                               <button type="button" onClick={() => onAcceptMission(mission.id)} disabled={standingLocked}>Accept</button>
                             )}
-                            {state.status === "readyToTurnIn" && (
+                            {status === "readyToTurnIn" && (
                               <button type="button" className="primary-button" onClick={() => onTurnInMission(mission.id)}>
                                 Claim {mission.rewardCredits} cr
                               </button>
@@ -2466,7 +2581,7 @@ export function StationPanel({
                           </div>
                         </div>
 
-                        <div className="mission-route">
+                        <div className="mission-route mission-route-compact">
                           <span>{sectorById[mission.pickupSystemId]?.name ?? mission.pickupSystemId}</span>
                           <span className="route-arrow">→</span>
                           <span>{sectorById[mission.destinationSystemId]?.name ?? mission.destinationSystemId}</span>
@@ -2476,7 +2591,7 @@ export function StationPanel({
                           )}
                         </div>
 
-                        <div className="mission-details">
+                        <div className="mission-details mission-details-compact">
                           <span className="status-chip">{mission.cargoVolume}u {mission.cargoType}</span>
                           {route.cargoReimbursement > 0 && (
                             <span className="status-chip">reimburses {route.cargoReimbursement} cr</span>
@@ -2552,7 +2667,7 @@ export function StationPanel({
                             {isActive && <span className={`status-chip mission-status-chip-${world.procgen.activeContractState?.status ?? "active"}`}>{world.procgen.activeContractState?.status}</span>}
                           </div>
                         </div>
-                        <div className="mission-details">
+                        <div className="mission-details mission-details-compact">
                           <span className="status-chip">{factionData[contract.issuerFaction].name}</span>
                           <span className="status-chip">{sectorById[contract.targetSystemId]?.name ?? contract.targetSystemId}</span>
                           {contract.targetCount && contract.targetResource && (
@@ -2560,6 +2675,16 @@ export function StationPanel({
                           )}
                           {contract.targetCount && contract.type === "bounty" && (
                             <span className="status-chip">{contract.targetCount} kills</span>
+                          )}
+                          {contract.type === "escort" && (
+                            <span className="status-chip">
+                              Escort to {sectorById[contract.targetSystemId]?.name ?? contract.targetSystemId}
+                            </span>
+                          )}
+                          {contract.type === "patrol" && (
+                            <span className="status-chip">
+                              {contract.patrolDurationSec ? `${Math.ceil(contract.patrolDurationSec / 60)} min sweep` : "Timed sweep"}
+                            </span>
                           )}
                           {contract.cargoVolume && contract.cargoType && (
                             <span className="status-chip">{contract.cargoVolume}u {contract.cargoType}</span>

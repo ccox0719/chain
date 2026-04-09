@@ -1,6 +1,7 @@
 import { ModuleDefinition, ModuleSlot, PlayerState, ShipBonusProfile } from "../../types/game";
 import { moduleById } from "../data/modules";
 import { playerShipById } from "../data/ships";
+import { starterShipConfigById } from "../data/starterShips";
 import { commodityById } from "../economy/data/commodities";
 import { CAPACITOR_BALANCE } from "../config/balance";
 
@@ -26,6 +27,27 @@ function applyResistProfile(
   target.thermal += profile.thermal ?? 0;
   target.kinetic += profile.kinetic ?? 0;
   target.explosive += profile.explosive ?? 0;
+}
+
+function applyCoreBonus(
+  derived: ReturnType<typeof computeBaseDerivedStats>,
+  bonuses: ShipBonusProfile
+) {
+  derived.maxHull += bonuses.maxHull ?? 0;
+  derived.maxShield += bonuses.maxShield ?? 0;
+  derived.maxArmor += bonuses.maxArmor ?? 0;
+  derived.capacitorCapacity += bonuses.capacitorCapacity ?? 0;
+  derived.capacitorRegen += bonuses.capacitorRegen ?? 0;
+  derived.acceleration += bonuses.acceleration ?? 0;
+  derived.turnSpeed += bonuses.turnSpeed ?? 0;
+  derived.maxSpeed += bonuses.maxSpeed ?? 0;
+  derived.lockRange += bonuses.lockRange ?? 0;
+  derived.warpSpeed += bonuses.warpSpeed ?? 0;
+  derived.cargoCapacity += bonuses.cargoCapacity ?? 0;
+  derived.interactionRange += bonuses.interactionRange ?? 0;
+  if (bonuses.signatureRadius !== undefined) {
+    derived.signatureRadius = Math.max(4, derived.signatureRadius + bonuses.signatureRadius);
+  }
 }
 
 export function getShipBonuses(player: PlayerState): ShipBonusProfile {
@@ -104,6 +126,7 @@ function computeBaseDerivedStats(player: PlayerState) {
     warpSpeed: hull.warpSpeed,
     cargoCapacity: hull.cargoCapacity,
     interactionRange: hull.interactionRange,
+    signatureRadius: hull.signatureRadius,
     miningYieldMultiplier: 1,
     shieldRepairAmountMultiplier: 1,
     armorRepairAmountMultiplier: 1,
@@ -165,11 +188,25 @@ export function getCargoUsed(player: PlayerState) {
 export function computeDerivedStats(player: PlayerState) {
   const derived = computeBaseDerivedStats(player);
   const shipBonuses = getShipBonuses(player);
+  const starterBonuses = starterShipConfigById[player.starterConfigId]?.starterBonuses ?? {};
   const fittedKinds = new Set<ModuleDefinition["kind"]>();
 
+  applyCoreBonus(derived, starterBonuses);
   if (shipBonuses.cargoCapacity !== undefined) {
     derived.cargoCapacity += shipBonuses.cargoCapacity;
   }
+  if (shipBonuses.maxHull !== undefined) derived.maxHull += shipBonuses.maxHull;
+  if (shipBonuses.maxShield !== undefined) derived.maxShield += shipBonuses.maxShield;
+  if (shipBonuses.maxArmor !== undefined) derived.maxArmor += shipBonuses.maxArmor;
+  if (shipBonuses.capacitorCapacity !== undefined) derived.capacitorCapacity += shipBonuses.capacitorCapacity;
+  if (shipBonuses.capacitorRegen !== undefined) derived.capacitorRegen += shipBonuses.capacitorRegen;
+  if (shipBonuses.acceleration !== undefined) derived.acceleration += shipBonuses.acceleration;
+  if (shipBonuses.turnSpeed !== undefined) derived.turnSpeed += shipBonuses.turnSpeed;
+  if (shipBonuses.maxSpeed !== undefined) derived.maxSpeed += shipBonuses.maxSpeed;
+  if (shipBonuses.lockRange !== undefined) derived.lockRange += shipBonuses.lockRange;
+  if (shipBonuses.warpSpeed !== undefined) derived.warpSpeed += shipBonuses.warpSpeed;
+  if (shipBonuses.interactionRange !== undefined) derived.interactionRange += shipBonuses.interactionRange;
+  if (shipBonuses.signatureRadius !== undefined) derived.signatureRadius = Math.max(4, derived.signatureRadius + shipBonuses.signatureRadius);
   derived.cargoCapacity = Math.max(0, Math.round(derived.cargoCapacity * (shipBonuses.cargoCapacityMultiplier ?? 1)));
   derived.miningYieldMultiplier *= shipBonuses.miningYieldMultiplier ?? 1;
   derived.commodityBuyMultiplier *= shipBonuses.commodityBuyMultiplier ?? 1;

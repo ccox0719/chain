@@ -89,6 +89,136 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+type QuickStatBar = {
+  label: string;
+  value: number;
+  tone: "shield" | "armor" | "hull" | "scan" | "risk";
+  valueLabel: string;
+};
+
+type CombatEffectChip = {
+  label: string;
+  detail: string;
+  tone: "shield" | "armor" | "hull" | "scan" | "risk";
+};
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getSelectionBadgeLabel(entry: ObjectInfo) {
+  if (entry.type === "enemy") return entry.threatLabel ?? "Hostile";
+  if (entry.type === "station") return entry.factionLabel ?? "Station";
+  if (entry.type === "gate") return entry.threatLabel ?? "Gate";
+  if (entry.type === "anomaly") return entry.threatLabel ?? "Anomaly";
+  return entry.threatLabel ?? entry.type;
+}
+
+function getSelectionBars(entry: ObjectInfo): QuickStatBar[] {
+  if (entry.type === "enemy") {
+    return [
+      {
+        label: "Shield",
+        value: clamp01(entry.shieldPercent ?? 0),
+        tone: "shield",
+        valueLabel: `${Math.round((entry.shieldPercent ?? 0) * 100)}%`
+      },
+      {
+        label: "Armor",
+        value: clamp01(entry.armorPercent ?? 0),
+        tone: "armor",
+        valueLabel: `${Math.round((entry.armorPercent ?? 0) * 100)}%`
+      },
+      {
+        label: "Hull",
+        value: clamp01(entry.hullPercent ?? 0),
+        tone: "hull",
+        valueLabel: `${Math.round((entry.hullPercent ?? 0) * 100)}%`
+      }
+    ];
+  }
+
+  const distanceBar = clamp01(1 - entry.distance / 4000);
+  const sizeBar = clamp01((entry.signatureRadius ?? 120) / 420);
+  const riskBar =
+    entry.type === "station"
+      ? 0.1
+      : entry.type === "gate"
+        ? 0.25
+        : entry.type === "loot"
+          ? 0.2
+          : entry.type === "wreck"
+            ? 0.45
+            : entry.type === "asteroid"
+              ? 0.3
+              : entry.type === "belt"
+                ? 0.35
+                : entry.type === "anomaly"
+                  ? 0.75
+                  : 0.4;
+
+  return [
+    {
+      label: "Range",
+      value: distanceBar,
+      tone: "scan",
+      valueLabel: `${Math.round(entry.distance)}m`
+    },
+    {
+      label: "Size",
+      value: sizeBar,
+      tone: "armor",
+      valueLabel: entry.signatureRadius ? `${Math.round(entry.signatureRadius)}m` : "?"
+    },
+    {
+      label: "Risk",
+      value: riskBar,
+      tone: "risk",
+      valueLabel: entry.threatLabel ?? "?"
+    }
+  ];
+}
+
+function getPlayerCombatEffectChips(player: GameSnapshot["world"]["player"]): CombatEffectChip[] {
+  const chips: CombatEffectChip[] = [];
+  if (player.effects.speedMultiplier < 0.99) {
+    chips.push({
+      label: "Webbed",
+      detail: `-${Math.round((1 - player.effects.speedMultiplier) * 100)}% speed`,
+      tone: "risk"
+    });
+  }
+  if (player.effects.signatureMultiplier > 1.01) {
+    chips.push({
+      label: "Painted",
+      detail: `+${Math.round((player.effects.signatureMultiplier - 1) * 100)}% sig`,
+      tone: "scan"
+    });
+  }
+  if (player.effects.turretTrackingMultiplier < 0.99) {
+    chips.push({
+      label: "Tracking Jammed",
+      detail: `-${Math.round((1 - player.effects.turretTrackingMultiplier) * 100)}%`,
+      tone: "armor"
+    });
+  }
+  if (player.effects.lockRangeMultiplier < 0.99) {
+    chips.push({
+      label: "Sensors Damped",
+      detail: `-${Math.round((1 - player.effects.lockRangeMultiplier) * 100)}% lock`,
+      tone: "scan"
+    });
+  }
+  if (player.effects.capacitorRegenMultiplier < 0.99) {
+    chips.push({
+      label: "Cap Pressure",
+      detail: `-${Math.round((1 - player.effects.capacitorRegenMultiplier) * 100)}% regen`,
+      tone: "hull"
+    });
+  }
+  return chips;
+}
+
 function getHostileWarpBlocker(world: GameSnapshot["world"]) {
   const sector = world.sectors[world.currentSectorId];
   if (!sector) return null;
@@ -99,13 +229,14 @@ function getHostileWarpBlocker(world: GameSnapshot["world"]) {
       const playerDistance = distance(enemy.position, world.player.position);
       const seesPlayer = playerDistance <= variant.lockRange * enemy.effects.lockRangeMultiplier;
       if (!seesPlayer) return false;
-      return enemy.modules.some((runtime) => {
-        if (!runtime.active || !runtime.moduleId) return false;
-        const module = moduleById[runtime.moduleId];
-        if (!module || module.kind !== "warp_disruptor") return false;
-        return !module.range || playerDistance <= module.range;
-      });
-    }) ?? null
+    return enemy.modules.some((runtime) => {
+      if (!runtime.active || !runtime.moduleId) return false;
+      const module = moduleById[runtime.moduleId];
+      if (!module || module.kind !== "warp_disruptor") return false;
+      const disruptRange = module.range ? Math.min(module.range, 260) : 220;
+      return playerDistance <= disruptRange;
+    });
+  }) ?? null
   );
 }
 function moduleCapUsePerSecond(module: (typeof moduleById)[string]) {
@@ -174,28 +305,14 @@ function getOverviewTooltip(entry: ObjectInfo) {
 }
 
 function makeWarpButtons(target: SelectableRef, type: SelectableRef["type"]): RailButton[] {
-  const makeBand = (label: string, range: number, tone?: "primary") => ({
-    label,
-    icon: "✦",
-    command: { type: "warp" as const, target, range },
-    tone: tone ?? ("neutral" as const)
-  });
-  switch (type) {
-    case "gate":
-    case "station":
-    case "belt":
-    case "anomaly":
-    case "beacon":
-    case "outpost":
-      return [
-        makeBand("W+0", 0, "primary"),
-        makeBand("W+10", 10),
-        makeBand("W+20", 20),
-        makeBand("W+30", 30)
-      ];
-    default:
-      return [makeBand("W+0", 0, "primary")];
-  }
+  return [
+    {
+      label: "W+0",
+      icon: "✦",
+      command: { type: "warp" as const, target, range: 0 },
+      tone: "primary"
+    }
+  ];
 }
 
 function makeTravelButtons(world: GameSnapshot["world"], targetInfo: ObjectInfo | null): RailButton[] {
@@ -1302,15 +1419,49 @@ export function GameHud({
           </div>
         )}
 
-        {/* Selected target mini info */}
+        {/* Selected target quick view */}
         {selectedInfo && (
-          <div className="sel-target-nano">
-            <span className="sel-target-name">
-              {getOverviewTypeSymbol(selectedInfo.type)} {selectedInfo.name}
-            </span>
-            <span className="sel-target-dist">
-              {Math.round(selectedInfo.distance)}m
-            </span>
+          <div className="sel-target-card" aria-label="Selected target details">
+            <div className="sel-target-card-top">
+              <div className={`sel-target-shape type-${selectedInfo.type}`} aria-hidden="true">
+                <span>{getOverviewTypeSymbol(selectedInfo.type)}</span>
+              </div>
+              <div className="sel-target-copy">
+                <div className="sel-target-head">
+                  <span className="sel-target-name">{selectedInfo.name}</span>
+                  <span className="sel-target-dist">{Math.round(selectedInfo.distance)}m</span>
+                </div>
+                <div className="sel-target-subline">
+                  {selectedInfo.subtitle ?? getSelectionBadgeLabel(selectedInfo)}
+                </div>
+                <div className="sel-target-chiprow">
+                  {selectedInfo.threatLabel && <span className="status-chip">{selectedInfo.threatLabel}</span>}
+                  {selectedInfo.factionLabel && <span className="status-chip dim">{selectedInfo.factionLabel}</span>}
+                  {selectedInfo.roleLabel && <span className="status-chip dim">{selectedInfo.roleLabel}</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="sel-target-bars">
+              {getSelectionBars(selectedInfo).map((bar) => (
+                <div key={bar.label} className="sel-target-bar">
+                  <div className="sel-target-bar-head">
+                    <span>{bar.label}</span>
+                    <strong>{bar.valueLabel}</strong>
+                  </div>
+                  <div className="sel-target-bar-track">
+                    <div
+                      className={`sel-target-bar-fill tone-${bar.tone}`}
+                      style={{ width: `${bar.value * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {selectedInfo.weaknessLabel && (
+              <div className="sel-target-note">{selectedInfo.weaknessLabel}</div>
+            )}
           </div>
         )}
         {selectedInfo && hostileWarpBlocker && (selectedInfo.type === "station" || selectedInfo.type === "gate") && (
@@ -1466,3 +1617,4 @@ export function GameHud({
     </div>
   );
 }
+

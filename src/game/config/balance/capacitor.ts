@@ -2,7 +2,7 @@ import { createBalanceConfig } from "./overrides";
 
 const CAPACITOR_BALANCE_DEFAULT = {
   // Shared regen multiplier applied after hull and module bonuses.
-  playerRegenMultiplier: 0.6,
+  playerRegenMultiplier: 0.5,
   // Capacitor should recover best when a ship is settled and not spending thrust.
   stationaryRegenBonusMultiplier: 1.3,
   stationarySpeedThresholdFraction: 0.18,

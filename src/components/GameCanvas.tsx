@@ -1,4 +1,4 @@
-import { RefObject, useRef } from "react";
+import { memo, RefObject, useRef } from "react";
 
 interface GameCanvasProps {
   canvasRef: RefObject<HTMLCanvasElement>;
@@ -9,14 +9,16 @@ interface GameCanvasProps {
   onPanBy: (deltaX: number, deltaY: number) => void;
 }
 
-export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick, onWheelZoom, onPanBy }: GameCanvasProps) {
+function GameCanvasImpl({ canvasRef, onLeftClick, onDoubleClick, onRightClick, onWheelZoom, onPanBy }: GameCanvasProps) {
   const touchTimerRef = useRef<number | null>(null);
+  const touchTapTimerRef = useRef<number | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchLastRef = useRef<{ x: number; y: number } | null>(null);
   const touchMovedRef = useRef(false);
   const pinchDistanceRef = useRef(0);
   const pinchZoomAccumulatorRef = useRef(0);
   const longPressTriggeredRef = useRef(false);
+  const lastTapRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const mouseDragRef = useRef<{
     startX: number;
     startY: number;
@@ -29,6 +31,13 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
     if (touchTimerRef.current !== null) {
       window.clearTimeout(touchTimerRef.current);
       touchTimerRef.current = null;
+    }
+  }
+
+  function clearTouchTapTimer() {
+    if (touchTapTimerRef.current !== null) {
+      window.clearTimeout(touchTapTimerRef.current);
+      touchTapTimerRef.current = null;
     }
   }
 
@@ -170,6 +179,8 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
           const start = touchStartRef.current;
           const wasLongPress = longPressTriggeredRef.current;
           const moved = touchMovedRef.current;
+          const now = performance.now();
+          const previousTap = lastTapRef.current;
           clearTouchTimer();
           touchStartRef.current = null;
           touchLastRef.current = null;
@@ -178,18 +189,40 @@ export function GameCanvas({ canvasRef, onLeftClick, onDoubleClick, onRightClick
           pinchZoomAccumulatorRef.current = 0;
           longPressTriggeredRef.current = false;
           if (!start || wasLongPress || moved) return;
-          onLeftClick(start.x, start.y);
+          const isDoubleTap =
+            previousTap !== null &&
+            now - previousTap.time < 320 &&
+            Math.hypot(previousTap.x - start.x, previousTap.y - start.y) < 28;
+
+          if (isDoubleTap) {
+            clearTouchTapTimer();
+            lastTapRef.current = null;
+            onDoubleClick(start.x, start.y);
+            return;
+          }
+
+          lastTapRef.current = { x: start.x, y: start.y, time: now };
+          clearTouchTapTimer();
+          touchTapTimerRef.current = window.setTimeout(() => {
+            if (!lastTapRef.current || lastTapRef.current.time !== now) return;
+            lastTapRef.current = null;
+            onLeftClick(start.x, start.y);
+          }, 220);
         }}
         onTouchCancel={() => {
           clearTouchTimer();
+          clearTouchTapTimer();
           touchStartRef.current = null;
           touchLastRef.current = null;
           touchMovedRef.current = false;
           pinchDistanceRef.current = 0;
           pinchZoomAccumulatorRef.current = 0;
           longPressTriggeredRef.current = false;
+          lastTapRef.current = null;
         }}
       />
     </div>
   );
 }
+
+export const GameCanvas = memo(GameCanvasImpl);

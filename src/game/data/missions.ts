@@ -368,6 +368,30 @@ export const missionCatalog: MissionDefinition[] = [
       rewardCreditsBonus: 2400,
       threatSummary: "Veilborn command sniper with control escorts in the Hush Atlas pocket."
     }
+  },
+  {
+    id: "abyss-crown",
+    title: "Abyss Crown",
+    type: "bounty",
+    briefing: "Blackwake command has pushed into Revenant Crossing to seize the salvage lanes. Break the apex hull and clear its escorts before the crossing goes dark.",
+    rewardCredits: 9400,
+    issuerFaction: "veilborn",
+    requiredStanding: 2.7,
+    requiredMissionId: "hush-oracle",
+    minPowerTier: 4,
+    targetCount: 1,
+    enemyVariantIds: ["blackwake-abyss-king"],
+    targetSystemId: "revenant-crossing",
+    targetDestinationId: "revenant-rift",
+    bossEncounter: {
+      bossVariantId: "blackwake-abyss-king",
+      escortVariantIds: ["blackwake-reaver-captain", "blackwake-reaver", "blackwake-interceptor"],
+      bossTitle: "Abyss King",
+      missionBriefing: "Expect fast tackle, disruption modules, and hard close-range pressure from the Blackwake command hull.",
+      specialMechanicTags: ["tackle", "disruption", "raider-command"],
+      rewardCreditsBonus: 2600,
+      threatSummary: "Blackwake apex command hull pushing deep into frontier salvage lanes."
+    }
   }
 ];
 
