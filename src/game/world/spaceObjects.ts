@@ -4,6 +4,7 @@ import { factionData } from "../data/factions";
 import { enemyVariantById, playerShipById } from "../data/ships";
 import { getSystemDestination, getSystemDestinations, sectorById } from "../data/sectors";
 import { commodityById } from "../economy/data/commodities";
+import { getAsteroidQualityLabel } from "../utils/mining";
 import { distance } from "../utils/vector";
 import { getVisibleSystemDestinations } from "./sites";
 
@@ -114,6 +115,15 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
         factionLabel: factionData[variant.faction].name,
         roleLabel: archetype?.roleLabel ?? undefined,
         bossLabel: variant.boss ? variant.bossTitle ?? "Boss" : allied ? "Allied Wing" : undefined,
+        eliteLabel: !allied && !variant.boss && variant.elite ? variant.eliteTitle ?? "Elite" : undefined,
+        priorityLabel:
+          !allied && variant.boss
+            ? "Apex Threat"
+            : !allied && variant.elite
+              ? "Priority Threat"
+              : !allied && variant.threatLevel >= 5
+                ? "High Threat"
+                : undefined,
         threatLabel: variant.boss
           ? `Boss Threat ${variant.threatLevel}`
           : allied
@@ -134,17 +144,28 @@ export function getObjectInfo(world: GameWorld, ref: SelectableRef | null): Obje
     case "asteroid": {
       const asteroid = sector.asteroids.find((item) => item.id === ref.id);
       if (!asteroid) return null;
+      const fieldState = sector.fieldStates[asteroid.beltId];
+      const beltStateLabel =
+        !fieldState ? "Stable belt" :
+        fieldState.reserve <= 18 || fieldState.depletionPressure >= 70 ? "Picked clean" :
+        fieldState.reserve <= 36 || fieldState.depletionPressure >= 42 ? "Worked belt" :
+        fieldState.reserve >= 72 && fieldState.depletionPressure <= 18 ? "Fresh belt" :
+        "Active belt";
+      const qualityLabel = getAsteroidQualityLabel(asteroid.quality);
       return {
         ref,
-        name: `${asteroid.resource} asteroid`,
+        name: `${qualityLabel} ${asteroid.resource} asteroid`,
         type: "asteroid",
         position,
         distance: distanceFromPlayer,
         velocity: 0,
-        subtitle: asteroid.beltId,
-        threatLabel: "Obstacle",
+        subtitle: `${asteroid.beltId} · ${beltStateLabel}${asteroid.hotspot ? " · hotspot vein" : ""}`,
+        threatLabel: asteroid.hotspot ? "Hotspot" : "Obstacle",
         signatureRadius: asteroid.radius * 2,
-        oreRemaining: asteroid.oreRemaining
+        oreRemaining: asteroid.oreRemaining,
+        oreQuality: qualityLabel,
+        hotspotLabel: asteroid.hotspot ? "Hotspot vein" : undefined,
+        beltStateLabel
       };
     }
     case "loot": {

@@ -115,8 +115,13 @@ const SPAWN_BALANCE_DEFAULT = {
   } as Record<SolarSystemDefinition["security"], Partial<Record<SpawnRole, number>>>,
   triggerWeights: {
     dangerSniperBonus: 1.04,
+    dangerFiveMixedRoleBonus: 1.14,
+    dangerSixElitePackBonus: 1.18,
     highSecuritySwarmPenalty: 0.82,
-    frontierRoleBoost: 1.05
+    frontierRoleBoost: 1.05,
+    frontierSupportTackleBoost: 1.12,
+    relicTheaterBoost: 1.2,
+    raidTheaterBoost: 1.12
   },
   pressure: {
     localReinforcementThreshold: 11.5,

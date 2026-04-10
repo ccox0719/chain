@@ -940,21 +940,50 @@ export function renderSector(
   sector.enemies.forEach((enemy, index) => {
     if (!isInView(enemy.position, 54, cameraX, cameraY, viewWidth, viewHeight, objectMargin)) return;
     const variant = enemyVariantById[enemy.variantId];
+    const isAlly = enemy.alignment === "ally";
+    const isEliteThreat = !isAlly && (variant.elite || variant.threatLevel >= 5);
+    const glowColor = isAlly ? "#9fffd4" : variant.color;
+    const hullFill = isAlly ? "rgba(120, 255, 206, 0.20)" : "rgba(255, 96, 96, 0.18)";
+    const arcColor = isAlly ? "rgba(141, 255, 196, 0.74)" : "rgba(255, 120, 102, 0.72)";
     ctx.save();
     ctx.translate(enemy.position.x, enemy.position.y);
     ctx.rotate(enemy.rotation);
-    setGlow(ctx, variant.color, 16);
-    drawShipShape(ctx, variant.silhouette, "rgba(255, 96, 96, 0.18)", variant.color);
+    setGlow(ctx, glowColor, isAlly ? 22 : 16);
+    drawShipShape(ctx, variant.silhouette, hullFill, glowColor);
     clearGlow(ctx);
     ctx.restore();
 
-    if (!lowQuality) drawEnergyArc(ctx, enemy.position.x, enemy.position.y, 28 + (index % 3) * 2, "rgba(255, 120, 102, 0.72)", world.elapsedTime + index);
+    if (!lowQuality) drawEnergyArc(ctx, enemy.position.x, enemy.position.y, 28 + (index % 3) * 2, arcColor, world.elapsedTime + index);
+
+    if (isAlly) {
+      setGlow(ctx, glowColor, 10);
+      ctx.strokeStyle = "rgba(159, 255, 212, 0.95)";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(enemy.position.x, enemy.position.y, 20, 0, Math.PI * 2);
+      ctx.stroke();
+      clearGlow(ctx);
+    }
+    if (isEliteThreat) {
+      setGlow(ctx, variant.elite ? "#ffd27d" : "#ff8f6b", 12);
+      ctx.strokeStyle = variant.elite ? "rgba(255, 210, 125, 0.95)" : "rgba(255, 143, 107, 0.92)";
+      ctx.lineWidth = variant.elite ? 1.9 : 1.5;
+      ctx.beginPath();
+      ctx.arc(enemy.position.x, enemy.position.y, variant.elite ? 23 : 21, 0, Math.PI * 2);
+      ctx.stroke();
+      clearGlow(ctx);
+      if (!lowQuality) {
+        ctx.fillStyle = variant.elite ? "#ffe6a6" : "#ffb7a0";
+        ctx.font = '11px "Space Grotesk", sans-serif';
+        ctx.fillText(variant.elite ? "ACE" : "ELITE", enemy.position.x - 13, enemy.position.y - 28);
+      }
+    }
 
     ctx.fillStyle = "rgba(255,255,255,0.10)";
     ctx.fillRect(enemy.position.x - 18, enemy.position.y + 18, 36, 3);
-    ctx.fillStyle = "#69dfff";
+    ctx.fillStyle = isAlly ? "#8affc4" : "#69dfff";
     ctx.fillRect(enemy.position.x - 18, enemy.position.y + 18, 36 * (enemy.shield / variant.shield), 3);
-    ctx.fillStyle = "#ff876e";
+    ctx.fillStyle = isAlly ? "#d6fff1" : "#ff876e";
     ctx.fillRect(enemy.position.x - 18, enemy.position.y + 23, 36 * (enemy.hull / variant.hull), 3);
   });
 

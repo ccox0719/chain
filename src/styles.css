@@ -1517,15 +1517,46 @@ select {
 }
 
 .menu-panel {
+  position: relative;
   width: min(400px, calc(100vw - 2rem));
   display: grid;
   gap: 0.9rem;
   padding: 1.1rem;
   border-radius: var(--radius-lg);
-  background: rgba(4, 7, 17, 0.97);
+  background:
+    linear-gradient(145deg, rgba(18, 28, 48, 0.2), transparent 42%),
+    linear-gradient(215deg, rgba(255, 188, 124, 0.06), transparent 38%),
+    linear-gradient(180deg, rgba(6, 10, 22, 0.98), rgba(4, 7, 17, 0.97));
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   animation: modal-rise 0.17s cubic-bezier(0.2, 0, 0.2, 1);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.menu-panel::before,
+.menu-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.menu-panel::before {
+  background:
+    linear-gradient(120deg, rgba(127, 192, 255, 0.08), transparent 48%),
+    linear-gradient(300deg, rgba(255, 188, 124, 0.06), transparent 40%);
+  clip-path: polygon(0 0, 42% 0, 26% 28%, 0 18%);
+  opacity: 0.95;
+}
+
+.menu-panel::after {
+  background:
+    linear-gradient(135deg, rgba(127, 192, 255, 0.05), rgba(127, 192, 255, 0)),
+    linear-gradient(315deg, rgba(141, 224, 174, 0.04), rgba(141, 224, 174, 0));
+  clip-path: polygon(58% 0, 100% 0, 100% 82%, 84% 100%, 62% 72%, 74% 36%);
+  opacity: 0.9;
 }
 
 .death-backdrop {
@@ -1610,10 +1641,14 @@ select {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(3, 5, 13, 0.98), rgba(2, 4, 10, 0.99));
+  background:
+    radial-gradient(circle at 18% 14%, rgba(127, 192, 255, 0.08), transparent 26%),
+    radial-gradient(circle at 82% 9%, rgba(255, 188, 124, 0.05), transparent 22%),
+    linear-gradient(180deg, rgba(3, 5, 13, 0.98), rgba(2, 4, 10, 0.99));
   backdrop-filter: blur(24px);
   animation: modal-fade 0.18s ease;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .station-header {
@@ -5363,6 +5398,27 @@ select {
   pointer-events: none;
 }
 
+.station-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+  background:
+    linear-gradient(140deg, rgba(127, 192, 255, 0.045), transparent 44%),
+    linear-gradient(220deg, rgba(255, 188, 124, 0.03), transparent 38%),
+    linear-gradient(320deg, rgba(141, 224, 174, 0.025), transparent 34%);
+  clip-path: polygon(0 0, 31% 0, 22% 18%, 45% 34%, 34% 52%, 56% 69%, 49% 100%, 0 100%);
+}
+
+.station-header,
+.station-tabs,
+.station-content {
+  position: relative;
+  z-index: 2;
+}
+
 /* ============================================
    CREDIT BADGE (station header)
    ============================================ */
@@ -7201,6 +7257,24 @@ select {
 
 .sel-target-chiprow .status-chip {
   padding: 0.08rem 0.28rem;
+}
+
+.sel-target-priority-chip {
+  color: #ffd98f;
+  border-color: rgba(255, 205, 120, 0.34);
+  background: rgba(255, 188, 124, 0.12);
+}
+
+.sel-target-elite-chip {
+  color: #ffe8b0;
+  border-color: rgba(255, 214, 138, 0.34);
+  background: rgba(255, 214, 138, 0.12);
+}
+
+.sel-target-boss-chip {
+  color: #ffb1b1;
+  border-color: rgba(255, 120, 120, 0.36);
+  background: rgba(255, 120, 120, 0.12);
 }
 
 .sel-target-chiprow .status-chip.dim {

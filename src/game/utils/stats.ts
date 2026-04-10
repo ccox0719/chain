@@ -1,4 +1,4 @@
-import { ModuleDefinition, ModuleSlot, PlayerState, ShipBonusProfile } from "../../types/game";
+import { ModuleDefinition, ModuleSlot, PlayerState, ShipBonusProfile, SolarSystemDefinition } from "../../types/game";
 import { moduleById } from "../data/modules";
 import { playerShipById } from "../data/ships";
 import { starterShipConfigById } from "../data/starterShips";
@@ -176,12 +176,19 @@ function getDerivedStatsCacheKey(player: PlayerState) {
 }
 
 export function getCargoUsed(player: PlayerState) {
-  const resourceCargo = Object.values(player.cargo).reduce((total, amount) => total + amount, 0);
+  const resourceCargo = Object.values(player.cargo).reduce((total, amount) => {
+    const numeric = Number(amount);
+    return total + (Number.isFinite(numeric) ? numeric : 0);
+  }, 0);
   const commodityCargo = Object.entries(player.commodities).reduce((total, [commodityId, amount]) => {
     const volume = commodityById[commodityId as keyof typeof commodityById]?.volume ?? 1;
-    return total + amount * volume;
+    const numericAmount = Number(amount);
+    return total + (Number.isFinite(numericAmount) ? numericAmount * volume : 0);
   }, 0);
-  const missionCargo = player.missionCargo.reduce((total, item) => total + item.volume, 0);
+  const missionCargo = player.missionCargo.reduce((total, item) => {
+    const numericVolume = Number(item.volume);
+    return total + (Number.isFinite(numericVolume) ? numericVolume : 0);
+  }, 0);
   return resourceCargo + commodityCargo + missionCargo;
 }
 
@@ -317,10 +324,36 @@ export function getStationaryCapacitorRegenMultiplier(
   return 1 + (CAPACITOR_BALANCE.stationaryRegenBonusMultiplier - 1) * stillness;
 }
 
-export function getRepairCost(player: PlayerState) {
+export function getRepairCostMultiplier(
+  sector?: Pick<SolarSystemDefinition, "theaterTag" | "danger" | "security">
+) {
+  if (!sector) return 1;
+  switch (sector.theaterTag) {
+    case "relic":
+      return 1.55;
+    case "raid":
+      return 1.4;
+    case "deep-wild":
+      return sector.danger >= 5 ? 1.32 : 1.2;
+    case "frontline":
+      return 1.22;
+    case "border":
+      return 1.12;
+    case "staging":
+      return sector.security === "medium" ? 1.05 : 1;
+    default:
+      return sector.danger >= 5 && sector.security === "frontier" ? 1.2 : 1;
+  }
+}
+
+export function getRepairCost(
+  player: PlayerState,
+  sector?: Pick<SolarSystemDefinition, "theaterTag" | "danger" | "security">
+) {
   const derived = getCachedDerivedStats(player);
   const missingHull = derived.maxHull - player.hull;
   const missingArmor = derived.maxArmor - player.armor;
   const missingShield = derived.maxShield - player.shield;
-  return Math.max(0, Math.ceil(missingHull * 2 + missingArmor * 1.7 + missingShield * 1.5));
+  const baseCost = missingHull * 2 + missingArmor * 1.7 + missingShield * 1.5;
+  return Math.max(0, Math.ceil(baseCost * getRepairCostMultiplier(sector)));
 }

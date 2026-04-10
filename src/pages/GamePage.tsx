@@ -136,6 +136,8 @@ export function GamePage() {
           onClose={() => setBalanceOpen(false)}
           snapshot={snapshot}
           onRegenShip={actions.regenShip}
+          onAddCredits={actions.addCredits}
+          onForcePilotLicenseLevel={actions.forcePilotLicenseLevel}
           onTriggerDevRegionalEvent={actions.triggerDevRegionalEvent}
           onTriggerDevSiteHotspot={actions.triggerDevSiteHotspot}
           onTriggerDevWarEvent={actions.triggerDevWarEvent}

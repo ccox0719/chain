@@ -1037,6 +1037,386 @@ const expansionSectorCatalog: BaseSystemDefinition[] = [
       { variantId: "veilborn-hunter", count: 3, center: { x: 1500, y: 1320 }, radius: 220 },
       { variantId: "veilborn-support", count: 2, center: { x: 1820, y: 1520 }, radius: 220 }
     ]
+  },
+  {
+    id: "marrow-rim",
+    name: "Marrow Rim",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Last practical staging rim before the chart breaks into long dead lanes and ugly return trips.",
+    flavorText: "Marrow Rim is where careful pilots stop pretending the frontier still has edges.",
+    controllingFaction: "veilborn",
+    factionInfluence: 52,
+    contestedFactionIds: ["blackwake-clans", "ironbound-syndicate"],
+    threatSummary: "Fractured fringe pressure, hostile tails, and mixed control fleets.",
+    visualTheme: "Bone-white relay arcs scattered across cold violet dust.",
+    economyTags: ["frontier", "repair", "salvage", "logistics"],
+    missionTags: ["escort", "survey", "salvage", "deep-haul"],
+    traffic: "low",
+    population: "Rim staging crews",
+    width: 3900,
+    height: 3500,
+    backdrop: { nebula: "#1c1530", dust: "#c7b6ff" },
+    mapPosition: { x: 1220, y: 280 },
+    neighbors: ["revenant-crossing", "hush-atlas", "null-ledger", "gravemoon-basin"],
+    destinations: [
+      station("marrow-dock", "Marrow Dock", 960, 2700, "Last-reliable rim dock with expensive repairs and uneven stock.", ["frontier", "repair", "logistics"]),
+      gate("gate-marrow-revenant", "Revenant Gate", 420, 620, "revenant-crossing", "gate-revenant-marrow", "Return gate toward the known deadspace crossing."),
+      gate("gate-marrow-hush", "Hush Gate", 760, 500, "hush-atlas", "gate-hush-marrow", "Survey lane back toward Hush Atlas."),
+      gate("gate-marrow-null", "Null Gate", 2940, 720, "null-ledger", "gate-null-marrow", "Partial-chart relay gate into the fractured fringe."),
+      gate("gate-marrow-gravemoon", "Gravemoon Gate", 3040, 2440, "gravemoon-basin", "gate-gravemoon-marrow", "Industrial dead-lane gate toward rare ore fields."),
+      belt("marrow-belt-alpha", "Marrow Belt Alpha", 1740, 1420, "ghost-alloy", "Worked but still valuable alloy seam on the rim."),
+      beacon("marrow-rim-marker", "Rim Marker", 2180, 1040, "Warning beacon repeating outdated convoy loss data.", ["mission", "navigation"])
+    ],
+    asteroidFields: [
+      {
+        beltId: "marrow-belt-alpha",
+        center: { x: 1740, y: 1420 },
+        count: 9,
+        resource: "ghost-alloy",
+        spread: 290,
+        richness: 19,
+        hostileSpawnChance: 0.72,
+        hostileSpawnCount: 2,
+        hostileSpawnVariantIds: ["veilborn-hunter", "veilborn-support", "blackwake-interceptor"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "veilborn-hunter", count: 3, center: { x: 2260, y: 1560 }, radius: 240 },
+      { variantId: "veilborn-support", count: 2, center: { x: 2060, y: 1820 }, radius: 220 },
+      { variantId: "blackwake-interceptor", count: 2, center: { x: 2520, y: 1340 }, radius: 220 }
+    ]
+  },
+  {
+    id: "knifepoint-run",
+    name: "Knifepoint Run",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Pirate toll corridor built around short jumps, fast tackle, and bodies left beside the shortcut.",
+    flavorText: "The Run is faster than the rim route, which is the whole scam.",
+    controllingFaction: "blackwake-clans",
+    factionInfluence: 94,
+    contestedFactionIds: ["veilborn"],
+    threatSummary: "Blackwake tackle screens, hunter wings, and toll ambushes.",
+    visualTheme: "Razor-dark lanes and red wake scars around broken toll buoys.",
+    economyTags: ["frontier", "black-market", "pirate-infested", "combat"],
+    missionTags: ["smuggle", "combat", "intercept", "risk"],
+    traffic: "low",
+    population: "Pirate toll run",
+    width: 3800,
+    height: 3400,
+    backdrop: { nebula: "#1d0c18", dust: "#ff7777" },
+    mapPosition: { x: 980, y: 20 },
+    neighbors: ["blackwake", "ashen-deep", "eclipse-yard"],
+    destinations: [
+      gate("gate-knifepoint-blackwake", "Blackwake Gate", 420, 620, "blackwake", "gate-blackwake-knifepoint", "Pirate return gate into Blackwake."),
+      gate("gate-knifepoint-ashen", "Ashen Gate", 760, 2760, "ashen-deep", "gate-ashen-knifepoint", "Shortcut gate toward Ashen Deep."),
+      gate("gate-knifepoint-eclipse", "Eclipse Gate", 3040, 2260, "eclipse-yard", "gate-eclipse-knifepoint", "Toll gate into a darker salvage branch."),
+      outpost("knifepoint-toll", "Toll Cage", 1880, 1680, "Undockable pirate cage marking who paid and who burned."),
+      anomaly("knifepoint-shear", "Shear Wake", 2320, 1260, "A slipstream trap that slings bad approaches into tackle range.", {
+        effect: "slipstream",
+        radius: 360,
+        strength: 310,
+        debrisCount: 16,
+        tint: "#ff6767"
+      }),
+      wreck("knifepoint-tithe", "Tithe Wrecks", 1440, 1080, "Unpaid toll runners arranged as a warning.")
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "blackwake-interceptor", count: 4, center: { x: 2100, y: 1420 }, radius: 260 },
+      { variantId: "blackwake-reaver", count: 3, center: { x: 2380, y: 1720 }, radius: 260 },
+      { variantId: "blackwake-reaver-captain", count: 1, center: { x: 1900, y: 1540 }, radius: 220 }
+    ]
+  },
+  {
+    id: "null-ledger",
+    name: "Null Ledger",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Abandoned relay accounting system where dead routes still answer old dispatch codes.",
+    flavorText: "Null Ledger keeps records for stations that no longer exist.",
+    controllingFaction: "veilborn",
+    factionInfluence: 36,
+    contestedFactionIds: ["helion-cabal", "blackwake-clans"],
+    threatSummary: "Sensor interference, decoy signals, and hunter response wings.",
+    visualTheme: "Dim blue ledger towers blinking inside a hollow violet field.",
+    economyTags: ["frontier", "research", "salvage"],
+    missionTags: ["survey", "recon", "data", "salvage"],
+    traffic: "low",
+    population: "Abandoned relay",
+    width: 3900,
+    height: 3500,
+    backdrop: { nebula: "#101a2e", dust: "#7fa7ff" },
+    mapPosition: { x: 1380, y: 230 },
+    neighbors: ["marrow-rim", "quietus-verge", "last-lantern"],
+    destinations: [
+      gate("gate-null-marrow", "Marrow Gate", 420, 620, "marrow-rim", "gate-marrow-null", "Partial-chart gate back to Marrow Rim."),
+      gate("gate-null-quietus", "Quietus Gate", 3000, 660, "quietus-verge", "gate-quietus-null", "Anomaly-verge gate with unstable telemetry."),
+      gate("gate-null-lantern", "Lantern Gate", 3060, 2460, "last-lantern", "gate-lantern-null", "Long dead-lane gate toward the last known staging light."),
+      beacon("null-ledger-relay", "Dead Ledger Relay", 1880, 1160, "Relay stack still logging phantom trade manifests.", ["mission", "research"]),
+      anomaly("null-blank", "Blank Field", 2260, 1740, "Ion pocket that smears locks and turns return vectors ugly.", {
+        effect: "ion",
+        radius: 380,
+        strength: 280,
+        debrisCount: 14,
+        tint: "#7fa7ff"
+      }),
+      wreck("null-archive", "Archive Hulks", 1320, 2120, "Dead courier hulls with sealed data vaults.")
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "veilborn-support", count: 3, center: { x: 2200, y: 1720 }, radius: 250 },
+      { variantId: "veilborn-hunter", count: 3, center: { x: 1940, y: 2020 }, radius: 250 },
+      { variantId: "helion-prism-sniper", count: 1, center: { x: 2560, y: 1280 }, radius: 220 }
+    ]
+  },
+  {
+    id: "eclipse-yard",
+    name: "Eclipse Yard",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Salvage graveyard where convoy shadows and pirate hunting rights overlap.",
+    flavorText: "The Yard is full of ships that almost made the shortcut worth it.",
+    controllingFaction: "blackwake-clans",
+    factionInfluence: 58,
+    contestedFactionIds: ["veilborn", "cinder-union"],
+    threatSummary: "Rival salvage crews, pirate aces, and wreck-field ambush geometry.",
+    visualTheme: "Black eclipse plates against pale wreck halos.",
+    economyTags: ["frontier", "salvage", "rare-resource", "black-market"],
+    missionTags: ["salvage", "combat", "recovery", "hunt"],
+    traffic: "low",
+    population: "Wreck-field squatters",
+    width: 4000,
+    height: 3600,
+    backdrop: { nebula: "#160d20", dust: "#e6c4ff" },
+    mapPosition: { x: 1210, y: 40 },
+    neighbors: ["ghostlight-pocket", "knifepoint-run", "quietus-verge"],
+    destinations: [
+      station("eclipse-cairn", "Eclipse Cairn", 940, 2860, "Black-market salvage dock built inside a wrecked carrier spine.", ["frontier", "market", "salvage"]),
+      gate("gate-eclipse-ghostlight", "Ghostlight Gate", 420, 680, "ghostlight-pocket", "gate-ghostlight-eclipse", "Hidden graveyard gate back toward Ghostlight."),
+      gate("gate-eclipse-knifepoint", "Knifepoint Gate", 780, 520, "knifepoint-run", "gate-knifepoint-eclipse", "Pirate toll gate toward Knifepoint Run."),
+      gate("gate-eclipse-quietus", "Quietus Gate", 3180, 2320, "quietus-verge", "gate-quietus-eclipse", "Wreck-lane gate into anomaly space."),
+      wreck("eclipse-carrier", "Eclipse Carrier Spine", 1820, 1280, "A broken capital hulk with salvage rights nobody can enforce."),
+      wreck("eclipse-vaults", "Cold Vault Scatter", 2440, 1660, "High-value vault fragments spread through the yard."),
+      anomaly("eclipse-gravewell", "Gravewell", 2260, 2180, "A drag field that makes wreck-field fights harder to leave.", {
+        effect: "drag",
+        radius: 370,
+        strength: 260,
+        debrisCount: 18,
+        tint: "#e6c4ff"
+      })
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "blackwake-reaver", count: 3, center: { x: 2140, y: 1740 }, radius: 280 },
+      { variantId: "blackwake-interceptor", count: 3, center: { x: 2480, y: 1460 }, radius: 260 },
+      { variantId: "reaver-gunship", count: 2, center: { x: 1840, y: 2160 }, radius: 240 },
+      { variantId: "blackwake-reaver-captain", count: 1, center: { x: 2260, y: 1260 }, radius: 220 }
+    ]
+  },
+  {
+    id: "gravemoon-basin",
+    name: "Gravemoon Basin",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Remote mining basin with rare alloy seams, failed colony infrastructure, and long rescue delays.",
+    flavorText: "The Basin pays in ghost-alloy and charges in return trips.",
+    controllingFaction: "ironbound-syndicate",
+    factionInfluence: 44,
+    contestedFactionIds: ["veilborn", "blackwake-clans"],
+    threatSummary: "Claim-jumpers, armor escorts, and raider opportunists around rich belts.",
+    visualTheme: "Dim amber moonlight crossing violet ore dust.",
+    economyTags: ["frontier", "mining", "industrial", "rare-resource"],
+    missionTags: ["mining", "escort", "delivery", "claim"],
+    traffic: "low",
+    population: "Claim camps",
+    width: 4000,
+    height: 3600,
+    backdrop: { nebula: "#2b1c22", dust: "#d59f72" },
+    mapPosition: { x: 1340, y: 410 },
+    neighbors: ["marrow-rim", "last-lantern"],
+    destinations: [
+      station("gravemoon-rig", "Gravemoon Rig", 1040, 2840, "Industrial claim rig with expensive field repairs and ore brokers.", ["frontier", "mining", "industrial"]),
+      gate("gate-gravemoon-marrow", "Marrow Gate", 420, 680, "marrow-rim", "gate-marrow-gravemoon", "Rim gate back toward Marrow Dock."),
+      gate("gate-gravemoon-lantern", "Lantern Gate", 3160, 2240, "last-lantern", "gate-lantern-gravemoon", "Dead-lane gate toward Last Lantern."),
+      belt("gravemoon-belt-alpha", "Gravemoon Belt Alpha", 1640, 1340, "ghost-alloy", "Dense ghost-alloy belt marked by old colony tethers."),
+      belt("gravemoon-belt-beta", "Gravemoon Belt Beta", 2420, 1820, "ember-crystal", "Deep crystal pocket used as a claim-jumper lure."),
+      wreck("gravemoon-colony", "Gravemoon Colony Wreck", 2040, 2320, "Abandoned colony infrastructure stripped by miners and raiders.")
+    ],
+    asteroidFields: [
+      {
+        beltId: "gravemoon-belt-alpha",
+        center: { x: 1640, y: 1340 },
+        count: 12,
+        resource: "ghost-alloy",
+        spread: 340,
+        richness: 22,
+        hostileSpawnChance: 0.9,
+        hostileSpawnCount: 3,
+        hostileSpawnVariantIds: ["ironbound-bruiser", "ironbound-artillery", "blackwake-interceptor"]
+      },
+      {
+        beltId: "gravemoon-belt-beta",
+        center: { x: 2420, y: 1820 },
+        count: 9,
+        resource: "ember-crystal",
+        spread: 280,
+        richness: 18,
+        hostileSpawnChance: 0.72,
+        hostileSpawnCount: 2,
+        hostileSpawnVariantIds: ["blackwake-reaver", "veilborn-hunter"]
+      }
+    ],
+    enemySpawns: [
+      { variantId: "ironbound-bruiser", count: 2, center: { x: 1760, y: 1520 }, radius: 240 },
+      { variantId: "ironbound-artillery", count: 2, center: { x: 2200, y: 1920 }, radius: 260 },
+      { variantId: "blackwake-interceptor", count: 2, center: { x: 2520, y: 1660 }, radius: 220 }
+    ]
+  },
+  {
+    id: "quietus-verge",
+    name: "Quietus Verge",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Anomaly verge where route geometry bends, sensors lie, and wreck fields drift across the gates.",
+    flavorText: "Quietus is quiet because pilots stop transmitting before they stop moving.",
+    controllingFaction: "veilborn",
+    factionInfluence: 26,
+    contestedFactionIds: ["blackwake-clans"],
+    threatSummary: "High anomaly pressure, control warfare, and hostile recovery crews.",
+    visualTheme: "Washed violet bands folding around black-blue anomaly scars.",
+    economyTags: ["frontier", "research", "salvage", "rare-resource"],
+    missionTags: ["survey", "anomaly", "recovery", "endgame"],
+    traffic: "low",
+    population: "Unstable verge",
+    width: 4100,
+    height: 3700,
+    backdrop: { nebula: "#120b28", dust: "#aab0ff" },
+    mapPosition: { x: 1520, y: 110 },
+    neighbors: ["null-ledger", "eclipse-yard", "last-lantern", "terminus-drift"],
+    destinations: [
+      gate("gate-quietus-null", "Null Gate", 420, 660, "null-ledger", "gate-null-quietus", "Telemetry-poor gate back toward Null Ledger."),
+      gate("gate-quietus-eclipse", "Eclipse Gate", 680, 2740, "eclipse-yard", "gate-eclipse-quietus", "Wreck-lane gate toward Eclipse Yard."),
+      gate("gate-quietus-lantern", "Lantern Gate", 3220, 920, "last-lantern", "gate-lantern-quietus", "Long anomaly lane toward Last Lantern."),
+      gate("gate-quietus-terminus", "Terminus Gate", 3320, 2660, "terminus-drift", "gate-terminus-quietus", "Barely stable gate toward the outer drift."),
+      anomaly("quietus-sink", "Quietus Sink", 1860, 1420, "A pull field that drags careless pilots toward wrecked survey frames.", {
+        effect: "pull",
+        radius: 390,
+        strength: 300,
+        debrisCount: 18,
+        tint: "#aab0ff"
+      }),
+      anomaly("quietus-lash", "Lash Stream", 2560, 2180, "A slipstream crossing used by hunters who know the angle.", {
+        effect: "slipstream",
+        radius: 360,
+        strength: 320,
+        debrisCount: 16,
+        tint: "#c7c9ff"
+      }),
+      beacon("quietus-whisper", "Whisper Signal", 2280, 980, "A signal pattern repeating from somewhere beyond the mapped gate.", ["mission", "anomaly"])
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "veilborn-hunter", count: 4, center: { x: 2260, y: 1780 }, radius: 300 },
+      { variantId: "veilborn-support", count: 3, center: { x: 2500, y: 2100 }, radius: 260 },
+      { variantId: "reaver-gunship", count: 2, center: { x: 1900, y: 1420 }, radius: 240 }
+    ]
+  },
+  {
+    id: "last-lantern",
+    name: "Last Lantern",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Final long-haul staging light before the known lanes thin into rumored outer wilds.",
+    flavorText: "Every outbound captain looks at Last Lantern twice: once for fuel, once for nerve.",
+    controllingFaction: "helion-cabal",
+    factionInfluence: 38,
+    contestedFactionIds: ["veilborn", "blackwake-clans", "ironbound-syndicate"],
+    threatSummary: "Elite scouts, precision snipers, and opportunistic raiders around thin support lines.",
+    visualTheme: "Cold gold lantern towers shining through violet deadspace.",
+    economyTags: ["frontier", "repair", "research", "logistics"],
+    missionTags: ["survey", "escort", "deep-haul", "endgame"],
+    traffic: "low",
+    population: "Expedition staging",
+    width: 4000,
+    height: 3600,
+    backdrop: { nebula: "#1c1b2e", dust: "#ffd78a" },
+    mapPosition: { x: 1560, y: 330 },
+    neighbors: ["null-ledger", "gravemoon-basin", "quietus-verge", "terminus-drift"],
+    destinations: [
+      station("last-lantern-post", "Last Lantern Post", 1040, 2780, "Sparse expedition station with limited premium stock and expensive field repair.", ["frontier", "repair", "research"]),
+      gate("gate-lantern-null", "Null Gate", 420, 620, "null-ledger", "gate-null-lantern", "Dead-lane return gate toward Null Ledger."),
+      gate("gate-lantern-gravemoon", "Gravemoon Gate", 720, 2640, "gravemoon-basin", "gate-gravemoon-lantern", "Ore-lane gate toward Gravemoon Basin."),
+      gate("gate-lantern-quietus", "Quietus Gate", 3180, 720, "quietus-verge", "gate-quietus-lantern", "Anomaly lane toward Quietus Verge."),
+      gate("gate-lantern-terminus", "Terminus Gate", 3200, 2480, "terminus-drift", "gate-terminus-lantern", "Last reliable gate before the outer drift."),
+      beacon("lantern-chartroom", "Lantern Chartroom", 1880, 1180, "Expedition relay full of partial maps and missing-ship annotations.", ["mission", "research"]),
+      wreck("lantern-expedition", "Lost Expedition Keel", 2420, 1680, "Forward expedition ship that came back without most of itself.")
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "helion-prism-sniper", count: 2, center: { x: 2360, y: 1420 }, radius: 260 },
+      { variantId: "helion-support-wing", count: 2, center: { x: 2140, y: 1800 }, radius: 240 },
+      { variantId: "veilborn-hunter", count: 2, center: { x: 2660, y: 2020 }, radius: 260 }
+    ]
+  },
+  {
+    id: "terminus-drift",
+    name: "Terminus Drift",
+    regionId: "frontier-march",
+    security: "frontier",
+    danger: 6,
+    description: "Outer-wilds terminal where mapped routes end in unstable gates and signals from deeper dead lanes.",
+    flavorText: "Terminus Drift is not the edge. It is just the last place the chart admits it is afraid.",
+    controllingFaction: "veilborn",
+    factionInfluence: 18,
+    contestedFactionIds: ["blackwake-clans"],
+    threatSummary: "Apex hunter patrols, anomaly collapse pockets, and no dependable rescue path.",
+    visualTheme: "Starless violet-black with faint gates pointing beyond the visible chain.",
+    economyTags: ["frontier", "salvage", "rare-resource", "endgame"],
+    missionTags: ["endgame", "survey", "recovery", "anomaly"],
+    traffic: "low",
+    population: "Outer wilds",
+    width: 4200,
+    height: 3800,
+    backdrop: { nebula: "#0c0718", dust: "#8d7dff" },
+    mapPosition: { x: 1740, y: 210 },
+    neighbors: ["quietus-verge", "last-lantern"],
+    destinations: [
+      gate("gate-terminus-quietus", "Quietus Gate", 420, 720, "quietus-verge", "gate-quietus-terminus", "Unstable return gate toward Quietus Verge."),
+      gate("gate-terminus-lantern", "Lantern Gate", 740, 2760, "last-lantern", "gate-lantern-terminus", "Last return gate toward expedition support."),
+      outpost("terminus-listening-post", "Listening Post 9", 1880, 2820, "Undockable ruined listening post still aimed beyond the chart."),
+      anomaly("terminus-deadlight", "Deadlight Verge", 2460, 1540, "Mixed drag and ion shear around the mapped edge.", {
+        effect: "drag",
+        radius: 430,
+        strength: 330,
+        debrisCount: 22,
+        tint: "#8d7dff"
+      }),
+      anomaly("terminus-black-thread", "Black Thread", 3180, 2280, "Slipstream filament pointing past the navigable map.", {
+        effect: "slipstream",
+        radius: 380,
+        strength: 340,
+        debrisCount: 18,
+        tint: "#5f5cff"
+      }),
+      wreck("terminus-expedition", "Vanished Chain Wreckage", 1640, 1220, "Scattered expedition wreckage from a route that is no longer mapped."),
+      beacon("terminus-beyond", "Beyond-Chain Echo", 3320, 940, "A signal from a lane the current gates refuse to resolve.", ["mission", "anomaly", "rumor"])
+    ],
+    asteroidFields: [],
+    enemySpawns: [
+      { variantId: "veilborn-hunter", count: 4, center: { x: 2360, y: 1680 }, radius: 320 },
+      { variantId: "veilborn-support", count: 3, center: { x: 2680, y: 1980 }, radius: 280 },
+      { variantId: "reaver-gunship", count: 3, center: { x: 1980, y: 1320 }, radius: 260 },
+      { variantId: "blackwake-reaver-captain", count: 1, center: { x: 2920, y: 2260 }, radius: 240 }
+    ]
   }
 ];
 
@@ -1049,9 +1429,12 @@ const neighborAdditions: Partial<Record<string, string[]>> = {
   "forge-plains": ["brass-strait"],
   "sable-haul": ["brass-strait"],
   "outer-verge": ["ashen-deep"],
-  blackwake: ["ashen-deep"],
+  blackwake: ["ashen-deep", "knifepoint-run"],
   "vanta-expanse": ["hush-atlas"],
-  "ghostlight-pocket": ["hush-atlas"]
+  "ghostlight-pocket": ["hush-atlas", "eclipse-yard"],
+  "hush-atlas": ["marrow-rim"],
+  "revenant-crossing": ["marrow-rim"],
+  "ashen-deep": ["knifepoint-run"]
 };
 
 const destinationAdditions: Partial<Record<string, SystemDestination[]>> = {
@@ -1081,13 +1464,24 @@ const destinationAdditions: Partial<Record<string, SystemDestination[]>> = {
     gate("gate-verge-ashen", "Ashen Gate", 1160, 2720, "ashen-deep", "gate-ashen-verge", "Frontier gate descending into Ashen Deep.")
   ],
   blackwake: [
-    gate("gate-blackwake-ashen", "Ashen Gate", 960, 2660, "ashen-deep", "gate-ashen-blackwake", "Secondary raider gate toward Ashen Deep.")
+    gate("gate-blackwake-ashen", "Ashen Gate", 960, 2660, "ashen-deep", "gate-ashen-blackwake", "Secondary raider gate toward Ashen Deep."),
+    gate("gate-blackwake-knifepoint", "Knifepoint Gate", 3040, 980, "knifepoint-run", "gate-knifepoint-blackwake", "Pirate toll gate toward Knifepoint Run.")
   ],
   "vanta-expanse": [
     gate("gate-vanta-hush", "Hush Gate", 1160, 2840, "hush-atlas", "gate-hush-vanta", "Survey route gate toward Hush Atlas.")
   ],
   "ghostlight-pocket": [
-    gate("gate-ghostlight-hush", "Hush Gate", 980, 2900, "hush-atlas", "gate-hush-ghostlight", "Deep salvage gate toward Hush Atlas.")
+    gate("gate-ghostlight-hush", "Hush Gate", 980, 2900, "hush-atlas", "gate-hush-ghostlight", "Deep salvage gate toward Hush Atlas."),
+    gate("gate-ghostlight-eclipse", "Eclipse Gate", 3180, 2360, "eclipse-yard", "gate-eclipse-ghostlight", "Hidden salvage gate toward Eclipse Yard.")
+  ],
+  "hush-atlas": [
+    gate("gate-hush-marrow", "Marrow Gate", 3120, 2840, "marrow-rim", "gate-marrow-hush", "Long survey gate toward the fractured rim.")
+  ],
+  "revenant-crossing": [
+    gate("gate-revenant-marrow", "Marrow Gate", 3200, 2460, "marrow-rim", "gate-marrow-revenant", "Outer rim gate toward Marrow Dock.")
+  ],
+  "ashen-deep": [
+    gate("gate-ashen-knifepoint", "Knifepoint Gate", 3060, 760, "knifepoint-run", "gate-knifepoint-ashen", "Fast raider gate toward Knifepoint Run.")
   ]
 };
 
@@ -1262,6 +1656,78 @@ const systemIdentityById: Record<
     identityLabel: "Deadspace crossing",
     gameplayPurpose: "Endgame salvage, heavy combat pockets, and hostile anomaly pressure.",
     prepAdvice: "Expect the hardest local fights, unstable geometry, and enemies that punish indecision.",
+    theaterTag: "relic",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
+  },
+  "marrow-rim": {
+    identityLabel: "Fractured rim staging",
+    gameplayPurpose: "Outer staging, long-route planning, and first committed pushes beyond the current frontier.",
+    prepAdvice: "Use Marrow Dock as a last controlled breath. Repairs are costly and outgoing routes are harder to unwind.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "restricted"
+  },
+  "knifepoint-run": {
+    identityLabel: "Pirate toll corridor",
+    gameplayPurpose: "Fast outer shortcut, tackle-heavy ambushes, and high-risk route compression.",
+    prepAdvice: "Do not take the Run unless you can kill tackle or survive being pinned under hunter pressure.",
+    theaterTag: "raid",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "restricted"
+  },
+  "null-ledger": {
+    identityLabel: "Abandoned relay dead lane",
+    gameplayPurpose: "Data recovery, stealthy survey work, and sensor-disruption fights in remote space.",
+    prepAdvice: "Bring lock reliability and patience. False signals and hunter response wings make lazy target selection expensive.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "high",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
+  },
+  "eclipse-yard": {
+    identityLabel: "Outer salvage graveyard",
+    gameplayPurpose: "High-risk salvage, black-market recovery, and pirate ace pressure in wreck-field geometry.",
+    prepAdvice: "Expect wreck-field traps, fast pirate tackle, and expensive resets if you overcommit.",
+    theaterTag: "relic",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
+  },
+  "gravemoon-basin": {
+    identityLabel: "Remote mining basin",
+    gameplayPurpose: "Rare ore extraction, claim-jumper pressure, and deep-haul mining routes.",
+    prepAdvice: "Bring cargo discipline and a real combat answer. The belt value here attracts organized interruptions.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "high",
+    supplyLineImportance: "low",
+    chartStatus: "partial"
+  },
+  "quietus-verge": {
+    identityLabel: "Anomaly verge",
+    gameplayPurpose: "Environmental endgame pressure, anomaly survey work, and hostile recovery fights.",
+    prepAdvice: "Fit for control pressure and moving hazards. The field geometry will punish straight-line escapes.",
+    theaterTag: "relic",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "rumored"
+  },
+  "last-lantern": {
+    identityLabel: "Last staging light",
+    gameplayPurpose: "Final expedition prep, sparse field repair, and outbound deep-route contract staging.",
+    prepAdvice: "Treat it as the last partial support point. Stock is thin and every route beyond it is a commitment.",
+    theaterTag: "deep-wild",
+    frontlinePressure: "extreme",
+    supplyLineImportance: "low",
+    chartStatus: "restricted"
+  },
+  "terminus-drift": {
+    identityLabel: "Outer wilds terminal",
+    gameplayPurpose: "Implied-beyond exploration, apex patrol pressure, and late-endgame anomaly recovery.",
+    prepAdvice: "This is not casual space. Bring a self-sufficient fit and leave before the route closes around you.",
     theaterTag: "relic",
     frontlinePressure: "extreme",
     supplyLineImportance: "low",

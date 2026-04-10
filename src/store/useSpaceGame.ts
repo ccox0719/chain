@@ -19,6 +19,7 @@ import {
   dock,
   equipModuleToSlot,
   disengageCombat,
+  forcePilotLicenseLevel,
   issueCommand,
   lockTarget,
   repairShip,
@@ -54,6 +55,35 @@ import {
   forceDevWarEvent
 } from "../game/procgen/runtime";
 import { CommodityId, GameSnapshot, GameWorld, ModuleSlot, SelectableRef, StarterShipConfigId, Vec2 } from "../types/game";
+
+function normalizeNumericRecord<T extends string>(
+  values: Partial<Record<T, unknown>> | undefined,
+  fallback: Record<T, number>
+): Record<T, number> {
+  const normalized = { ...fallback };
+  Object.entries(values ?? {}).forEach(([key, value]) => {
+    const numeric = Number(value);
+    normalized[key as T] = Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
+  });
+  return normalized;
+}
+
+function normalizeMissionCargo(
+  missionCargo: GameWorld["player"]["missionCargo"] | undefined
+): GameWorld["player"]["missionCargo"] {
+  return (missionCargo ?? []).map((entry) => {
+    const numericVolume = Number(entry.volume);
+    return {
+      ...entry,
+      volume: Number.isFinite(numericVolume) ? Math.max(0, numericVolume) : 0
+    };
+  });
+}
+
+function normalizeNonNegativeNumber(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : fallback;
+}
 
 function worldPointFromClient(
   canvas: HTMLCanvasElement,
@@ -257,6 +287,14 @@ export function useSpaceGame() {
       },
       regenShip: () => {
         regenShip(worldRef.current);
+        refresh();
+      },
+      addCredits: (amount: number) => {
+        addCredits(worldRef.current, amount);
+        refresh();
+      },
+      forcePilotLicenseLevel: (level: 1 | 2 | 3) => {
+        forcePilotLicenseLevel(worldRef.current, level);
         refresh();
       },
       sellCargo: () => {
@@ -569,10 +607,12 @@ function loadWorld() {
         ...parsed.player,
         starterConfigId: parsed.player?.starterConfigId ?? fallback.player.starterConfigId,
         pilotLicense: normalizePilotLicense(parsed.player?.pilotLicense ?? fallback.player.pilotLicense),
+        credits: normalizeNonNegativeNumber(parsed.player?.credits, fallback.player.credits),
+        cargo: normalizeNumericRecord(parsed.player?.cargo, fallback.player.cargo),
         commodities: {
-          ...fallback.player.commodities,
-          ...(parsed.player?.commodities ?? {})
+          ...normalizeNumericRecord(parsed.player?.commodities, fallback.player.commodities)
         },
+        missionCargo: normalizeMissionCargo(parsed.player?.missionCargo ?? fallback.player.missionCargo),
         effects: {
           ...fallback.player.effects,
           ...(parsed.player?.effects ?? {})

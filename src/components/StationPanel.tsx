@@ -33,6 +33,7 @@ import {
   getStationTradeTags
 } from "../game/economy/stationIntel";
 import {
+  normalizePilotLicense,
   getPilotLicenseProgressPercent,
   getPilotLicenseProgressRange,
   getRequiredPilotLicenseLevel,
@@ -44,12 +45,21 @@ import { contractProgressFraction } from "../game/procgen/runtime";
 import { estimateRouteRisk, planRoute } from "../game/universe/routePlanning";
 import { regionById, sectorById } from "../game/data/sectors";
 import { getFactionStandingLabel, getStandingRequirementForAccessTier } from "../game/utils/factionStanding";
-import { getCachedDerivedStats, getCargoUsed, getRepairCost } from "../game/utils/stats";
+import { getCachedDerivedStats, getCargoUsed, getRepairCost, getRepairCostMultiplier } from "../game/utils/stats";
 import { findComparableEquippedWeapon, getWeaponSummaryStats } from "../game/utils/weaponStats";
 import { CommodityId, FactionId, GameSnapshot, ModuleSlot, ResourceId, TransportMissionDefinition, TransportMissionState, TransportRisk } from "../types/game";
 
 type StationTab = "services" | "ships" | "market" | "modules" | "fitting" | "missions";
 type MarketSortKey = "name" | "category" | "volume" | "owned" | "buyPrice" | "sellPrice" | "profit";
+
+function hashStringToUnitInterval(input: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
 
 const TAB_LABELS: Record<StationTab, string> = {
   services: "Overview",
@@ -77,6 +87,11 @@ const TAB_COLORS: Record<StationTab, string> = {
   fitting:  "#ff9471",
   missions: "#c4a3ff",
 };
+
+function safeDisplayNumber(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
   essentials: "◉",
@@ -566,6 +581,8 @@ export function DeveloperBalanceModal({
   onClose,
   snapshot,
   onRegenShip,
+  onAddCredits,
+  onForcePilotLicenseLevel,
   onTriggerDevRegionalEvent,
   onTriggerDevSiteHotspot,
   onTriggerDevWarEvent
@@ -574,6 +591,8 @@ export function DeveloperBalanceModal({
   onClose: () => void;
   snapshot: GameSnapshot;
   onRegenShip: () => void;
+  onAddCredits: (amount: number) => void;
+  onForcePilotLicenseLevel: (level: 1 | 2 | 3) => void;
   onTriggerDevRegionalEvent: () => void;
   onTriggerDevSiteHotspot: () => void;
   onTriggerDevWarEvent: () => void;
@@ -583,6 +602,7 @@ export function DeveloperBalanceModal({
   const [masterDialValues, setMasterDialValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(BALANCE_GROUPS.filter(g => g.masterDial).map(g => [g.title, g.masterDial!.inferFrom()]))
   );
+  const currentCredits = Math.max(0, Math.round(Number(snapshot.world.player.credits) || 0));
 
   useEffect(() => {
     if (!open) return;
@@ -697,6 +717,82 @@ export function DeveloperBalanceModal({
               Forces the current region and system into the live procgen tables.
             </span>
           </div>
+        </section>
+        <section className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem", marginBottom: "0.75rem", borderColor: "rgba(127, 220, 255, 0.24)" }}>
+          <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+            <strong>Progression Tools</strong>
+            <span className="status-chip">
+              L{normalizePilotLicense(snapshot.world.player.pilotLicense).level} · {normalizePilotLicense(snapshot.world.player.pilotLicense).progress.toLocaleString()} XP
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <button type="button" className="ghost-button mini" onClick={() => onForcePilotLicenseLevel(1)}>
+              Set L1
+            </button>
+            <button type="button" className="ghost-button mini" onClick={() => onForcePilotLicenseLevel(2)}>
+              Set L2
+            </button>
+            <button type="button" className="ghost-button mini" onClick={() => onForcePilotLicenseLevel(3)}>
+              Set L3
+            </button>
+          </div>
+        </section>
+        <section className="panel-lite" style={{ display: "grid", gap: "0.55rem", padding: "0.7rem 0.8rem", marginBottom: "0.75rem", borderColor: "rgba(127, 220, 255, 0.24)" }}>
+          <div className="mission-card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
+            <strong>Credit Tools</strong>
+            <span className="status-chip">
+              ✦ {currentCredits.toLocaleString()} cr
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className="ghost-button mini"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAddCredits(1000);
+              }}
+            >
+              +1k
+            </button>
+            <button
+              type="button"
+              className="ghost-button mini"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAddCredits(10000);
+              }}
+            >
+              +10k
+            </button>
+            <button
+              type="button"
+              className="ghost-button mini"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAddCredits(100000);
+              }}
+            >
+              +100k
+            </button>
+            <button
+              type="button"
+              className="ghost-button mini"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAddCredits(1000000);
+              }}
+            >
+              +1m
+            </button>
+          </div>
+          <span className="status-chip" style={{ justifySelf: "flex-start" }}>
+            Adds credits directly to the pilot wallet. `F8` still adds 10k.
+          </span>
         </section>
         <div
           className="dev-balance-grid"
@@ -947,6 +1043,18 @@ export function StationPanel({
   const stationFactionReward = getFactionRewardDefinition(stationFactionId);
   const stationFactionRewardClaimed = world.player.factionRewardClaims[stationFactionId] ?? false;
   const stationStandingLabel = getFactionStandingLabel(stationStanding);
+  const repairCost = getRepairCost(world.player, snapshot.sector);
+  const repairSurchargePercent = Math.max(0, Math.round((getRepairCostMultiplier(snapshot.sector) - 1) * 100));
+  const stockPressureNote =
+    snapshot.sector.theaterTag === "relic"
+      ? "Relic-space docks carry thinner premium stock. Treat this station as a field refit, not a full showroom."
+      : snapshot.sector.theaterTag === "raid"
+        ? "Raid-space docks lean toward practical frontier stock and rotate premium hulls more aggressively."
+        : snapshot.sector.theaterTag === "deep-wild" && snapshot.sector.danger >= 5
+          ? "Deep-wild inventory is uneven. Expect fewer premium hull options and a narrower refit board."
+          : snapshot.sector.theaterTag === "frontline"
+            ? "Frontline docks prioritize combat turnover over deep catalog choice."
+            : null;
   const alliedFactionSet = useMemo<Set<string>>(
     () =>
       new Set([
@@ -994,6 +1102,32 @@ export function StationPanel({
     const accessTier = stationProfile?.shipAccessTier ?? "neutral";
     const shipStanding = world.player.factionStandings[ship.faction] ?? 0;
     const standingRequirement = getStandingRequirementForAccessTier(accessTier, ship.faction, stationProfile);
+    const theaterTag = snapshot.sector.theaterTag;
+    const premiumHull = ship.price >= 18000 || ship.shipClass === "cruiser";
+    const advancedHull = ship.price >= 7600 || ship.shipClass === "destroyer";
+    const stockRoll = hashStringToUnitInterval(`${currentStation?.id ?? snapshot.sector.id}:${ship.id}:shipyard`);
+    const scarcityVisible =
+      theaterTag === "relic"
+        ? premiumHull
+          ? stockRoll < 0.32
+          : advancedHull
+            ? stockRoll < 0.62
+            : true
+        : theaterTag === "raid"
+          ? premiumHull
+            ? stockRoll < 0.42
+            : advancedHull
+              ? stockRoll < 0.72
+              : true
+          : theaterTag === "deep-wild" && snapshot.sector.danger >= 5
+            ? premiumHull
+              ? stockRoll < 0.5
+              : true
+            : true;
+
+    if (!scarcityVisible && ship.faction !== stationFactionId && shipStanding < Math.max(1.6, standingRequirement)) {
+      return false;
+    }
 
     if (accessTier === "native") return (factionAligned && baseAllowed) || (shipStanding >= standingRequirement && baseAllowed);
     if (accessTier === "allied") return (factionAligned && baseAllowed) || ((ship.faction === stationFactionId || shipStanding >= standingRequirement) && baseAllowed);
@@ -1022,6 +1156,10 @@ export function StationPanel({
       alliedFactionSet,
       security,
       stationTradeTagSet,
+      currentStation?.id,
+      snapshot.sector.id,
+      snapshot.sector.theaterTag,
+      snapshot.sector.danger,
       snapshot.currentRegion.dominantFaction,
       snapshot.currentRegion.secondaryFactions,
       stationProfile?.factionControl
@@ -1038,12 +1176,18 @@ export function StationPanel({
   const roundedShieldMax = Math.round(currentStats.maxShield);
   const roundedArmorMax = Math.round(currentStats.maxArmor);
   const roundedHullMax = Math.round(currentStats.maxHull);
-  const roundedCargoCapacity = Math.round(currentStats.cargoCapacity);
-  const freeCargo = Math.max(0, currentStats.cargoCapacity - getCargoUsed(world.player));
+  const safeCargoCapacity = Number.isFinite(currentStats.cargoCapacity) ? currentStats.cargoCapacity : 0;
+  const roundedCargoCapacity = Math.round(safeCargoCapacity);
+  const cargoUsed = Number.isFinite(getCargoUsed(world.player)) ? getCargoUsed(world.player) : 0;
+  const freeCargo = Math.max(0, safeCargoCapacity - cargoUsed);
   const roundedFreeCargo = Math.round(freeCargo);
-  const missionCargoUsed = world.player.missionCargo.reduce((total, entry) => total + entry.volume, 0);
+  const missionCargoUsed = world.player.missionCargo.reduce((total, entry) => {
+    const numericVolume = Number(entry.volume);
+    return total + (Number.isFinite(numericVolume) ? numericVolume : 0);
+  }, 0);
   const previewBonuses = previewHull.bonuses ?? null;
-  const pilotLicense = world.player.pilotLicense;
+  const pilotLicense = normalizePilotLicense(world.player.pilotLicense);
+  const safeCredits = Math.round(safeDisplayNumber(world.player.credits, 0));
   const pilotLicenseProgress = getPilotLicenseProgressPercent(pilotLicense);
   const pilotLicenseRange = getPilotLicenseProgressRange(pilotLicense.level);
   const pilotLicenseNextTarget =
@@ -1345,8 +1489,7 @@ export function StationPanel({
     return marketSort.direction === "asc" ? " ↑" : " ↓";
   }
 
-  const cargoUsed = getCargoUsed(world.player);
-  const cargoPct = Math.min(100, (cargoUsed / currentStats.cargoCapacity) * 100);
+  const cargoPct = safeCargoCapacity > 0 ? Math.min(100, (cargoUsed / safeCargoCapacity) * 100) : 0;
 
   return (
     <div className="station-overlay">
@@ -1361,14 +1504,20 @@ export function StationPanel({
         </div>
         <div className="station-header-actions">
           <div className="station-header-topline">
-            <span className="credit-badge">✦ {world.player.credits.toLocaleString()} cr</span>
+            <span className="credit-badge">✦ {safeCredits.toLocaleString()} cr</span>
             <button
               type="button"
               onClick={onRepair}
-              disabled={getRepairCost(world.player) <= 0}
-              title={getRepairCost(world.player) <= 0 ? "Ship already fully repaired" : `Repair ship for ${getRepairCost(world.player)} credits`}
+              disabled={repairCost <= 0}
+              title={
+                repairCost <= 0
+                  ? "Ship already fully repaired"
+                  : repairSurchargePercent > 0
+                    ? `Repair ship for ${repairCost} credits (${repairSurchargePercent}% ${snapshot.sector.theaterTag ?? snapshot.sector.security} surcharge)`
+                    : `Repair ship for ${repairCost} credits`
+              }
             >
-              Repair ({getRepairCost(world.player)} cr)
+              Repair ({repairCost} cr)
             </button>
             <button
               type="button"
@@ -1739,6 +1888,7 @@ export function StationPanel({
           <div className="station-grid">
             <article className="panel-lite">
               <h3>Ship Market</h3>
+              {stockPressureNote && <p className="station-support-copy">{stockPressureNote}</p>}
               <div className="stack-list">
                 {availableShips.map((ship) => {
                   const owned = world.player.ownedShips.includes(ship.id);
@@ -2018,7 +2168,7 @@ export function StationPanel({
                 </div>
                 <span className="mkt-cargo-label">{cargoUsed}/{roundedCargoCapacity}u · {roundedFreeCargo} free</span>
                 {missionCargoUsed > 0 && <span className="mkt-cargo-label mkt-mission-lock">{missionCargoUsed}u mission locked</span>}
-                <span className="mkt-cargo-label">✦ {world.player.credits} cr</span>
+                <span className="mkt-cargo-label">✦ {safeCredits} cr</span>
               </div>
             </div>
             <div className="mkt-table-shell">
@@ -2038,7 +2188,7 @@ export function StationPanel({
                   const buyTotal = buyPrice * quantity;
                   const sellQty = Math.min(quantity, owned);
                   const sellTotal = sellPrice * sellQty;
-                  const canAfford = world.player.credits >= buyTotal;
+                  const canAfford = safeCredits >= buyTotal;
                   const requiredVolume = commodity.volume * quantity;
                   const canFit = freeCargo >= requiredVolume;
                   const buyFill = Math.min(100, (buyPrice / maxMarketPrice) * 100);
@@ -2135,6 +2285,7 @@ export function StationPanel({
                 <div>
                   <h3>Module Exchange</h3>
                   <p>Scan station stock by output, reach, price, or footprint without forcing the market into one wide strip.</p>
+                  {stockPressureNote && <p className="station-support-copy">{stockPressureNote}</p>}
                 </div>
                 <span className="status-chip">{availableModules.length} stocked</span>
               </div>

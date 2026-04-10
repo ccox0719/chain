@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { moduleById } from "../game/data/modules";
 import { EquippedLoadout, ModuleDefinition, ModuleSlot, ShipHullDefinition } from "../types/game";
 
@@ -333,9 +334,16 @@ export function ShipFittingDiagram({
   onSlotTap,
   onClearSlot,
 }: ShipFittingDiagramProps) {
+  const uid = useId().replace(/:/g, "");
   const silhouette = hull.silhouette;
-  const glowId   = `sfx-glow-${hull.id}`;
-  const blurId   = `sfx-blur-${hull.id}`;
+  const glowId = `sfx-glow-${hull.id}-${uid}`;
+  const blurId = `sfx-blur-${hull.id}-${uid}`;
+  const hullGradientId = `sfx-hull-gradient-${hull.id}-${uid}`;
+  const hullClipId = `sfx-hull-clip-${hull.id}-${uid}`;
+  const edgeMaskId = `sfx-edge-mask-${hull.id}-${uid}`;
+  const edgeLightId = `sfx-edge-light-${hull.id}-${uid}`;
+  const shadowId = `sfx-shadow-${hull.id}-${uid}`;
+  const specularId = `sfx-specular-${hull.id}-${uid}`;
   const detailPaths = SHIP_DETAIL_PATHS[silhouette];
 
   const sockets = (["weapon", "utility", "defense"] as ModuleSlot[]).flatMap((slotType) =>
@@ -379,10 +387,48 @@ export function ShipFittingDiagram({
           <stop offset="0%"   stopColor={hull.color} stopOpacity="0.32" />
           <stop offset="100%" stopColor={hull.color} stopOpacity="0"    />
         </radialGradient>
+        <radialGradient id={hullGradientId} cx="38%" cy="34%" r="82%">
+          <stop offset="0%" stopColor="#dbeeff" stopOpacity="0.22" />
+          <stop offset="18%" stopColor={hull.color} stopOpacity="0.24" />
+          <stop offset="58%" stopColor={hull.color} stopOpacity="0.13" />
+          <stop offset="100%" stopColor="#06101f" stopOpacity="0.88" />
+        </radialGradient>
+        <radialGradient id={specularId} cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.14" />
+          <stop offset="60%" stopColor="#dff0ff" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="#dff0ff" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={edgeMaskId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="white" stopOpacity="1" />
+          <stop offset="42%" stopColor="white" stopOpacity="0.7" />
+          <stop offset="72%" stopColor="white" stopOpacity="0" />
+          <stop offset="100%" stopColor="white" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={edgeLightId} x1="12%" y1="8%" x2="84%" y2="90%">
+          <stop offset="0%" stopColor="#f6fbff" stopOpacity="0.7" />
+          <stop offset="45%" stopColor="#b9ddff" stopOpacity="0.42" />
+          <stop offset="100%" stopColor="#b9ddff" stopOpacity="0" />
+        </linearGradient>
+        <clipPath id={hullClipId}>
+          <path d={SHIP_PATHS[silhouette]} />
+        </clipPath>
+        <mask id={`${edgeMaskId}-mask`}>
+          <rect x="0" y="0" width="360" height="260" fill={`url(#${edgeMaskId})`} />
+        </mask>
         <filter id={blurId} x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="5" />
         </filter>
+        <filter id={shadowId} x="-30%" y="-30%" width="180%" height="180%">
+          <feDropShadow dx="2" dy="2" stdDeviation="6" floodColor="#000000" floodOpacity="0.4" />
+        </filter>
       </defs>
+
+      <path
+        d={SHIP_PATHS[silhouette]}
+        fill="rgba(0,0,0,0.28)"
+        stroke="none"
+        filter={`url(#${shadowId})`}
+      />
 
       {/* Ambient hull glow */}
       <ellipse
@@ -406,25 +452,60 @@ export function ShipFittingDiagram({
       {/* Ship hull fill */}
       <path
         d={SHIP_PATHS[silhouette]}
-        fill={hull.color}
-        fillOpacity="0.13"
+        fill={`url(#${hullGradientId})`}
         stroke={hull.color}
         strokeWidth="1.6"
         strokeOpacity="0.72"
         strokeLinejoin="round"
       />
 
+      {/* Top-left edge lighting */}
+      <path
+        d={SHIP_PATHS[silhouette]}
+        fill="none"
+        stroke={`url(#${edgeLightId})`}
+        strokeWidth="1.8"
+        strokeOpacity="0.6"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        clipPath={`url(#${hullClipId})`}
+        mask={`url(#${edgeMaskId}-mask)`}
+      />
+
+      {/* Specular catch on the lit upper-left hull face */}
+      <g clipPath={`url(#${hullClipId})`}>
+        <ellipse
+          cx="156"
+          cy="92"
+          rx="52"
+          ry="24"
+          fill={`url(#${specularId})`}
+          transform="rotate(-14 156 92)"
+        />
+      </g>
+
       {/* Hull detail / panel lines */}
       {detailPaths.map((d, i) => (
-        <path
-          key={i}
-          d={d}
-          fill="none"
-          stroke={hull.color}
-          strokeWidth="0.7"
-          strokeOpacity="0.28"
-          strokeLinecap="round"
-        />
+        <g key={i}>
+          <path
+            d={d}
+            fill="none"
+            stroke="#f2f8ff"
+            strokeWidth="0.7"
+            strokeOpacity={i < 3 ? 0.14 : 0.08}
+            strokeLinecap="round"
+            transform="translate(-2.4,-2.4)"
+            clipPath={`url(#${hullClipId})`}
+          />
+          <path
+            d={d}
+            fill="none"
+            stroke={hull.color}
+            strokeWidth="0.7"
+            strokeOpacity="0.28"
+            strokeLinecap="round"
+          />
+        </g>
       ))}
 
       {/* Connector lines — drawn below socket circles */}

@@ -670,6 +670,8 @@ export interface AsteroidFieldRuntimeState {
   desiredCount: number;
   maxCount: number;
   hiddenPocketChance: number;
+  hotspotIntensity: number;
+  hotspotResource: ResourceId | null;
 }
 
 export interface SystemEcology {
@@ -1011,6 +1013,8 @@ export interface AsteroidState {
   radius: number;
   resource: ResourceId;
   oreRemaining: number;
+  quality: "poor" | "standard" | "rich" | "pristine";
+  hotspot: boolean;
 }
 
 export interface ProjectileState {
@@ -1078,6 +1082,9 @@ export interface MissionState {
   objectiveTimer?: number;
   reinforcementTimer?: number;
   challengePressure?: number;
+  interferenceBudget?: number;
+  interferenceTimer?: number;
+  interferenceIncidents?: number;
 }
 
 export interface TransportMissionState {
@@ -1089,6 +1096,9 @@ export interface TransportMissionState {
   acceptedAt: number | null;
   dueAt: number | null;
   rewardEstimate: number;
+  interferenceBudget?: number;
+  interferenceTimer?: number;
+  interferenceIncidents?: number;
 }
 
 export interface RegionalEventState {
@@ -1149,6 +1159,9 @@ export interface ProceduralContractState {
   rewardClaimed: boolean;
   pickedUp?: boolean;
   delivered?: boolean;
+  interferenceBudget?: number;
+  interferenceTimer?: number;
+  interferenceIncidents?: number;
 }
 
 export interface ProcgenState {
@@ -1248,6 +1261,8 @@ export interface ObjectInfo {
   factionLabel?: string;
   roleLabel?: string;
   bossLabel?: string;
+  eliteLabel?: string;
+  priorityLabel?: string;
   threatLabel?: string;
   combatProfileLabel?: string;
   combatProfileTone?: "shield" | "armor" | "speed";
@@ -1260,6 +1275,9 @@ export interface ObjectInfo {
   armorResists?: ResistProfile;
   hullResists?: ResistProfile;
   oreRemaining?: number;
+  oreQuality?: string;
+  hotspotLabel?: string;
+  beltStateLabel?: string;
   lootCredits?: number;
 }
 

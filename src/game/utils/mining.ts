@@ -11,8 +11,25 @@ export type MiningModuleLike = {
   miningTargets?: ResourceId[];
 };
 
+export type AsteroidQuality = "poor" | "standard" | "rich" | "pristine";
+
+const ASTEROID_QUALITY_MULTIPLIER: Record<AsteroidQuality, number> = {
+  poor: 0.78,
+  standard: 1,
+  rich: 1.24,
+  pristine: 1.56
+};
+
 export function getMiningResourceTier(resource: ResourceId) {
   return MINING_RESOURCE_TIER[resource];
+}
+
+export function getAsteroidQualityMultiplier(quality: AsteroidQuality) {
+  return ASTEROID_QUALITY_MULTIPLIER[quality];
+}
+
+export function getAsteroidQualityLabel(quality: AsteroidQuality) {
+  return quality === "poor" ? "Poor" : quality === "rich" ? "Rich" : quality === "pristine" ? "Pristine" : "Standard";
 }
 
 export function getMiningModuleTier(module: MiningModuleLike) {

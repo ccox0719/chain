@@ -115,14 +115,29 @@ function getEncounterTemplateWeight(template: (typeof encounterPackTemplates)[nu
   const roleBias =
     template.roles.reduce((sum, role) => sum + getEncounterRoleWeight(role, sector), 0) / Math.max(1, template.roles.length);
   let weight = template.weight * roleBias;
+  const roleSet = new Set(template.roles);
   if (sector.danger >= 4 && template.roles.some((role) => role === "sniper" || role === "artillery")) {
     weight *= SPAWN_BALANCE.triggerWeights.dangerSniperBonus;
+  }
+  if (sector.danger >= 5 && roleSet.size >= 3) {
+    weight *= SPAWN_BALANCE.triggerWeights.dangerFiveMixedRoleBonus;
+  }
+  if (sector.danger >= 6 && (roleSet.has("support") || roleSet.has("escort")) && (roleSet.has("tackle") || roleSet.has("artillery"))) {
+    weight *= SPAWN_BALANCE.triggerWeights.dangerSixElitePackBonus;
   }
   if (sector.security === "high" && template.roles.some((role) => role === "swarm" || role === "tackle")) {
     weight *= SPAWN_BALANCE.triggerWeights.highSecuritySwarmPenalty;
   }
   if (sector.security === "frontier" && template.roles.some((role) => role === "swarm" || role === "tackle" || role === "hunter")) {
     weight *= SPAWN_BALANCE.triggerWeights.frontierRoleBoost;
+  }
+  if (sector.security === "frontier" && template.roles.some((role) => role === "support" || role === "tackle" || role === "escort")) {
+    weight *= SPAWN_BALANCE.triggerWeights.frontierSupportTackleBoost;
+  }
+  if (sector.theaterTag === "relic") {
+    weight *= SPAWN_BALANCE.triggerWeights.relicTheaterBoost;
+  } else if (sector.theaterTag === "raid") {
+    weight *= SPAWN_BALANCE.triggerWeights.raidTheaterBoost;
   }
   return weight;
 }
@@ -754,7 +769,10 @@ export function createContractState(world: GameWorld, contract: ProceduralContra
     dueAt: contract.bonusReward && contract.bonusTimeLimitSec ? world.elapsedTime + contract.bonusTimeLimitSec : null,
     rewardClaimed: false,
     pickedUp: contract.type === "transport",
-    delivered: false
+    delivered: false,
+    interferenceBudget: 0,
+    interferenceTimer: 0,
+    interferenceIncidents: 0
   };
 }
 

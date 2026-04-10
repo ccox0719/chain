@@ -171,6 +171,9 @@ function createSystemEcology(sectorId: string): SystemEcology {
 }
 
 function createFieldState(field: AsteroidFieldDefinition): AsteroidFieldRuntimeState {
+  const hotspotIntensity = field.count >= 6 ? 0.22 : field.count >= 4 ? 0.16 : 0.1;
+  const hotspotResource =
+    field.resource === "ferrite" ? "ember-crystal" : field.resource === "ember-crystal" ? "ghost-alloy" : null;
   return {
     beltId: field.beltId,
     reserve: clamp(field.richness * field.count * 1.4, 12, 100),
@@ -180,7 +183,9 @@ function createFieldState(field: AsteroidFieldDefinition): AsteroidFieldRuntimeS
     recoveryTimer: 0,
     desiredCount: Math.max(1, field.count),
     maxCount: Math.max(field.count + Math.ceil(field.count * 0.5), field.count + 2),
-    hiddenPocketChance: field.hiddenPocketChance ?? clamp(0.05 + field.richness * 0.002, 0.04, 0.12)
+    hiddenPocketChance: field.hiddenPocketChance ?? clamp(0.05 + field.richness * 0.002, 0.04, 0.12),
+    hotspotIntensity,
+    hotspotResource
   };
 }
 
@@ -383,14 +388,29 @@ export function createRuntimeSector(sectorId: string, difficulty: DifficultyId =
   const enemyDurabilityMultiplier = getEnemyDurabilityMultiplier(difficulty);
   const asteroids: AsteroidState[] = [];
   sector.asteroidFields.forEach((field) => {
+    const fieldState = createFieldState(field);
     for (let index = 0; index < field.count; index += 1) {
+      const hotspot = index < Math.max(1, Math.round(field.count * fieldState.hotspotIntensity));
+      const qualityRoll = (index + Math.floor(field.richness)) % 10;
+      const quality =
+        qualityRoll >= 9 ? "pristine" :
+        qualityRoll >= 6 ? "rich" :
+        qualityRoll <= 1 ? "poor" :
+        "standard";
+      const qualityOreMultiplier =
+        quality === "poor" ? 0.72 :
+        quality === "rich" ? 1.26 :
+        quality === "pristine" ? 1.58 :
+        1;
       asteroids.push({
         id: uid("asteroid"),
         beltId: field.beltId,
         position: scatter(field.center, field.spread, index, field.count),
-        radius: 22 + (index % 4) * 5,
-        resource: field.resource,
-        oreRemaining: field.richness + (index % 3) * 3
+        radius: 22 + (index % 4) * 5 + (quality === "pristine" ? 4 : quality === "rich" ? 2 : 0),
+        resource: hotspot && fieldState.hotspotResource ? fieldState.hotspotResource : field.resource,
+        oreRemaining: Math.max(1, Math.round((field.richness + (index % 3) * 3 + (hotspot ? 4 : 0)) * qualityOreMultiplier)),
+        quality,
+        hotspot
       });
     }
   });

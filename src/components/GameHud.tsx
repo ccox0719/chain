@@ -825,6 +825,9 @@ export function GameHud({
   const speed = Math.round(Math.hypot(world.player.velocity.x, world.player.velocity.y));
   const cargoUsed = getCargoUsed(world.player);
   const cargoCap = Math.round(derived.cargoCapacity);
+  const safeCredits = Number.isFinite(Number(world.player.credits))
+    ? Math.max(0, Math.round(Number(world.player.credits)))
+    : 0;
 
   const filteredOverview = useMemo(() => {
     return overview.filter((entry) => {
@@ -981,7 +984,7 @@ export function GameHud({
           <div className="status-stats">
             <span title="Speed">▶{speed}</span>
             <span title="Cargo">⊡{cargoUsed}/{cargoCap}</span>
-            <span title="Credits">✦{world.player.credits}</span>
+            <span title="Credits">✦{safeCredits}</span>
             {snapshot.nextRouteStep && (
               <span title="Next gate">⊟{snapshot.nextRouteStep.gateName}</span>
             )}
@@ -1244,6 +1247,7 @@ export function GameHud({
                       <span className="ov-row-name">
                         {entry.name}
                         {entry.subtitle && <small>{entry.subtitle}</small>}
+                        {entry.priorityLabel && <small>{entry.priorityLabel}</small>}
                         {tacticalActive && entry.type === "enemy" && entry.threatLabel && (
                           <small>{entry.threatLabel}</small>
                         )}
@@ -1266,6 +1270,9 @@ export function GameHud({
                       <strong>{hoveredOverviewInfo.name}</strong>
                       <small>{hoveredOverviewInfo.subtitle}</small>
                     </div>
+                    {hoveredOverviewInfo.priorityLabel && (
+                      <span className="status-chip sel-target-priority-chip">{hoveredOverviewInfo.priorityLabel}</span>
+                    )}
                     {hoveredOverviewInfo.threatLabel && (
                       <span className="status-chip">{hoveredOverviewInfo.threatLabel}</span>
                     )}
@@ -1450,6 +1457,9 @@ export function GameHud({
                   {selectedInfo.subtitle ?? getSelectionBadgeLabel(selectedInfo)}
                 </div>
                 <div className="sel-target-chiprow">
+                  {selectedInfo.priorityLabel && <span className="status-chip sel-target-priority-chip">{selectedInfo.priorityLabel}</span>}
+                  {selectedInfo.bossLabel && <span className="status-chip sel-target-boss-chip">{selectedInfo.bossLabel}</span>}
+                  {selectedInfo.eliteLabel && <span className="status-chip sel-target-elite-chip">{selectedInfo.eliteLabel}</span>}
                   {selectedInfo.threatLabel && <span className="status-chip">{selectedInfo.threatLabel}</span>}
                   {selectedInfo.factionLabel && <span className="status-chip dim">{selectedInfo.factionLabel}</span>}
                   {selectedInfo.roleLabel && <span className="status-chip dim">{selectedInfo.roleLabel}</span>}

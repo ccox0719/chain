@@ -1,6 +1,7 @@
 import { GameWorld, ModuleDefinition, SecurityBand, SystemDestination } from "../../types/game";
 import { stationMarketProfileById } from "./data/stationMarketProfiles";
 import { ECONOMY_BALANCE } from "../config/balance";
+import { sectorById } from "../data/sectors";
 
 function hashStringToUnitInterval(input: string) {
   let hash = 2166136261;
@@ -47,6 +48,48 @@ function moduleFamilyScore(module: ModuleDefinition, stationTags: Set<string>, s
   return score;
 }
 
+function getDangerousTheaterStockModifier(module: ModuleDefinition, world?: GameWorld) {
+  if (!world) return 0;
+  const sector = sectorById[world.currentSectorId];
+  if (!sector) return 0;
+
+  let modifier = 0;
+  const techLevel = module.techLevel ?? 1;
+  const premiumModule = techLevel >= 3 || module.price >= 7000;
+  const advancedModule = techLevel >= 2 || module.price >= 3200;
+  const frontierSpecialist = module.tags.includes("frontier") || module.tags.includes("salvage") || module.tags.includes("industrial");
+
+  switch (sector.theaterTag) {
+    case "relic":
+      if (premiumModule) modifier -= 0.28;
+      else if (advancedModule) modifier -= 0.14;
+      if (module.tags.includes("high-tech")) modifier -= 0.08;
+      if (frontierSpecialist) modifier += 0.06;
+      break;
+    case "raid":
+      if (premiumModule) modifier -= 0.22;
+      else if (advancedModule) modifier -= 0.1;
+      if (module.tags.includes("high-tech")) modifier -= 0.05;
+      if (module.tags.includes("frontier") || module.tags.includes("military")) modifier += 0.05;
+      break;
+    case "deep-wild":
+      if (sector.danger >= 5) {
+        if (premiumModule) modifier -= 0.16;
+        else if (advancedModule) modifier -= 0.08;
+        if (frontierSpecialist) modifier += 0.04;
+      }
+      break;
+    case "frontline":
+      if (premiumModule) modifier -= 0.1;
+      if (module.tags.includes("military") || module.tags.includes("industrial")) modifier += 0.04;
+      break;
+    default:
+      break;
+  }
+
+  return modifier;
+}
+
 export function getModuleStockScore(module: ModuleDefinition, security: SecurityBand, station: SystemDestination | null) {
   if (!station) return 0;
   const stationTags = stationTagSet(station);
@@ -74,7 +117,11 @@ export function isModuleAvailableAtStation(
 ) {
   if (!station) return false;
   if (module.specialReward) return false;
-  const score = getModuleStockScore(module, security, station);
+  const score = clamp(
+    getModuleStockScore(module, security, station) + getDangerousTheaterStockModifier(module, world),
+    ECONOMY_BALANCE.moduleStockScore.clampMin,
+    ECONOMY_BALANCE.moduleStockScore.clampMax
+  );
   const roll = hashStringToUnitInterval(`${station.id}:${module.id}:roll`);
   return roll < score;
 }
